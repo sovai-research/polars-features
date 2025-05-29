@@ -1,0 +1,77 @@
+site_name: functime
+site_url: https://docs.functime.ai/
+repo_url: https://github.com/functime-org/functime
+repo_name: functime-org/functime
+
+theme:
+  name: "material"
+  custom_dir: docs/overrides
+  icon:
+    repo: fontawesome/brands/github
+  favicon: img/logo_dark.png
+  logo: img/logo.png
+  palette:
+    primary: black
+  features:
+    - content.code.copy
+    - content.tabs.link
+    - navigation.expand
+
+plugins:
+  - search:
+      lang: en
+  - mkdocs-jupyter:
+      include: ["*.ipynb"]
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: false
+            show_bases: false
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - footnotes
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Quick Start: index.md
+  - Installation: installation.md
+  - User Guide:
+    - Forecasting: user-guide/forecasting.md
+    - Preprocessing: user-guide/preprocessing.md
+    - Feature Extraction: user-guide/feature-extraction.md
+    - Seasonality: user-guide/seasonality.md
+  - Developer Guides:
+    - Custom Forecasters and Transformers: developer-guide/develop.md
+    - Contributing: developer-guide/contributing.md
+  - Tutorials:
+    - Preprocessing: notebooks/preprocessing.ipynb
+    - Feature Extraction: notebooks/benchmarks.ipynb
+    - Forecast Evaluation: notebooks/evaluation.ipynb
+    - LLM Analysis: notebooks/llm.ipynb
+  - API Reference:
+    - forecasting: api-reference/forecasting.md
+    - preprocessing: api-reference/preprocessing.md
+    - seasonality: api-reference/seasonality.md
+    - feature_extraction: api-reference/feature-extractors.md
+    - cross_validation: api-reference/cross-validation.md
+    - offsets: api-reference/offsets.md
+    - metrics: api-reference/metrics.md
+    - multi_objective: api-reference/multi-objective.md
+    - evaluation: api-reference/evaluation.md
+    - plotting: api-reference/plotting.md
+
+extra:
+  analytics:
+    provider: google
+    property: G-CYGTL9FJ4R
