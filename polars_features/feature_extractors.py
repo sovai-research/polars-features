@@ -17,6 +17,7 @@ from polars_features._compat import register_plugin_function, rle_fields
 from polars_features._polars_features_rust import rs_faer_lstsq1
 from polars_features._utils import warn_is_unstable
 from polars_features.type_aliases import DetrendMethod
+from scipy.stats import skew, kurtosis
 
 # from functime.feature_extractor import FeatureExtractor  # noqa: F401
 
@@ -1926,6 +1927,103 @@ def fft_coefficients(x: TIME_SERIES_T) -> MAP_LIST_EXPR:
     }
 
 
+def realized_volatility(x: pl.Series) -> float:
+    """
+    Realized Volatility
+
+    Computes the square root of the sum of squared log returns.
+
+    Parameters
+    ----------
+    x : pl.Series
+        Price series.
+
+    Returns
+    -------
+    float
+        Realized volatility (non-annualized).
+    """
+    log_returns = np.diff(np.log(x.to_numpy()))
+    return np.sqrt(np.sum(log_returns ** 2))
+
+
+def return_skew(x: pl.Series) -> float:
+    """
+    Skewness of Log Returns
+
+    Parameters
+    ----------
+    x : pl.Series
+        Price series.
+
+    Returns
+    -------
+    float
+        Skewness of the log returns.
+    """
+    returns = np.diff(np.log(x.to_numpy()))
+    return skew(returns)
+
+
+def return_kurtosis(x: pl.Series) -> float:
+    """
+    Kurtosis of Log Returns
+
+    Parameters
+    ----------
+    x : pl.Series
+        Price series.
+
+    Returns
+    -------
+    float
+        Kurtosis of the log returns.
+    """
+    returns = np.diff(np.log(x.to_numpy()))
+    return kurtosis(returns)
+
+
+def num_direction_changes(x: pl.Series) -> int:
+    """
+    Number of Direction Changes
+
+    Counts how often the price trend switches direction.
+
+    Parameters
+    ----------
+    x : pl.Series
+        Price series.
+
+    Returns
+    -------
+    int
+        Number of sign changes in first-order price differences.
+    """
+    returns = np.diff(x.to_numpy())
+    return np.sum(np.diff(np.sign(returns)) != 0)
+
+
+def max_drawdown(x: pl.Series) -> float:
+    """
+    Maximum Drawdown
+
+    Computes the largest peak-to-trough drop in the time series.
+
+    Parameters
+    ----------
+    x : pl.Series
+        Price series.
+
+    Returns
+    -------
+    float
+        Maximum drawdown value (in absolute units, not percentage).
+    """
+    prices = x.to_numpy()
+    cumulative_max = np.maximum.accumulate(prices)
+    drawdowns = cumulative_max - prices
+    return np.max(drawdowns)
+
 @pl.api.register_expr_namespace("ts")
 class FeatureExtractor:
     def __init__(self, expr: pl.Expr):
@@ -2850,3 +2948,43 @@ class FeatureExtractor:
             is_elementwise=False,
             cast_to_supertype=True,
         )
+
+    def max_drawdown(self) -> pl.Expr:
+        """
+        Compute the maximum drawdown of the time series.
+
+        Returns
+        -------
+        An expression of the output
+        """
+        return (self._expr / self._expr.cummax()).min() - 1
+
+    def num_direction_changes(self) -> pl.Expr:
+        """
+        Calculate the number of direction changes in the time series.
+
+        Returns
+        -------
+        An expression of the output
+        """
+        return (self._expr.diff().sign().diff().abs() > 0).sum()
+
+    def return_kurtosis(self) -> pl.Expr:
+        """
+        Compute the kurtosis of the return series.
+
+        Returns
+        -------
+        An expression of the output
+        """
+        return self._expr.pct_change().kurtosis()
+
+    def return_skew(self) -> pl.Expr:
+        """
+        Compute the skewness of the return series.
+
+        Returns
+        -------
+        An expression of the output
+        """
+        return self._expr.pct_change().skew()
