@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import polars as pl
+
 from polars.type_aliases import ClosedInterval
 # from numpy.linalg import lstsq
 from scipy.linalg import lstsq
@@ -2024,6 +2025,40 @@ def max_drawdown(x: pl.Series) -> float:
     drawdowns = cumulative_max - prices
     return np.max(drawdowns)
 
+
+def signed_mci(
+    trade_price: pl.Expr,
+    bid_price: pl.Expr,
+    ask_price: pl.Expr,
+    side: pl.Expr,
+) -> pl.Expr:
+    """
+    Compute signed Marginal Cost of Immediacy (MCI) reflecting cost paid by aggressive orders:
+    
+    Signed MCI = side * (trade_price - mid_price)
+    
+    where mid_price = (bid_price + ask_price) / 2
+    and side = +1 for buyer-initiated trades, -1 for seller-initiated trades.
+    
+    Parameters
+    ----------
+    trade_price : Expr
+        The actual trade price.
+    bid_price : Expr
+        Best bid price at trade time.
+    ask_price : Expr
+        Best ask price at trade time.
+    side : Expr
+        Trade side indicator (+1 buy, -1 sell).
+    
+    Returns
+    -------
+    Expr : expression producing signed MCI values
+    """
+    mid_price = (bid_price + ask_price) / 2
+    return side * (trade_price - mid_price)
+
+
 @pl.api.register_expr_namespace("ts")
 class FeatureExtractor:
     def __init__(self, expr: pl.Expr):
@@ -2988,3 +3023,19 @@ class FeatureExtractor:
         An expression of the output
         """
         return self._expr.pct_change().skew()
+    
+    def marginal_cost_of_immediacy(self) -> pl.Expr:
+        """
+        Compute Marginal Cost of Immediacy (MCI) as half of the quoted spread:
+        
+        MCI = (ask_price - bid_price) / 2
+        
+        Assumes the input expression is a Struct with fields:
+            - 'bid_price'
+            - 'ask_price'
+        
+        Returns
+        -------
+        Expr : expression producing MCI values
+        """
+        return (self._expr.struct.field("ask_price") - self._expr.struct.field("bid_price")) / 2
