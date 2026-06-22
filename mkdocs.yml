@@ -1,4 +1,5 @@
-site_name: functime
+site_name: PanelKit
+site_description: "Leak-safe, Rust-fast feature engineering and ML for panel data, built on Polars. Built on the foundations of functime (no longer maintained)."
 site_url: https://docs.functime.ai/
 repo_url: https://github.com/functime-org/functime
 repo_name: functime-org/functime
@@ -29,6 +30,10 @@ plugins:
             docstring_style: numpy
             show_source: false
             show_bases: false
+  # If available, enable an llms.txt plugin to generate an LLM-friendly site
+  # summary for coding agents (see https://llmstxt.org). A hand-written
+  # `llms.txt` already lives at the repo root.
+  # - mkdocs-llmstxt
 
 markdown_extensions:
   - admonition
@@ -44,7 +49,9 @@ markdown_extensions:
       alternate_style: true
 
 nav:
-  - Quick Start: index.md
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Leakage & Correctness: leakage.md
   - Installation: installation.md
   - User Guide:
     - Forecasting: user-guide/forecasting.md
