@@ -30,7 +30,8 @@ struct FracDiffKwargs {
 pub fn frac_diff(inputs: &[Series], kwargs: FracDiffKwargs) -> PolarsResult<Series> {
     let weights = get_ffd_weights(kwargs.d, kwargs.min_weight, kwargs.window_size);
     let values = inputs[0].f64().unwrap().to_ndarray()?;
-    let mut output_builder = PrimitiveChunkedBuilder::<Float64Type>::new("frac_diff", values.len());
+    let mut output_builder =
+        PrimitiveChunkedBuilder::<Float64Type>::new("frac_diff".into(), values.len());
     let width = weights.len() - 1;
     for i in 0..values.len() {
         if i < width {

@@ -89,5 +89,5 @@ pub fn cusum(inputs: &[Series], kwargs: CusumKwargs) -> PolarsResult<Series> {
             }
         }
     }
-    Ok(Series::from_vec("events", events))
+    Ok(Series::from_vec("events".into(), events))
 }

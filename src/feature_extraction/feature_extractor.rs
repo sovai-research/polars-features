@@ -1,15 +1,12 @@
 use hashbrown::HashSet;
-use polars_core::prelude::*;
-use pyo3_polars::{
-    derive::polars_expr,
-    export::polars_core::{prelude::*, series::Series},
-};
+use polars::prelude::*;
+use pyo3_polars::derive::polars_expr;
 //use pyo3::prelude::*;
 
 #[polars_expr(output_type=UInt32)]
 fn pl_lempel_ziv_complexity(inputs: &[Series]) -> PolarsResult<Series> {
     let input: &Series = &inputs[0];
-    let name = input.name();
+    let name = input.name().clone();
     let input = input.bool()?;
     let bits: Vec<bool> = input
         .into_iter()
