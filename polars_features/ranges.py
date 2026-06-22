@@ -3,7 +3,11 @@ from __future__ import annotations
 from typing import Optional
 
 import polars as pl
-from polars.type_aliases import FrameType, TimeUnit
+
+try:  # polars>=1.0 moved type aliases to the private `_typing` module
+    from polars._typing import FrameType, TimeUnit
+except ImportError:  # pragma: no cover - older polars
+    from polars.type_aliases import FrameType, TimeUnit
 from polars_features.offsets import _strip_freq_alias
 
 
