@@ -1,0 +1,213 @@
+name: Release
+
+# Build abi3 wheels + sdist across the full OS/arch matrix, audit them with
+# abi3audit, then publish to PyPI via Trusted Publishing (OIDC, no API tokens).
+#
+# ===========================================================================
+# ONE-TIME MAINTAINER SETUP (Trusted Publishing / OIDC)
+# ---------------------------------------------------------------------------
+# 1. PyPI:  https://pypi.org/manage/account/publishing/
+#      Add a "pending publisher" (or, once the project exists, a publisher)
+#      with:
+#         PyPI Project Name : polars_features
+#         Owner             : <your GitHub org/user>
+#         Repository name   : polars-features
+#         Workflow name     : release.yml
+#         Environment name  : pypi
+# 2. TestPyPI: repeat the same at https://test.pypi.org/manage/account/publishing/
+#         Environment name  : testpypi
+# 3. GitHub:  Settings -> Environments -> create `pypi` and `testpypi`.
+#      Optionally add required reviewers / branch restrictions to `pypi`.
+# No usernames, passwords, or API tokens are stored anywhere. The
+# `id-token: write` permission below lets PyPI verify the OIDC identity.
+# ===========================================================================
+
+on:
+  push:
+    tags:
+      - "v*"
+  # Manual trigger -> defaults to a TestPyPI dry-run (see publish jobs).
+  workflow_dispatch:
+    inputs:
+      publish_target:
+        description: "Where to publish"
+        required: true
+        default: testpypi
+        type: choice
+        options:
+          - testpypi
+          - pypi
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build abi3 wheels. One wheel per OS/arch (abi3 = stable ABI, py310+),
+  # so we do NOT fan out over Python versions here.
+  # ---------------------------------------------------------------------------
+  build-wheels:
+    name: Wheels ${{ matrix.platform.target }} (${{ matrix.platform.runner }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          # Linux glibc (manylinux)
+          - runner: ubuntu-latest
+            target: x86_64
+            manylinux: auto
+          - runner: ubuntu-latest
+            target: aarch64
+            manylinux: auto
+          # Linux musl (musllinux)
+          - runner: ubuntu-latest
+            target: x86_64
+            manylinux: musllinux_1_2
+          - runner: ubuntu-latest
+            target: aarch64
+            manylinux: musllinux_1_2
+          # macOS (arm64 + x86_64)
+          - runner: macos-14
+            target: aarch64
+          - runner: macos-13
+            target: x86_64
+          # Windows
+          - runner: windows-latest
+            target: x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build abi3 wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          # `manylinux` is ignored on non-Linux runners.
+          manylinux: ${{ matrix.platform.manylinux || 'auto' }}
+          # --release for optimized builds; abi3-py310 ships a single wheel.
+          args: --release --out dist
+          # Cross-compile aarch64 via zig for reproducible manylinux/musl.
+          sccache: "true"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform.runner }}-${{ matrix.platform.target }}-${{ matrix.platform.manylinux || 'native' }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Build the source distribution once.
+  # ---------------------------------------------------------------------------
+  build-sdist:
+    name: Build sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # abi3audit: verify every wheel only uses the stable (abi3) ABI surface.
+  # ---------------------------------------------------------------------------
+  abi3audit:
+    name: abi3audit wheels
+    needs: [build-wheels]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run abi3audit
+        # --strict turns any ABI violation / non-abi3 wheel into a failure.
+        run: |
+          uvx abi3audit --strict --report dist/*.whl
+
+  # ---------------------------------------------------------------------------
+  # TestPyPI dry-run.
+  # Runs on workflow_dispatch when publish_target == testpypi, or for any
+  # prerelease tag (e.g. v1.2.3rc1, v1.2.3-alpha.1, ...-beta...).
+  # ---------------------------------------------------------------------------
+  publish-testpypi:
+    name: Publish to TestPyPI (dry-run)
+    needs: [build-wheels, build-sdist, abi3audit]
+    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.publish_target == 'testpypi') ||
+      (github.event_name == 'push' &&
+        (contains(github.ref_name, 'rc') ||
+         contains(github.ref_name, 'alpha') ||
+         contains(github.ref_name, 'beta')))
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/polars_features
+    permissions:
+      id-token: write # OIDC token for Trusted Publishing
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "{wheels-*,sdist}"
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          # Allow re-runs against an already-uploaded version on TestPyPI.
+          skip-existing: true
+
+  # ---------------------------------------------------------------------------
+  # Real PyPI publish.
+  # Runs only for final (non-prerelease) version tags, or an explicit
+  # workflow_dispatch with publish_target == pypi.
+  # ---------------------------------------------------------------------------
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [build-wheels, build-sdist, abi3audit]
+    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.publish_target == 'pypi') ||
+      (github.event_name == 'push' &&
+        !contains(github.ref_name, 'rc') &&
+        !contains(github.ref_name, 'alpha') &&
+        !contains(github.ref_name, 'beta'))
+    environment:
+      name: pypi
+      url: https://pypi.org/p/polars_features
+    permissions:
+      id-token: write # OIDC token for Trusted Publishing
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "{wheels-*,sdist}"
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No `password:` -> Trusted Publishing via OIDC is used automatically.
