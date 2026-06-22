@@ -10,7 +10,13 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { version = "0.28", features = ["abi3-py310", "extension-module"] }
 pyo3-polars = { version = "0.27", features = ["derive"] }
-polars = { version = "0.54", features = ["rolling_window", "fmt", "performant", "lazy", "zip_with", "random", "ndarray"] }
+# This crate is a Series-level `#[polars_expr]` plugin (it never touches
+# LazyFrame), so we deliberately avoid the `lazy`/`performant` features. Those
+# pull in polars-lazy -> polars-mem-engine, whose 0.54.4 match arms for
+# `IR::PythonScan` / `DeletionFilesList::Delta` fail to compile under the
+# feature set pyo3-polars unifies in. `object` is required so polars-ops'
+# `DataType::Object` match arm is present (else non-exhaustive-patterns error).
+polars = { version = "0.54", features = ["rolling_window", "fmt", "zip_with", "random", "ndarray", "object"] }
 faer = "0.24"
 faer-ext = { version = "0.8", features = ["ndarray"] }
 ndarray = "0.17"

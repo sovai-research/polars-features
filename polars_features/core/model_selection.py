@@ -80,7 +80,9 @@ def _subset_by_times(panel: PanelFrame, times: Sequence) -> PanelFrame:
     Stays lazy; uses ``is_in`` against the selected time values, so every entity
     contributes its rows for those times (panel grouping respected).
     """
-    time_vals = pl.Series(values=list(times))
+    # `.implode()` gives the unambiguous set-membership form of `is_in`
+    # (a plain same-dtype collection is deprecated in recent Polars).
+    time_vals = pl.Series(values=list(times)).implode()
     lf = panel.lazy().filter(pl.col(panel.time_col).is_in(time_vals))
     return PanelFrame(lf, entity=panel.entity_col, time=panel.time_col, validate=False)
 

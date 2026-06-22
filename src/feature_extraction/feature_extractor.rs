@@ -9,7 +9,7 @@ fn pl_lempel_ziv_complexity(inputs: &[Series]) -> PolarsResult<Series> {
     let name = input.name().clone();
     let input = input.bool()?;
     let bits: Vec<bool> = input
-        .into_iter()
+        .iter()
         .map(|op_b| op_b.unwrap_or(false))
         .collect();
 
