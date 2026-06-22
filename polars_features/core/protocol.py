@@ -212,7 +212,7 @@ class PanelTransformer(abc.ABC):
     # ------------------------------------------------------------------ #
     # Public API (sklearn-shaped)
     # ------------------------------------------------------------------ #
-    def fit(self, panel: PanelFrame) -> "Self":
+    def fit(self, panel: PanelFrame) -> Self:
         """Learn parameters from ``panel`` (training data only).
 
         Parameters

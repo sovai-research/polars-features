@@ -41,8 +41,9 @@ from __future__ import annotations
 
 import itertools
 import math
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 import polars as pl
@@ -62,8 +63,8 @@ __all__ = [
 ]
 
 # A fold is (train_panel, test_panel) or (train_time_idx, test_time_idx).
-PanelFold = Tuple[PanelFrame, PanelFrame]
-IndexFold = Tuple["NDArray[np.int64]", "NDArray[np.int64]"]
+PanelFold = tuple[PanelFrame, PanelFrame]
+IndexFold = tuple["NDArray[np.int64]", "NDArray[np.int64]"]
 
 
 # --------------------------------------------------------------------------- #
@@ -87,11 +88,11 @@ def _subset_by_times(panel: PanelFrame, times: Sequence) -> PanelFrame:
     return PanelFrame(lf, entity=panel.entity_col, time=panel.time_col, validate=False)
 
 
-def _contiguous_blocks(positions: np.ndarray) -> List[Tuple[int, int]]:
+def _contiguous_blocks(positions: np.ndarray) -> list[tuple[int, int]]:
     """Split sorted positions into contiguous ``[start, end]`` index blocks."""
     if positions.size == 0:
         return []
-    blocks: List[Tuple[int, int]] = []
+    blocks: list[tuple[int, int]] = []
     start = prev = int(positions[0])
     for p in positions[1:]:
         p = int(p)
@@ -139,7 +140,7 @@ def _purge_embargo_positions(
     ``horizon`` of any test position on either side. The embargo (7.4.3) removes
     a further ``embargo`` positions immediately *after* each test block.
     """
-    test_set = set(int(p) for p in test_positions)
+    test_set = {int(p) for p in test_positions}
     blocked = set(test_set)
 
     # Purge: any train position whose label window [j, j+horizon] overlaps a test
@@ -154,15 +155,13 @@ def _purge_embargo_positions(
 
     # Embargo: remove `embargo` positions after each contiguous test block.
     if embargo > 0:
-        for start, end in _contiguous_blocks(np.array(sorted(test_set))):
+        for _start, end in _contiguous_blocks(np.array(sorted(test_set))):
             lo = end + 1
             hi = min(n_times - 1, end + embargo)
             for j in range(lo, hi + 1):
                 blocked.add(j)
 
-    train = np.array(
-        [p for p in range(n_times) if p not in blocked], dtype=np.int64
-    )
+    train = np.array([p for p in range(n_times) if p not in blocked], dtype=np.int64)
     return train
 
 
@@ -233,20 +232,23 @@ class PurgedKFold:
         """Return the number of folds (sklearn-compatible)."""
         return self.n_splits
 
-    def _test_position_folds(self, n_times: int) -> List[np.ndarray]:
+    def _test_position_folds(self, n_times: int) -> list[np.ndarray]:
         """Partition ``range(n_times)`` into ``n_splits`` contiguous test folds."""
         if n_times < self.n_splits:
             raise ValueError(
                 f"cannot make {self.n_splits} folds from only {n_times} unique "
                 "time steps; reduce `n_splits` or supply more history."
             )
-        return [np.array(part, dtype=np.int64) for part in np.array_split(
-            np.arange(n_times, dtype=np.int64), self.n_splits
-        )]
+        return [
+            np.array(part, dtype=np.int64)
+            for part in np.array_split(
+                np.arange(n_times, dtype=np.int64), self.n_splits
+            )
+        ]
 
     def split(
-        self, panel: Union[PanelFrame, pl.DataFrame, pl.LazyFrame]
-    ) -> Iterator[Union[PanelFold, IndexFold]]:
+        self, panel: PanelFrame | pl.DataFrame | pl.LazyFrame
+    ) -> Iterator[PanelFold | IndexFold]:
         """Generate purged, embargoed train/test folds.
 
         Parameters
@@ -284,9 +286,9 @@ class PurgedKFold:
 class _CPCVFold:
     """A single CPCV split: which groups are test, plus position arrays."""
 
-    test_groups: Tuple[int, ...]
-    train_positions: "NDArray[np.int64]"
-    test_positions: "NDArray[np.int64]"
+    test_groups: tuple[int, ...]
+    train_positions: NDArray[np.int64]
+    test_positions: NDArray[np.int64]
 
 
 class CombinatorialPurgedCV:
@@ -378,7 +380,7 @@ class CombinatorialPurgedCV:
         """Return :attr:`n_splits` (sklearn-compatible)."""
         return self.n_splits
 
-    def _group_positions(self, n_times: int) -> List[np.ndarray]:
+    def _group_positions(self, n_times: int) -> list[np.ndarray]:
         """Partition ``range(n_times)`` into ``n_groups`` contiguous groups."""
         if n_times < self.n_groups:
             raise ValueError(
@@ -387,15 +389,19 @@ class CombinatorialPurgedCV:
             )
         return [
             np.array(part, dtype=np.int64)
-            for part in np.array_split(np.arange(n_times, dtype=np.int64), self.n_groups)
+            for part in np.array_split(
+                np.arange(n_times, dtype=np.int64), self.n_groups
+            )
         ]
 
     def _iter_folds(self, n_times: int) -> Iterator[_CPCVFold]:
         groups = self._group_positions(n_times)
-        for test_combo in itertools.combinations(range(self.n_groups), self.n_test_groups):
-            test_pos = np.sort(
-                np.concatenate([groups[g] for g in test_combo])
-            ).astype(np.int64)
+        for test_combo in itertools.combinations(
+            range(self.n_groups), self.n_test_groups
+        ):
+            test_pos = np.sort(np.concatenate([groups[g] for g in test_combo])).astype(
+                np.int64
+            )
             train_pos = _purge_embargo_positions(
                 n_times, test_pos, self.horizon, self.embargo
             )
@@ -406,8 +412,8 @@ class CombinatorialPurgedCV:
             )
 
     def split(
-        self, panel: Union[PanelFrame, pl.DataFrame, pl.LazyFrame]
-    ) -> Iterator[Union[PanelFold, IndexFold]]:
+        self, panel: PanelFrame | pl.DataFrame | pl.LazyFrame
+    ) -> Iterator[PanelFold | IndexFold]:
         """Generate all CPCV train/test folds.
 
         Parameters
@@ -427,8 +433,14 @@ class CombinatorialPurgedCV:
             yield train, test
 
     def split_with_groups(
-        self, panel: Union[PanelFrame, pl.DataFrame, pl.LazyFrame]
-    ) -> Iterator[Tuple[Union[PanelFrame, "NDArray[np.int64]"], Union[PanelFrame, "NDArray[np.int64]"], Tuple[int, ...]]]:
+        self, panel: PanelFrame | pl.DataFrame | pl.LazyFrame
+    ) -> Iterator[
+        tuple[
+            PanelFrame | NDArray[np.int64],
+            PanelFrame | NDArray[np.int64],
+            tuple[int, ...],
+        ]
+    ]:
         """Like :meth:`split` but also yields the test-group tuple per fold.
 
         Yields
@@ -450,7 +462,7 @@ class CombinatorialPurgedCV:
                     fold.test_groups,
                 )
 
-    def backtest_paths(self) -> List[List[Tuple[int, int]]]:
+    def backtest_paths(self) -> list[list[tuple[int, int]]]:
         """Return the assignment of (split, group) to each backtest path.
 
         Each path is a list of ``(split_index, group_index)`` pairs covering all
@@ -467,14 +479,14 @@ class CombinatorialPurgedCV:
         combos = list(itertools.combinations(range(self.n_groups), self.n_test_groups))
         # For each group, list the (split_index, position-within-combo) where it
         # is tested. Each group is tested in exactly C(N-1, k-1) splits == n_paths.
-        per_group: List[List[int]] = [[] for _ in range(self.n_groups)]
+        per_group: list[list[int]] = [[] for _ in range(self.n_groups)]
         for s_idx, combo in enumerate(combos):
             for g in combo:
                 per_group[g].append(s_idx)
         n_paths = self.n_paths
-        paths: List[List[Tuple[int, int]]] = []
+        paths: list[list[tuple[int, int]]] = []
         for p in range(n_paths):
-            path: List[Tuple[int, int]] = []
+            path: list[tuple[int, int]] = []
             for g in range(self.n_groups):
                 split_idx = per_group[g][p]
                 path.append((split_idx, g))
@@ -490,8 +502,8 @@ def _window_panel_split(
     test_size: int,
     n_splits: int,
     step_size: int,
-    window_size: Optional[int],
-) -> List[PanelFold]:
+    window_size: int | None,
+) -> list[PanelFold]:
     """Shared walk-forward split logic on the unique-time axis.
 
     Mirrors the slicing approach in
@@ -505,7 +517,7 @@ def _window_panel_split(
     backward_steps = np.arange(1, n_splits) * step_size + test_size
     cutoffs = np.flip(np.concatenate([np.array([test_size]), backward_steps]))
 
-    folds: List[PanelFold] = []
+    folds: list[PanelFold] = []
     for i in range(n_splits):
         cutoff = int(cutoffs[i])
         test_start = n_times - cutoff
@@ -575,7 +587,7 @@ def expanding_window_split(
         functime original this thinly wraps.
     """
 
-    def split(panel: Union[PanelFrame, pl.DataFrame, pl.LazyFrame]) -> List[PanelFold]:
+    def split(panel: PanelFrame | pl.DataFrame | pl.LazyFrame) -> list[PanelFold]:
         pf = as_panel(panel)
         return _window_panel_split(pf, test_size, n_splits, step_size, None)
 
@@ -618,7 +630,7 @@ def sliding_window_split(
         ``split(panel) -> list[(train_panel, test_panel)]``.
     """
 
-    def split(panel: Union[PanelFrame, pl.DataFrame, pl.LazyFrame]) -> List[PanelFold]:
+    def split(panel: PanelFrame | pl.DataFrame | pl.LazyFrame) -> list[PanelFold]:
         pf = as_panel(panel)
         return _window_panel_split(pf, test_size, n_splits, step_size, window_size)
 
@@ -641,19 +653,32 @@ def _norm_ppf(p: float) -> float:
     if not (0.0 < p < 1.0):
         raise ValueError(f"`p` must be in the open interval (0, 1), got {p}.")
     a = [
-        -3.969683028665376e01, 2.209460984245205e02, -2.759285104469687e02,
-        1.383577518672690e02, -3.066479806614716e01, 2.506628277459239e00,
+        -3.969683028665376e01,
+        2.209460984245205e02,
+        -2.759285104469687e02,
+        1.383577518672690e02,
+        -3.066479806614716e01,
+        2.506628277459239e00,
     ]
     b = [
-        -5.447609879822406e01, 1.615858368580409e02, -1.556989798598866e02,
-        6.680131188771972e01, -1.328068155288572e01,
+        -5.447609879822406e01,
+        1.615858368580409e02,
+        -1.556989798598866e02,
+        6.680131188771972e01,
+        -1.328068155288572e01,
     ]
     c = [
-        -7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e00,
-        -2.549732539343734e00, 4.374664141464968e00, 2.938163982698783e00,
+        -7.784894002430293e-03,
+        -3.223964580411365e-01,
+        -2.400758277161838e00,
+        -2.549732539343734e00,
+        4.374664141464968e00,
+        2.938163982698783e00,
     ]
     d = [
-        7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e00,
+        7.784695709041462e-03,
+        3.224671290700398e-01,
+        2.445134137142996e00,
         3.754408661907416e00,
     ]
     plow, phigh = 0.02425, 1 - 0.02425
@@ -664,13 +689,15 @@ def _norm_ppf(p: float) -> float:
         )
     if p > phigh:
         q = math.sqrt(-2 * math.log(1 - p))
-        return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / (
-            (((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1
-        )
+        return -(
+            ((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]
+        ) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
     q = p - 0.5
     r = q * q
-    return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (
-        ((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1
+    return (
+        (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5])
+        * q
+        / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1)
     )
 
 
@@ -679,11 +706,11 @@ def deflated_sharpe_ratio(
     *,
     n_trials: int,
     n_observations: int,
-    sharpe_std: Optional[float] = None,
-    sharpe_variance_across_trials: Optional[float] = None,
+    sharpe_std: float | None = None,
+    sharpe_variance_across_trials: float | None = None,
     skewness: float = 0.0,
     kurtosis: float = 3.0,
-    benchmark_sharpe: Optional[float] = None,
+    benchmark_sharpe: float | None = None,
 ) -> float:
     """Deflated Sharpe Ratio (DSR): probability the strategy is truly skilled.
 
@@ -792,7 +819,7 @@ def deflated_sharpe_ratio(
 
 
 def probability_of_backtest_overfitting(
-    performance_matrix: Union[np.ndarray, Sequence[Sequence[float]]],
+    performance_matrix: np.ndarray | Sequence[Sequence[float]],
     *,
     n_partitions: int = 16,
     higher_is_better: bool = True,
@@ -864,7 +891,7 @@ def probability_of_backtest_overfitting(
         raise ValueError(
             f"`n_partitions` must be an even integer >= 2, got {n_partitions}."
         )
-    if T < n_partitions:
+    if n_partitions > T:
         raise ValueError(
             f"need at least n_partitions={n_partitions} rows, got T={T}. "
             "Reduce `n_partitions` or supply a longer track record."
@@ -874,11 +901,11 @@ def probability_of_backtest_overfitting(
 
     # Trim rows so they divide evenly into n_partitions contiguous blocks.
     block = T // n_partitions
-    usable = block * n_partitions
+    block * n_partitions
     blocks = [M[i * block : (i + 1) * block, :] for i in range(n_partitions)]
 
     half = n_partitions // 2
-    logits: List[float] = []
+    logits: list[float] = []
     for is_combo in itertools.combinations(range(n_partitions), half):
         is_set = set(is_combo)
         is_rows = np.vstack([blocks[i] for i in range(n_partitions) if i in is_set])

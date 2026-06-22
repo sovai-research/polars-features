@@ -22,7 +22,7 @@ operations (lags, rolling windows, splits) can be expressed safely with
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterable, Sequence
+from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
@@ -316,9 +316,7 @@ class PanelFrame:
     # ------------------------------------------------------------------ #
     def _rewrap(self, lf: pl.LazyFrame, *, validate: bool = False) -> Self:
         """Wrap a derived LazyFrame in a new PanelFrame preserving the keys."""
-        return type(self)(
-            lf, entity=self._entity, time=self._time, validate=validate
-        )
+        return type(self)(lf, entity=self._entity, time=self._time, validate=validate)
 
     def with_columns(self, *exprs: Any, **named_exprs: Any) -> Self:
         """Return a new :class:`PanelFrame` with added/replaced columns.
@@ -460,24 +458,16 @@ class PanelFrame:
     def entities(self) -> pl.Series:
         """Return the sorted unique entity ids. **Materialises.**"""
         return (
-            self._lf.select(pl.col(self._entity).unique().sort())
-            .collect()
-            .to_series()
+            self._lf.select(pl.col(self._entity).unique().sort()).collect().to_series()
         )
 
     def n_entities(self) -> int:
         """Return the number of distinct entities. **Materialises.**"""
-        return (
-            self._lf.select(pl.col(self._entity).n_unique()).collect().item()
-        )
+        return self._lf.select(pl.col(self._entity).n_unique()).collect().item()
 
     def time_index(self) -> pl.Series:
         """Return the sorted unique time values across all entities. **Materialises.**"""
-        return (
-            self._lf.select(pl.col(self._time).unique().sort())
-            .collect()
-            .to_series()
-        )
+        return self._lf.select(pl.col(self._time).unique().sort()).collect().to_series()
 
     # ------------------------------------------------------------------ #
     # Dunders

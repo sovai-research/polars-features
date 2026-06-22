@@ -23,3 +23,23 @@ try:
     )
 except Exception:  # pragma: no cover - never let core import break the package
     pass
+
+# --- PanelKit feature registry + expression namespaces ----------------------
+# Importing `namespaces` registers the `.panel` / `.xs` Polars expression
+# namespaces as a side effect (idempotent).
+try:
+    from polars_features import namespaces as namespaces  # noqa: F401
+    from polars_features.registry import (  # noqa: F401
+        FeatureRegistry,
+        FeatureSpec,
+        register_feature,
+        registry,
+    )
+except Exception:  # pragma: no cover
+    pass
+
+# --- PanelKit panel-native transforms ---------------------------------------
+try:
+    from polars_features import transform as transform  # noqa: F401
+except Exception:  # pragma: no cover
+    pass

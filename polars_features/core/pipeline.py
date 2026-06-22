@@ -20,7 +20,8 @@ All steps except the last must be transformers. The last may be a transformer
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Iterator, List, Tuple, Union
+from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 from polars_features.core.panel_frame import PanelFrame
 from polars_features.core.protocol import PanelEstimator, PanelTransformer
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
 
 __all__ = ["Pipeline"]
 
-Step = Tuple[str, PanelTransformer]
+Step = tuple[str, PanelTransformer]
 
 
 class Pipeline(PanelTransformer):
@@ -83,10 +84,10 @@ class Pipeline(PanelTransformer):
     panel_safe: bool = True
     leakage_safe: bool = True
 
-    def __init__(self, steps: List[Step]) -> None:
+    def __init__(self, steps: list[Step]) -> None:
         super().__init__()
         self._validate_steps(steps)
-        self.steps: List[Step] = list(steps)
+        self.steps: list[Step] = list(steps)
         # Instance-level safety flags derived from the steps.
         self.panel_safe = all(t.panel_safe for _, t in self.steps)
         self.leakage_safe = all(t.leakage_safe for _, t in self.steps)
@@ -125,7 +126,9 @@ class Pipeline(PanelTransformer):
             names.append(name)
         if len(set(names)) != len(names):
             dupes = sorted({n for n in names if names.count(n) > 1})
-            raise ValueError(f"Pipeline step names must be unique; duplicates: {dupes}.")
+            raise ValueError(
+                f"Pipeline step names must be unique; duplicates: {dupes}."
+            )
         # All but last must be transformers (not necessarily estimators). Every
         # PanelTransformer can transform, so the only thing we forbid is a
         # *non-final* step that cannot transform — which is impossible given the
@@ -196,7 +199,7 @@ class Pipeline(PanelTransformer):
                 "estimator. Use `transform` for a feature-only pipeline."
             )
         out = panel
-        for name, transformer in self.steps[:-1]:
+        for _name, transformer in self.steps[:-1]:
             out = transformer.transform(out)
         return last.predict(out)
 
@@ -206,7 +209,7 @@ class Pipeline(PanelTransformer):
     @property
     def named_steps(self) -> dict[str, PanelTransformer]:
         """Mapping from step name to step object."""
-        return {name: obj for name, obj in self.steps}
+        return dict(self.steps)
 
     def __len__(self) -> int:
         return len(self.steps)
@@ -214,9 +217,7 @@ class Pipeline(PanelTransformer):
     def __iter__(self) -> Iterator[Step]:
         return iter(self.steps)
 
-    def __getitem__(
-        self, key: Union[int, str, slice]
-    ) -> Union[PanelTransformer, "Self"]:
+    def __getitem__(self, key: int | str | slice) -> PanelTransformer | Self:
         """Index a step by position or name, or slice into a sub-pipeline.
 
         Parameters
@@ -243,8 +244,7 @@ class Pipeline(PanelTransformer):
         if isinstance(key, int):
             return self.steps[key][1]
         raise TypeError(
-            f"Pipeline indices must be int, str, or slice, not "
-            f"{type(key).__name__!r}."
+            f"Pipeline indices must be int, str, or slice, not {type(key).__name__!r}."
         )
 
     def __repr__(self) -> str:  # pragma: no cover - cosmetic
