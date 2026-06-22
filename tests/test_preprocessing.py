@@ -324,7 +324,6 @@ def pd_fractional_diff(df, d, thres):
     )
 
 
-@pytest.mark.skip('The fractional_diff is not compiled in cargo yet')
 def test_fractional_diff(pd_X):
     X = pl.from_pandas(pd_X.reset_index()).lazy()
     entity_col = pd_X.index.names[0]

@@ -146,6 +146,7 @@ def score_forecasts(
 # 6 mins timeout
 @pytest.mark.benchmark
 def test_mlforecast_on_m4(regressor, pd_m4_dataset, benchmark, request):
+    pytest.importorskip("mlforecast")
     from joblib import cpu_count
     from mlforecast import MLForecast
     from mlforecast.target_transforms import LocalStandardScaler
@@ -185,6 +186,7 @@ def test_mlforecast_on_m4(regressor, pd_m4_dataset, benchmark, request):
 
 @pytest.mark.benchmark
 def test_mlforecast_on_m5(regressor, pd_m5_dataset, benchmark):
+    pytest.importorskip("mlforecast")
     from joblib import cpu_count
     from mlforecast import MLForecast
     from mlforecast.target_transforms import LocalStandardScaler
@@ -234,6 +236,11 @@ def test_functime_on_m4(forecaster, m4_dataset_no_missing, benchmark, request):
     mlforecast_scores = request.config.cache.get(
         f"baseline_m4_{freq}_{lags}_{forecaster_name}", None
     )
+    if mlforecast_scores is None:
+        pytest.skip(
+            "Requires the optional 'mlforecast' baseline to be computed first "
+            "(test_mlforecast_on_m4); 'mlforecast' is not installed."
+        )
 
     for metric_name, baseline_scores in mlforecast_scores.items():
         functime_scores = scores[metric_name]
@@ -279,6 +286,7 @@ def m4_dataset_no_missing_long_fh(m4_dataset_no_missing):
 
 @pytest.mark.benchmark
 def test_mlforecast_on_m4_long_fh(regressor, pd_m4_dataset_long_fh, benchmark):
+    pytest.importorskip("mlforecast")
     from joblib import cpu_count
     from mlforecast import MLForecast
     from mlforecast.target_transforms import LocalStandardScaler

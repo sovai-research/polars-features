@@ -48,7 +48,10 @@ def commodities_backtest(commodities_dataset):
     return y_preds, y_resids
 
 
-@pytest.mark.skip("Values do not align up with scipy")
+@pytest.mark.skip(
+    "Requires optional 'statsmodels' dependency and the polars ACF "
+    "implementation does not numerically match statsmodels' adjusted ACF/confint."
+)
 def test_acf(commodities_dataset):
     from statsmodels.tsa.stattools import acf as sm_acf
 
@@ -103,7 +106,10 @@ def test_acf(commodities_dataset):
     )
 
 
-@pytest.mark.skip("Values do not align up with scipy")
+@pytest.mark.skip(
+    "Requires optional 'statsmodels' dependency and the polars Ljung-Box "
+    "implementation does not numerically match statsmodels' acorr_ljungbox."
+)
 def test_ljung_box(commodities_dataset):
     import statsmodels.api as sm
 

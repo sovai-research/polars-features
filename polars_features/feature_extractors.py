@@ -719,7 +719,7 @@ def fourier_entropy(x: TIME_SERIES_T, n_bins: int = 10) -> float:
         if len(x) == 1:
             return np.nan
         else:
-            _, pxx = welch(x, nperseg=min(x.len(), 256))
+            _, pxx = welch(x.to_numpy(), nperseg=min(x.len(), 256))
             pxx_as_series = pl.Series(pxx)
             return binned_entropy(pxx_as_series / pxx_as_series.max(), n_bins)
     else:
@@ -1559,7 +1559,7 @@ def spkt_welch_density(x: TIME_SERIES_T, n_coeffs: int | None = None) -> LIST_EX
             last_idx = len(x)
         else:
             last_idx = n_coeffs
-        _, pxx = welch(x, nperseg=min(len(x), 256))
+        _, pxx = welch(x.to_numpy(), nperseg=min(len(x), 256))
         return pxx[:last_idx]
     else:
         logger.info(

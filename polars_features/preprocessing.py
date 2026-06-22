@@ -579,8 +579,10 @@ def boxcox(method: str = "mle"):
         # Step 1. Compute optimal lambdas
         lmbds = gb.agg(
             PL_NUMERIC_COLS(entity_col, time_col)
-            .map_elements(
-                lambda x: boxcox_normmax(x, method=method, optimizer=optimizer),
+            .map_batches(
+                lambda x: pl.Series(
+                    [boxcox_normmax(x.to_numpy(), method=method, optimizer=optimizer)]
+                ),
                 returns_scalar=True,
                 return_dtype=pl.Float64,
             )
@@ -1031,12 +1033,16 @@ def fractional_diff(
         raise ValueError("Only one of `min_weight` or `window_size` must be specified.")
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
+        # Ensure the rust-backed ``ts`` expression namespace is registered.
+        import polars_features.feature_extractors  # noqa: F401
+
         idx_cols = X.columns[:2]
         entity_col = idx_cols[0]
         time_col = idx_cols[1]
 
         X_new = X.with_columns(
             PL_NUMERIC_COLS(entity_col, time_col)
+            .as_expr()
             .ts.frac_diff(d, min_weight, window_size)
             .over(entity_col)
         )
