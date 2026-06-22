@@ -4,11 +4,34 @@ build-backend = "maturin"
 
 [project]
 name = "polars_features"
+# NOTE: Pinned for now. maturin can later read the version from Cargo.toml
+# (`version = "..."` under [tool.maturin]) or derive it from git tags at
+# release time -- that dynamic-versioning setup is handled elsewhere.
 version = "0.1.0"
-description = "Time-series machine learning at scale."
-requires-python = ">=3.8"
-authors = [{ name = "Your Name", email = "you@example.com" }]
+description = "Leak-safe, Rust-fast feature engineering and ML for panel data, built on Polars."
+requires-python = ">=3.10"
+authors = [{ name = "Sov.ai", email = "research@sov.ai" }]
 readme = "README.md"
+keywords = [
+  "polars",
+  "panel-data",
+  "feature-engineering",
+  "time-series",
+  "finance",
+  "quant",
+  "machine-learning",
+  "rust",
+]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Rust",
+  "Intended Audience :: Financial and Insurance Industry",
+  "Typing :: Typed",
+]
 dependencies = [
   "cloudpickle",
   "flaml>=2.0.2",
@@ -18,10 +41,106 @@ dependencies = [
   "scikit-learn>=1.2.2",
   "scipy",
   "tqdm",
-  "typing-extensions; python_version < '3.10'"
+]
+
+[project.urls]
+Homepage = "https://github.com/sovai-research/polars-features"
+Repository = "https://github.com/sovai-research/polars-features"
+Documentation = "https://github.com/sovai-research/polars-features"
+Changelog = "https://github.com/sovai-research/polars-features/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# LLM-assisted features. The current code targets the OpenAI SDK; anthropic is
+# included as the recommended provider going forward.
+llm = ["openai", "anthropic", "tiktoken", "tenacity"]
+# GPU acceleration. Polars exposes its GPU engine via the collect engine
+# (`.collect(engine="gpu")`), which pulls in the cudf-polars backend.
+gpu = ["cudf-polars-cu12"]
+# Path-signature transforms. NOTE: signatory / iisignature licenses must be
+# verified before enabling these as a hard dependency in any distribution.
+signatures = ["iisignature"]
+# Plotting utilities (see polars_features/plotting.py -> plotly).
+viz = ["plotly"]
+# Cross-dataframe interop.
+interop = ["narwhals"]
+# Convenience extra unioning all optional feature sets above.
+all = [
+  "openai",
+  "anthropic",
+  "tiktoken",
+  "tenacity",
+  "cudf-polars-cu12",
+  "iisignature",
+  "plotly",
+  "narwhals",
+]
+# Development / CI tooling.
+dev = [
+  "ruff>=0.8.0",
+  "pytest>=8.0",
+  "hypothesis>=6.0",
+  "mypy>=1.8",
+  "pre-commit>=3.5",
+  "maturin>=1.3.2,<2",
 ]
 
 [tool.maturin]
 module-name = "polars_features._polars_features_rust"
 features = ["pyo3/extension-module"]
 exclude = ["docs/**", "data/**", "tests/**"]
+# Ship the typing marker so downstream type checkers treat the package as typed.
+include = ["polars_features/py.typed"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "I",   # isort
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear
+  "SIM", # flake8-simplify
+  "C4",  # flake8-comprehensions
+  "W",   # pycodestyle warnings
+]
+ignore = [
+  "E501", # line length handled by the formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "E402"]
+"tests/**" = ["B", "F401", "F811"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["polars_features"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "benchmark: marks tests as benchmarks",
+]
+
+[tool.mypy]
+# `ty` (astral) is the preferred type checker going forward, but mypy config is
+# kept as the portable fallback that runs everywhere today.
+python_version = "3.10"
+files = ["polars_features"]
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# The compiled Rust extension module has no stubs.
+module = [
+  "polars_features._polars_features_rust",
+  "polars_features._plotting",
+]
+ignore_missing_imports = true
+
+[tool.hypothesis]
+# Disable per-example deadlines; Rust-backed ops can have variable warm-up cost.
+deadline = 0
