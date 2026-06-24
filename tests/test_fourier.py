@@ -66,6 +66,7 @@ def test_fourier_with_dates(freq: str, sp: int):
 
 @pytest.mark.benchmark
 def test_fourier_compare_with_aeon():
+    pytest.importorskip("aeon")
     from aeon.transformations.series.fourier import FourierFeatures
 
     sp = 12

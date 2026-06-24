@@ -8,10 +8,13 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-from polars.type_aliases import ClosedInterval
+try:  # polars>=1.0 moved type aliases to the private `_typing` module
+    from polars._typing import ClosedInterval
+except ImportError:  # pragma: no cover - older polars
+    from polars.type_aliases import ClosedInterval
 # from numpy.linalg import lstsq
 from scipy.linalg import lstsq
-from scipy.signal import find_peaks_cwt, ricker, welch
+from scipy.signal import find_peaks_cwt, welch
 from scipy.spatial import KDTree
 
 from polars_features._compat import register_plugin_function, rle_fields
@@ -23,6 +26,21 @@ from scipy.stats import skew, kurtosis
 # from functime.feature_extractor import FeatureExtractor  # noqa: F401
 
 logger = logging.getLogger(__name__)
+
+
+def ricker(points: int, a: float) -> np.ndarray:
+    """Ricker (Mexican-hat) wavelet.
+
+    Vendored from the implementation removed in SciPy 1.15 so the CWT-based
+    feature extractors keep working across SciPy versions.
+    """
+    A = 2 / (np.sqrt(3 * a) * np.pi**0.25)
+    wsq = a**2
+    vec = np.arange(0, points) - (points - 1.0) / 2
+    xsq = vec**2
+    mod = 1 - xsq / wsq
+    gauss = np.exp(-xsq / (2 * wsq))
+    return A * mod * gauss
 
 TIME_SERIES_T = pl.Series | pl.Expr
 FLOAT_EXPR = float | pl.Expr
@@ -701,7 +719,7 @@ def fourier_entropy(x: TIME_SERIES_T, n_bins: int = 10) -> float:
         if len(x) == 1:
             return np.nan
         else:
-            _, pxx = welch(x, nperseg=min(x.len(), 256))
+            _, pxx = welch(x.to_numpy(), nperseg=min(x.len(), 256))
             pxx_as_series = pl.Series(pxx)
             return binned_entropy(pxx_as_series / pxx_as_series.max(), n_bins)
     else:
@@ -1541,7 +1559,7 @@ def spkt_welch_density(x: TIME_SERIES_T, n_coeffs: int | None = None) -> LIST_EX
             last_idx = len(x)
         else:
             last_idx = n_coeffs
-        _, pxx = welch(x, nperseg=min(len(x), 256))
+        _, pxx = welch(x.to_numpy(), nperseg=min(len(x), 256))
         return pxx[:last_idx]
     else:
         logger.info(

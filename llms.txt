@@ -1,0 +1,57 @@
+# PanelKit
+
+> Leak-safe, Rust-fast feature engineering and ML for panel data, built on Polars. PanelKit is a panel-native (entity x time) data-science toolkit with an sklearn-familiar API, Polars-native lazy execution, and correctness-by-construction (no lookahead/leakage). It is built on the foundations of functime (Apache-2.0, no longer maintained) and is being extended into a maintained, panel-first platform.
+
+Pipeline philosophy: transform -> interact -> map -> extract -> select -> synthesize -> compare -> label -> signal_eval -> models -> model_selection, with no lookahead, ever.
+
+## Naming and status
+
+- Project/brand name: PanelKit.
+- Python import/PyPI package: `polars_features` (e.g. `import polars_features as pk`). The public rename to `panelkit` is planned but NOT yet effective. Do not assume `import panelkit` works today.
+- License: Apache-2.0, retained from functime. functime is credited prominently in NOTICE.
+- Shipped today: the functime-derived engine (Polars-native feature extractors via the `ts` namespace, forecasting, preprocessing, seasonality, cross-validation, metrics, LLM analysis).
+- Roadmap (coming soon, NOT yet shipped): PanelFrame, leak-safe Pipeline, the panel module taxonomy below, labeling (triple_barrier), CPCV validation, clean-room catch22.
+
+## Core concepts
+
+- PanelFrame: first-class panel/cross-section object wrapping a Polars frame with an `entity` and `time` key. The unit of work is the panel, not a bag of rows. (Roadmap)
+- panel_safe contract: within-entity operations stay inside their entity and run in time order (use `.over(entity)`).
+- leakage_safe contract: cross-sectional and fit-based operations never see the future or the test fold. Cross-sectional ops use `.over(time)`; fit happens per-fold.
+- Leak-safe Pipeline: sklearn-style fit/transform pipeline where fitting only ever sees the past of each fold; scalers/selectors are fit per-fold, never globally. (Roadmap)
+- CPCV: Combinatorial Purged Cross-Validation with purging + embargo to eliminate train/test leakage around fold boundaries. (Roadmap)
+
+## Module taxonomy (roadmap)
+
+- transform: leak-safe per-entity / per-date transforms (winsorize, frac_diff, scaling).
+- interact: pairwise and cross-feature interactions.
+- map: row/entity-wise mappings and encodings.
+- extract: time-series feature extraction (functime `ts` namespace today; clean-room catch22 planned).
+- select: feature selection (e.g. mRMR), fit per-fold.
+- synthesize: synthetic / augmented feature generation.
+- compare: cross-sectional and cross-entity comparisons (ranks, z-scores over date).
+- label: target construction (triple_barrier, fixed-horizon, meta-labeling), leak-safe horizons.
+- signal_eval: signal/factor evaluation diagnostics.
+- models: panel/cross-sectional model wrappers (e.g. lgbm_classifier) plus functime forecasters.
+- model_selection: validation and tuning, including `validate.cpcv`.
+- neutralize: factor/exposure neutralization of signals.
+
+## Docs
+
+- [README](./README.md): positioning, install, 60-second quickstart, shipped-vs-roadmap table.
+- [Quickstart](./docs/quickstart.md): 60-second getting-started.
+- [Leakage & correctness](./docs/leakage.md): what leakage is and how PanelKit prevents it by construction.
+- [Changelog](./CHANGELOG.md): Phase 0 modernization and planned 0.1.0 wedge release.
+- [Contributing](./CONTRIBUTING.md): Tier B/C contributions land in Python; panel_safe/leakage_safe contracts; good-first-issue posture.
+- [NOTICE](./NOTICE): functime attribution and Apache-2.0 notices.
+
+## Ecosystem positioning
+
+- Depends on / recommends polars-ds and polars_ta for general Polars-native primitives; does not compete with them.
+- Nixtla (statsforecast/mlforecast) owns forecasting; PanelKit centers on leak-safe feature engineering, labeling, selection, and cross-sectional ML for panels.
+- catch22 features are clean-room reimplemented from Lubba et al. 2019, NOT vendored from GPL pycatch22.
+
+## Optional
+
+- Legacy functime documentation: https://docs.functime.ai/
+- functime upstream (Apache-2.0, unmaintained): https://github.com/functime-org/functime
+- Polars: https://pola.rs/
