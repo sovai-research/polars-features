@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Union
 
 import polars as pl
 
@@ -12,7 +12,7 @@ from polars_features.base.model import (
 )
 
 METRIC_TYPE = Callable[
-    [Union[pl.LazyFrame, pl.DataFrame], Union[pl.LazyFrame, pl.DataFrame]], pl.DataFrame
+    [pl.LazyFrame | pl.DataFrame, pl.LazyFrame | pl.DataFrame], pl.DataFrame
 ]
 
 
@@ -20,8 +20,8 @@ METRIC_TYPE = Callable[
 def metric(score: Callable):
     @wraps(score)
     def _score(
-        y_true: Union[pl.LazyFrame, pl.DataFrame],
-        y_pred: Union[pl.LazyFrame, pl.DataFrame],
+        y_true: pl.LazyFrame | pl.DataFrame,
+        y_pred: pl.LazyFrame | pl.DataFrame,
         *args,
         **kwargs,
     ) -> pl.DataFrame:
@@ -37,7 +37,7 @@ def metric(score: Callable):
         y_pred = y_pred.pipe(_enforce_string_cache, string_cache=string_cache)
         # Coerce column names and dtypes
         cols = y_true.columns
-        y_pred = y_pred.rename({x: y for x, y in zip(y_pred.columns, cols)}).select(
+        y_pred = y_pred.rename(dict(zip(y_pred.columns, cols, strict=False))).select(
             [pl.col(col).cast(dtype) for col, dtype in y_true.schema.items()]
         )
 

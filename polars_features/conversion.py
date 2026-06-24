@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 
+
 def df_to_ndarray(df: pl.DataFrame) -> np.ndarray:
     """Zero-copy spill-to-disk Polars DataFrame to numpy ndarray."""
     return df.to_numpy()

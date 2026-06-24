@@ -5,6 +5,7 @@ from functools import partial
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
+
 from polars_features.cross_validation import train_test_split
 from polars_features.evaluation import (
     acf,

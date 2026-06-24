@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, List, Literal, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import Any, Literal
 
 import cloudpickle
 import numpy as np
@@ -14,6 +15,7 @@ from polars_features.base import transformer
 from polars_features.base.model import ModelState
 from polars_features.offsets import _strip_freq_alias
 from polars_features.seasonality import add_fourier_terms
+
 # from polars_features._polars_features_rust import frac_diff
 
 
@@ -92,7 +94,7 @@ def time_to_arange(eager: bool = False):
 
 
 @transformer
-def resample(freq: str, agg_method: str, impute_method: Union[str, int, float]):
+def resample(freq: str, agg_method: str, impute_method: str | int | float):
     """
     Resamples and transforms a DataFrame using the specified frequency, aggregation method, and imputation method.
 
@@ -165,7 +167,7 @@ def trim(direction: Literal["both", "left", "right"] = "both"):
 
 
 @transformer
-def lag(lags: List[int], is_sorted: bool = False):
+def lag(lags: list[int], is_sorted: bool = False):
     """Applies lag transformation to a LazyFrame. The time series is assumed to have no null values.
 
     Parameters
@@ -191,10 +193,8 @@ def lag(lags: List[int], is_sorted: bool = False):
             )
             for lag in lags
         )
-        if is_sorted:
-            X_new = X
-        else:  # Pre-sorting seems to improve performance by ~20%
-            X_new = X.sort(by=[entity_col, time_col])
+        # Pre-sorting seems to improve performance by ~20%
+        X_new = X if is_sorted else X.sort(by=[entity_col, time_col])
 
         X_new = X_new.select(
             pl.col(entity_col).set_sorted(),
@@ -254,10 +254,10 @@ def one_hot_encode(drop_first: bool = False):
 
 @transformer
 def roll(
-    window_sizes: List[int],
-    stats: List[Literal["mean", "min", "max", "mlm", "sum", "std", "cv"]],
+    window_sizes: list[int],
+    stats: list[Literal["mean", "min", "max", "mlm", "sum", "std", "cv"]],
     freq: str,
-    fill_strategy: Optional[str] = None,
+    fill_strategy: str | None = None,
 ):
     """
     Performs rolling window calculations on specified columns of a DataFrame.
@@ -428,10 +428,9 @@ def scale(use_mean: bool = True, use_std: bool = True, rescale_bool: bool = Fals
 
 @transformer
 def impute(
-    method: Union[
-        Literal["mean", "median", "fill", "ffill", "bfill", "interpolate"],
-        Union[int, float],
-    ],
+    method: Literal["mean", "median", "fill", "ffill", "bfill", "interpolate"]
+    | int
+    | float,
 ):
     """
     Performs missing value imputation on numeric columns of a DataFrame grouped by entity.
@@ -477,7 +476,7 @@ def impute(
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
         entity_col, time_col = X.columns[:2]
-        if isinstance(method, int) or isinstance(method, float):
+        if isinstance(method, (int, float)):
             expr = PL_NUMERIC_COLS(entity_col, time_col).fill_null(pl.lit(method))
         else:
             expr = method_to_expr(entity_col, time_col)[method]
@@ -488,7 +487,7 @@ def impute(
 
 
 @transformer
-def diff(order: int, sp: int = 1, fill_strategy: Optional[str] = None):
+def diff(order: int, sp: int = 1, fill_strategy: str | None = None):
     """Difference time-series in panel data given order and seasonal period.
 
     Parameters
@@ -531,20 +530,42 @@ def diff(order: int, sp: int = 1, fill_strategy: Optional[str] = None):
         }
         return artifacts
 
-    def invert(state: ModelState, X: pl.LazyFrame, from_last: bool = False) -> pl.LazyFrame:
+    def invert(
+        state: ModelState, X: pl.LazyFrame, from_last: bool = False
+    ) -> pl.LazyFrame:
         artifacts = state.artifacts
         entity_col = X.columns[0]
         time_col = X.columns[1]
         idx_cols = entity_col, time_col
 
         X_cutoff = artifacts["X_last"] if from_last else artifacts["X_first"]
-        X_new = pl.concat([X,X_cutoff.select(pl.col(col).cast(dtype) for col, dtype in X.schema.items()),],how="diagonal",).sort(idx_cols)
+        X_new = pl.concat(
+            [
+                X,
+                X_cutoff.select(
+                    pl.col(col).cast(dtype) for col, dtype in X.schema.items()
+                ),
+            ],
+            how="diagonal",
+        ).sort(idx_cols)
         for _ in range(order):
-            X_new = X_new.select([entity_col,time_col,PL_NUMERIC_COLS(entity_col, time_col).cum_sum().over(entity_col),])
-        X_new = (X.select(idx_cols)
+            X_new = X_new.select(
+                [
+                    entity_col,
+                    time_col,
+                    PL_NUMERIC_COLS(entity_col, time_col).cum_sum().over(entity_col),
+                ]
+            )
+        X_new = (
+            X.select(idx_cols)
             # Must drop duplicates to deal with case where
             # X to be inverted starts with timestamp == cutoff
-            .join(X_new.unique(subset=[entity_col, time_col], keep="last"), on=idx_cols, how="left",))
+            .join(
+                X_new.unique(subset=[entity_col, time_col], keep="last"),
+                on=idx_cols,
+                how="left",
+            )
+        )
         return X_new
 
     return transform, invert
@@ -628,8 +649,6 @@ def boxcox(method: str = "mle"):
     return transform, invert
 
 
-
-
 @transformer
 def yeojohnson(brack: tuple = (-2, 2)):
     def transform(X: pl.LazyFrame) -> dict:
@@ -654,11 +673,15 @@ def yeojohnson(brack: tuple = (-2, 2)):
                 pl.when((pl.col(col) >= 0) & (pl.col(f"{col}__lmbd") == 0))
                 .then(pl.col(col).log1p())
                 .when(pl.col(col) >= 0)
-                .then(((pl.col(col) + 1) ** pl.col(f"{col}__lmbd") - 1) / pl.col(f"{col}__lmbd"))
+                .then(
+                    ((pl.col(col) + 1) ** pl.col(f"{col}__lmbd") - 1)
+                    / pl.col(f"{col}__lmbd")
+                )
                 .when((pl.col(col) < 0) & (pl.col(f"{col}__lmbd") == 2))
                 .then(-pl.col(col).log1p())
                 .otherwise(
-                    -((-pl.col(col) + 1) ** (2 - pl.col(f"{col}__lmbd")) - 1) / (2 - pl.col(f"{col}__lmbd"))
+                    -((-pl.col(col) + 1) ** (2 - pl.col(f"{col}__lmbd")) - 1)
+                    / (2 - pl.col(f"{col}__lmbd"))
                 )
                 .alias(col)
                 for col in cols
@@ -674,25 +697,35 @@ def yeojohnson(brack: tuple = (-2, 2)):
 
         return (
             X.join(lmbds, on=entity_col, how="left")
-            .with_columns([
-                pl.when((pl.col(col) >= 0) & (pl.col(f"{col}__lmbd") == 0))
-                .then(pl.col(col).exp() - 1)
-                .when(pl.col(col) >= 0)
-                .then(((pl.col(col) * pl.col(f"{col}__lmbd") + 1) ** (1 / pl.col(f"{col}__lmbd"))) - 1)
-                .when((pl.col(col) < 0) & (pl.col(f"{col}__lmbd") == 2))
-                .then(1 - (-(pl.col(col)).exp()))
-                .otherwise(
-                    1 - ((-(2 - pl.col(f"{col}__lmbd")) * pl.col(col) + 1) ** (1 / (2 - pl.col(f"{col}__lmbd"))))
-                )
-                .alias(col)
-                for col in cols
-            ])
+            .with_columns(
+                [
+                    pl.when((pl.col(col) >= 0) & (pl.col(f"{col}__lmbd") == 0))
+                    .then(pl.col(col).exp() - 1)
+                    .when(pl.col(col) >= 0)
+                    .then(
+                        (
+                            (pl.col(col) * pl.col(f"{col}__lmbd") + 1)
+                            ** (1 / pl.col(f"{col}__lmbd"))
+                        )
+                        - 1
+                    )
+                    .when((pl.col(col) < 0) & (pl.col(f"{col}__lmbd") == 2))
+                    .then(1 - (-(pl.col(col)).exp()))
+                    .otherwise(
+                        1
+                        - (
+                            (-(2 - pl.col(f"{col}__lmbd")) * pl.col(col) + 1)
+                            ** (1 / (2 - pl.col(f"{col}__lmbd")))
+                        )
+                    )
+                    .alias(col)
+                    for col in cols
+                ]
+            )
             .select(X.columns)
         )
 
     return transform, invert
-
-
 
 
 @transformer
@@ -876,10 +909,7 @@ def deseasonalize_fourier(sp: int, K: int, robust: bool = False):
     Note: part of this transformer uses sklearn under-the-hood: it is not pure Polars and lazy.
     """
 
-    if robust:
-        regressor_cls = LinearRegression
-    else:
-        regressor_cls = TheilSenRegressor
+    regressor_cls = LinearRegression if robust else TheilSenRegressor
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
         X = X.collect()  # Not lazy
@@ -1000,9 +1030,10 @@ def deseasonalize_fourier(sp: int, K: int, robust: bool = False):
 
     return transform, invert
 
+
 @transformer
 def fractional_diff(
-    d: float, min_weight: Optional[float] = None, window_size: Optional[int] = None
+    d: float, min_weight: float | None = None, window_size: int | None = None
 ):
     """Compute the fractional differential of a time series.
 

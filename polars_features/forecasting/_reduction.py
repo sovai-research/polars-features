@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import polars as pl
 
 from polars_features.preprocessing import lag
@@ -19,10 +17,10 @@ def _join_X_y(y: pl.LazyFrame, X: pl.LazyFrame) -> pl.LazyFrame:
 
 
 def make_reduction(
-    lags: int, y: pl.LazyFrame, X: Optional[pl.LazyFrame] = None
+    lags: int, y: pl.LazyFrame, X: pl.LazyFrame | None = None
 ) -> pl.DataFrame:
     idx_cols = y.columns[:2]
-    
+
     # Force LazyFrame
     y = y.lazy()
     if X is not None:
@@ -34,28 +32,29 @@ def make_reduction(
         y_lag = y_lag["X"]
 
     # Ensure columns are aligned before join
-    y_lag = y_lag.select([*idx_cols, *[col for col in y_lag.columns if col not in idx_cols]])
+    y_lag = y_lag.select(
+        [*idx_cols, *[col for col in y_lag.columns if col not in idx_cols]]
+    )
 
     # Join lagged y with original y
     X_y = y_lag.join(y, on=idx_cols, how="inner")
-    
+
     # Add exogenous X if available
     if X is not None:
         try:
             X_y = _join_X_y(X_y, X)
         except Exception as e:
-            raise ValueError(f"Error joining X and y: {e}")
+            raise ValueError(f"Error joining X and y: {e}") from e
 
     # NOTE: Do not use streaming due to PyO3 backend instability
     try:
         return X_y.collect(streaming=False)
     except Exception as e:
-        raise RuntimeError(f"Polars collect failed: {e}")
-
+        raise RuntimeError(f"Polars collect failed: {e}") from e
 
 
 def make_direct_reduction(
-    lags: int, max_horizons: int, y: pl.LazyFrame, X: Optional[pl.LazyFrame] = None
+    lags: int, max_horizons: int, y: pl.LazyFrame, X: pl.LazyFrame | None = None
 ) -> pl.DataFrame:
     idx_cols = y.columns[:2]
     # Defensive lazy

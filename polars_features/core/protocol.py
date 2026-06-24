@@ -127,9 +127,7 @@ class PanelTransformer(abc.ABC):
                     "        leakage_safe = True\n"
                 )
 
-    def __init__(
-        self, *, entity: str | None = None, time: str | None = None
-    ) -> None:
+    def __init__(self, *, entity: str | None = None, time: str | None = None) -> None:
         # `_fitted` flips to True after a successful `fit`. Subclasses store
         # learned parameters as instance attributes (sklearn convention:
         # trailing-underscore names) during `_fit`.

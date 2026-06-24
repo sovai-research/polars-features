@@ -24,7 +24,7 @@ def add_fourier_terms(sp: int, K: int):
         Must be less than `sp`.
     """
 
-    if K > sp:
+    if sp < K:
         raise ValueError("`K` must be less than `sp`")
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:

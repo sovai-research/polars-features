@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import List, Literal, Optional
+from typing import Literal
 
 import polars as pl
 import polars.selectors as cs
 from scipy.stats import norm, normaltest
+
 from polars_features.base.metric import METRIC_TYPE
 from polars_features.metrics import (
     mae,
@@ -58,7 +59,7 @@ RESIDUALS_SORT_BY = Literal["bias", "abs_bias", "normality", "autocorr"]
 FVA_SORT_BY = Literal["naive", "snaive", "linear", "linear_scaled"]
 
 
-def acf_formula(x: pl.Expr, max_lags: int) -> List[pl.Expr]:
+def acf_formula(x: pl.Expr, max_lags: int) -> list[pl.Expr]:
     # NOTE: Unsure if lists of expressions are automatically vectorized by the Rust query engine...
     # Brute force adjusted ACF calculation (might be slow for long series and lags)
     n = x.len()
@@ -144,7 +145,9 @@ def ljung_box_test(X: pl.DataFrame, max_lags: int):
             for i in range(1, max_lags + 1)
         ]
         acf_sqr = [x**2 for x in acf]
-        acf_sqr_ratio = [x / (n - k) for x, k in zip(acf_sqr, range(1, max_lags + 1))]
+        acf_sqr_ratio = [
+            x / (n - k) for x, k in zip(acf_sqr, range(1, max_lags + 1), strict=False)
+        ]
         return [*acf_sqr_ratio, n.alias("length")]
 
     def _qstat_ljung_box(acf: pl.Expr, length: pl.Expr):
@@ -325,8 +328,8 @@ def rank_residuals(
 def rank_fva(
     y_true: pl.DataFrame,
     y_pred: pl.DataFrame,
-    y_pred_bench: Optional[pl.DataFrame] = None,
-    scoring: Optional[METRIC_TYPE] = None,
+    y_pred_bench: pl.DataFrame | None = None,
+    scoring: METRIC_TYPE | None = None,
     descending: bool = False,
 ) -> pl.DataFrame:
     """Sorts point forecasts in `y_pred` across entities / time-series by score.

@@ -8,7 +8,6 @@ import pytest
 # AttributeError: module 'polars' has no attribute 'testing'
 from polars.testing import assert_frame_equal
 from scipy import signal
-
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import PowerTransformer
 

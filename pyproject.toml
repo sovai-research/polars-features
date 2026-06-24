@@ -94,6 +94,7 @@ include = ["polars_features/py.typed"]
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+extend-exclude = ["*.ipynb", "docs/notebooks/**"]
 
 [tool.ruff.lint]
 select = [

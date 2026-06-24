@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
 import polars as pl
+
+if TYPE_CHECKING:
+    from polars._typing import IntoExpr
 
 try:
     POLARS_MAJOR_VERSION = int(pl.__version__.split(".", 1)[0])

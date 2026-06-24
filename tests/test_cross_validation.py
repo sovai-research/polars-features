@@ -11,6 +11,7 @@ from polars_features.cross_validation import (
     train_test_split,
 )
 
+
 @pytest.fixture(params=[6, 12], ids=lambda x: f"test_size({x})")
 def test_size(request):
     return request.param

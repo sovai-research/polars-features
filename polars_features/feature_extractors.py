@@ -16,12 +16,12 @@ except ImportError:  # pragma: no cover - older polars
 from scipy.linalg import lstsq
 from scipy.signal import find_peaks_cwt, welch
 from scipy.spatial import KDTree
+from scipy.stats import kurtosis, skew
 
 from polars_features._compat import register_plugin_function, rle_fields
 from polars_features._polars_features_rust import rs_faer_lstsq1
 from polars_features._utils import warn_is_unstable
 from polars_features.type_aliases import DetrendMethod
-from scipy.stats import skew, kurtosis
 
 # from functime.feature_extractor import FeatureExtractor  # noqa: F401
 
@@ -41,6 +41,7 @@ def ricker(points: int, a: float) -> np.ndarray:
     mod = 1 - xsq / wsq
     gauss = np.exp(-xsq / (2 * wsq))
     return A * mod * gauss
+
 
 TIME_SERIES_T = pl.Series | pl.Expr
 FLOAT_EXPR = float | pl.Expr
@@ -75,9 +76,9 @@ def absolute_energy(x: TIME_SERIES_T) -> FLOAT_INT_EXPR:
     -------
     float | Expr
     """
-    if isinstance(x, pl.Series):
-        if x.len() > 300_000:  # Would be different for different machines
-            return np.dot(x, x)
+    if isinstance(x, pl.Series) and x.len() > 300_000:
+        # Would be different for different machines
+        return np.dot(x, x)
     return x.dot(x)
 
 
@@ -143,10 +144,7 @@ def approximate_entropy(
     if filtering_level <= 0:
         raise ValueError("Filter level must be positive.")
 
-    if scale_by_std:
-        r = filtering_level * x.std()
-    else:
-        r = filtering_level
+    r = filtering_level * x.std() if scale_by_std else filtering_level
 
     if isinstance(x, pl.Series):
         if len(x) < run_length + 1:
@@ -512,10 +510,7 @@ def cid_ce(x: TIME_SERIES_T, normalize: bool = False) -> FLOAT_EXPR:
     -------
     float | Expr
     """
-    if normalize:
-        y = (x - x.mean()) / x.std(ddof=0)
-    else:
-        y = x
+    y = (x - x.mean()) / x.std(ddof=0) if normalize else x
 
     if isinstance(x, pl.Series):
         diff = np.diff(y)
@@ -630,7 +625,6 @@ def cwt_coefficients(
             "Expression version of cwt_coefficients is not yet implemented due to "
             "technical difficulty regarding Polars Expression Plugins."
         )
-        NotImplemented
 
 
 def energy_ratios(x: TIME_SERIES_T, n_chunks: int = 10) -> LIST_EXPR:
@@ -653,10 +647,7 @@ def energy_ratios(x: TIME_SERIES_T, n_chunks: int = 10) -> LIST_EXPR:
     # We calculate all 1,2,3,...,n_chunk at once
     if isinstance(x, pl.Series):
         r = x.len() % n_chunks
-        if r == 0:
-            y = x.pow(2)
-        else:
-            y = x.pow(2).extend_constant(0, n_chunks - r)
+        y = x.pow(2) if r == 0 else x.pow(2).extend_constant(0, n_chunks - r)
         seg_sum = y.reshape((n_chunks, -1)).list.sum()
         return (seg_sum / seg_sum.sum()).to_list()
     else:
@@ -1555,10 +1546,7 @@ def spkt_welch_density(x: TIME_SERIES_T, n_coeffs: int | None = None) -> LIST_EX
     list of floats
     """
     if isinstance(x, pl.Series):
-        if n_coeffs is None:
-            last_idx = len(x)
-        else:
-            last_idx = n_coeffs
+        last_idx = len(x) if n_coeffs is None else n_coeffs
         _, pxx = welch(x.to_numpy(), nperseg=min(len(x), 256))
         return pxx[:last_idx]
     else:
@@ -1780,10 +1768,7 @@ def streak_length_stats(x: TIME_SERIES_T, above: bool, threshold: float) -> MAP_
     -------
     float | Expr
     """
-    if above:
-        y = (x.diff() >= threshold).rle()
-    else:
-        y = (x.diff() <= threshold).rle()
+    y = (x.diff() >= threshold).rle() if above else (x.diff() <= threshold).rle()
 
     y = y.filter(y.struct.field(rle_fields["value"])).struct.field(rle_fields["len"])
     if isinstance(x, pl.Series):
@@ -1963,7 +1948,7 @@ def realized_volatility(x: pl.Series) -> float:
         Realized volatility (non-annualized).
     """
     log_returns = np.diff(np.log(x.to_numpy()))
-    return np.sqrt(np.sum(log_returns ** 2))
+    return np.sqrt(np.sum(log_returns**2))
 
 
 def return_skew(x: pl.Series) -> float:
@@ -2052,12 +2037,12 @@ def signed_mci(
 ) -> pl.Expr:
     """
     Compute signed Marginal Cost of Immediacy (MCI) reflecting cost paid by aggressive orders:
-    
+
     Signed MCI = side * (trade_price - mid_price)
-    
+
     where mid_price = (bid_price + ask_price) / 2
     and side = +1 for buyer-initiated trades, -1 for seller-initiated trades.
-    
+
     Parameters
     ----------
     trade_price : Expr
@@ -2068,7 +2053,7 @@ def signed_mci(
         Best ask price at trade time.
     side : Expr
         Trade side indicator (+1 buy, -1 sell).
-    
+
     Returns
     -------
     Expr : expression producing signed MCI values
@@ -3041,19 +3026,21 @@ class FeatureExtractor:
         An expression of the output
         """
         return self._expr.pct_change().skew()
-    
+
     def marginal_cost_of_immediacy(self) -> pl.Expr:
         """
         Compute Marginal Cost of Immediacy (MCI) as half of the quoted spread:
-        
+
         MCI = (ask_price - bid_price) / 2
-        
+
         Assumes the input expression is a Struct with fields:
             - 'bid_price'
             - 'ask_price'
-        
+
         Returns
         -------
         Expr : expression producing MCI values
         """
-        return (self._expr.struct.field("ask_price") - self._expr.struct.field("bid_price")) / 2
+        return (
+            self._expr.struct.field("ask_price") - self._expr.struct.field("bid_price")
+        ) / 2

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import polars as pl
 
 try:  # polars>=1.0 moved type aliases to the private `_typing` module
@@ -16,7 +14,7 @@ def make_future_ranges(
     cutoffs: FrameType,
     fh: int,
     freq: str,
-    time_unit: Optional[TimeUnit] = None,
+    time_unit: TimeUnit | None = None,
 ) -> FrameType:
     """Return pl.DataFrame with columns entity_col, time_col.
 

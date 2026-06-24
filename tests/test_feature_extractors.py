@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 import pytest
+
 from polars_features.feature_extractors import cwt_coefficients
 
 

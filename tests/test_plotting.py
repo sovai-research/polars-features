@@ -9,6 +9,7 @@ from polars_features._plotting import (
     get_subplot_grid_position,
 )
 
+
 @pytest.fixture
 def mock_dataframe():
     data = {

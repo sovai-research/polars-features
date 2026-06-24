@@ -1,10 +1,11 @@
 from __future__ import annotations
+
 import math
+
 import numpy as np
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal, assert_series_equal
-
 
 # percent_recoccuring_values,
 from polars_features.feature_extractors import (
@@ -66,10 +67,16 @@ from polars_features.feature_extractors import (
 
 np.random.seed(42)
 
+
 @pytest.mark.parametrize(
     "S, params, res, k",
     [
-        ([0, 0, 0], [True, 0], [2.0, 2, 2.0, None, 2.0, 2.0, 2.0, 2], {"check_dtype": False}),
+        (
+            [0, 0, 0],
+            [True, 0],
+            [2.0, 2, 2.0, None, 2.0, 2.0, 2.0, 2],
+            {"check_dtype": False},
+        ),
         # ([0, 0, 0], [False, 0], [2.0, 2, 2.0, None, 2.0, 2.0, 2.0, 2], {"check_dtype": False}),
         # ([0, 0, 0], [False, 1], [2.0, 2, 2.0, None, 2.0, 2.0, 2.0, 2], {"check_dtype": False}),
         # ([0, 0, 0], [True, 1], [0.0, None, None, None, None, None, None, None], {"check_dtype": False}),
@@ -80,14 +87,27 @@ np.random.seed(42)
 )
 def test_streak_length_stats(S, params, res, k):
     above, threshold = params
-    keys = ["min", "max", "mean", "std", "10-percentile", "median", "90-percentile", "mode"]
+    keys = [
+        "min",
+        "max",
+        "mean",
+        "std",
+        "10-percentile",
+        "median",
+        "90-percentile",
+        "mode",
+    ]
     res = pl.DataFrame(dict(zip(keys, res)))
     df = pl.DataFrame({"a": S}).lazy()
-    print(df,'\n',df.schema)
+    print(df, "\n", df.schema)
     assert_frame_equal(
-        df.select([streak_length_stats(pl.col("a"), above, threshold).alias("out")]).unnest("out").collect(),
+        df.select([streak_length_stats(pl.col("a"), above, threshold).alias("out")])
+        .unnest("out")
+        .collect(),
         res,
-        **k,)
+        **k,
+    )
+
 
 @pytest.mark.parametrize(
     "S, res, k",
@@ -871,13 +891,15 @@ def test_longest_streak_below_mean(S, res):
         pl.DataFrame({"a": S}).select(
             longest_streak_below_mean(pl.col("a")).alias("len").cast(pl.UInt32)
         ),
-        pl.DataFrame(pl.Series("len", res, dtype=pl.UInt32)),check_dtypes=False
+        pl.DataFrame(pl.Series("len", res, dtype=pl.UInt32)),
+        check_dtypes=False,
     )
     assert_frame_equal(
         pl.LazyFrame({"a": S})
         .select(longest_streak_below_mean(pl.col("a")).alias("len").cast(pl.UInt32))
         .collect(),
-        pl.DataFrame(pl.Series("len", res, dtype=pl.UInt32)),check_dtypes=False
+        pl.DataFrame(pl.Series("len", res, dtype=pl.UInt32)),
+        check_dtypes=False,
     )
 
 
@@ -903,7 +925,8 @@ def test_longest_streak_above_mean(S, res):
         pl.LazyFrame({"a": S})
         .select(longest_streak_above_mean(pl.col("a")).alias("len").cast(pl.UInt32))
         .collect(),
-        pl.DataFrame(pl.Series("len", res, dtype=pl.UInt32)),check_dtypes=False
+        pl.DataFrame(pl.Series("len", res, dtype=pl.UInt32)),
+        check_dtypes=False,
     )
 
 
@@ -1389,7 +1412,8 @@ def test_longest_streak_above(S, res):
             .alias(x.name)
             .cast(pl.Int64)
         ),
-        pl.DataFrame({x.name: [res]}),check_dtypes=False
+        pl.DataFrame({x.name: [res]}),
+        check_dtypes=False,
     )
 
     assert_frame_equal(
@@ -1400,7 +1424,8 @@ def test_longest_streak_above(S, res):
             .cast(pl.Int64)
         )
         .collect(),
-        pl.DataFrame({x.name: [res]}),check_dtypes=False
+        pl.DataFrame({x.name: [res]}),
+        check_dtypes=False,
     )
 
 
@@ -1422,7 +1447,8 @@ def test_longest_streak_below(S, res):
             .alias(x.name)
             .cast(pl.Int64)
         ),
-        pl.DataFrame({x.name: [res]}),check_dtypes=False
+        pl.DataFrame({x.name: [res]}),
+        check_dtypes=False,
     )
 
     assert_frame_equal(
@@ -1433,7 +1459,8 @@ def test_longest_streak_below(S, res):
             .cast(pl.Int64)
         )
         .collect(),
-        pl.DataFrame({x.name: [res]}),check_dtypes=False
+        pl.DataFrame({x.name: [res]}),
+        check_dtypes=False,
     )
 
 
@@ -1479,18 +1506,23 @@ def test_range_over_mean_and_range(S, res):
     df = x.to_frame()
     assert_frame_equal(
         df.select(range_change(pl.col(x.name), percentage=False)),
-        pl.DataFrame({x.name: [range_]}), check_dtypes=False
+        pl.DataFrame({x.name: [range_]}),
+        check_dtypes=False,
     )
     assert_frame_equal(
-        df.select(range_over_mean(pl.col(x.name))), pl.DataFrame({x.name: [res]}),check_dtypes=False
+        df.select(range_over_mean(pl.col(x.name))),
+        pl.DataFrame({x.name: [res]}),
+        check_dtypes=False,
     )
     assert_frame_equal(
         df.lazy().select(range_change(pl.col(x.name), percentage=True)).collect(),
-        pl.DataFrame({x.name: [range_chg_pct]}),check_dtypes=False
+        pl.DataFrame({x.name: [range_chg_pct]}),
+        check_dtypes=False,
     )
     assert_frame_equal(
         df.lazy().select(range_over_mean(pl.col(x.name))).collect(),
-        pl.DataFrame({x.name: [res]}),check_dtypes=False
+        pl.DataFrame({x.name: [res]}),
+        check_dtypes=False,
     )
 
 

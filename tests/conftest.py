@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 import os
 from functools import partial
-from typing import List
+
 import numpy as np
 import pandas as pd
 import polars as pl
 import pytest
+
 from polars_features.cross_validation import train_test_split
 from polars_features.offsets import freq_to_sp
 
@@ -88,7 +89,10 @@ def m4_dataset(request):
             .pipe(
                 lambda df: df.select(
                     [
-                        pl.col("series").cast(pl.String).str.replace(" ", "").cast(pl.Categorical),
+                        pl.col("series")
+                        .cast(pl.String)
+                        .str.replace(" ", "")
+                        .cast(pl.Categorical),
                         pl.col("time").cast(pl.Int16),
                         pl.col(df.columns[2]).cast(pl.Float32),
                     ]
@@ -117,8 +121,8 @@ def m4_dataset(request):
     y_test = update_test_time_ranges(y_train, y_test)
 
     # Check m4 dataset RAM usage
-    logging.info("y_train mem: %s", f'{y_train.estimated_size("mb"):.4f} mb')
-    logging.info("y_test mem: %s", f'{y_test.estimated_size("mb"):.4f} mb')
+    logging.info("y_train mem: %s", f"{y_train.estimated_size('mb'):.4f} mb")
+    logging.info("y_test mem: %s", f"{y_test.estimated_size('mb'):.4f} mb")
     # Preview
     logging.info("y_train preview: %s", y_train)
     logging.info("y_test preview: %s", y_test)
@@ -147,9 +151,9 @@ def prepare_m5_dataset(m5_train: pl.LazyFrame, m5_test: pl.LazyFrame):
     def preprocess(
         X: pl.LazyFrame,
         entity_col: str,
-        sampled_entities: List[str],
-        categorical_cols: List[str],
-        boolean_cols: List[str],
+        sampled_entities: list[str],
+        categorical_cols: list[str],
+        boolean_cols: list[str],
     ) -> pl.LazyFrame:
         X_new = (
             X.select(
@@ -278,10 +282,10 @@ def m5_dataset():
         X_test = X_test.filter(pl.col(entity_col).is_in(top_sellers))
 
     # Check m5 dataset RAM usage
-    logging.info("y_train mem: %s", f'{y_train.estimated_size("mb"):.4f} mb')
-    logging.info("X_train mem: %s", f'{X_train.estimated_size("mb"):.4f} mb')
-    logging.info("y_test mem: %s", f'{y_test.estimated_size("mb"):.4f} mb')
-    logging.info("X_test mem: %s", f'{X_test.estimated_size("mb"):.4f} mb')
+    logging.info("y_train mem: %s", f"{y_train.estimated_size('mb'):.4f} mb")
+    logging.info("X_train mem: %s", f"{X_train.estimated_size('mb'):.4f} mb")
+    logging.info("y_test mem: %s", f"{y_test.estimated_size('mb'):.4f} mb")
+    logging.info("X_test mem: %s", f"{X_test.estimated_size('mb'):.4f} mb")
 
     # Preview
     logging.info("y_train preview: %s", y_train)

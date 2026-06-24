@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import List, Optional
-
 import polars as pl
 
 from polars_features.llm.common import MODEL_T, openai_call
-from polars_features.llm.formatting import FORMAT_T, format_dataframes, format_instructions
+from polars_features.llm.formatting import (
+    FORMAT_T,
+    format_dataframes,
+    format_instructions,
+)
 
 _LLM_NAMESPACE = "llm"
 
@@ -15,7 +17,7 @@ class LLMActions:
     def __init__(self, df: pl.DataFrame):
         self._df = df
 
-    def _filter_panel_entities(self, panel_df: pl.DataFrame, basket: List[str]):
+    def _filter_panel_entities(self, panel_df: pl.DataFrame, basket: list[str]):
         entity_col = panel_df.columns[0]
         df = panel_df.filter(pl.col(entity_col).is_in(basket))
         if df.is_empty():
@@ -37,8 +39,8 @@ class LLMActions:
 
     def analyze(
         self,
-        basket: List[str],
-        context: Optional[str] = None,
+        basket: list[str],
+        context: str | None = None,
         model: MODEL_T = "gpt-3.5-turbo",
         format: FORMAT_T = "markdown_bullet_list",
         **kwargs,
@@ -66,10 +68,10 @@ class LLMActions:
 
     def compare(
         self,
-        basket: List[str],
-        other_basket: List[str],
+        basket: list[str],
+        other_basket: list[str],
         model: MODEL_T = "gpt-3.5-turbo",
-        target_feature: Optional[str] = None,
+        target_feature: str | None = None,
         **kwargs,
     ) -> str:
         """Compare two basket of forecasts."""

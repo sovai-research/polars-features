@@ -152,9 +152,7 @@ def _expr_frac_diff(expr: pl.Expr, d: float, *, threshold: float = 1e-5) -> pl.E
 def _expr_zscore(expr: pl.Expr, window: int) -> pl.Expr:
     """Build the causal rolling z-score expression over a trailing ``window``."""
     if not isinstance(window, int) or window <= 0:
-        raise ValueError(
-            f"zscore window must be a positive integer, got {window!r}."
-        )
+        raise ValueError(f"zscore window must be a positive integer, got {window!r}.")
     mean = expr.rolling_mean(window_size=window)
     std = expr.rolling_std(window_size=window)
     return (expr - mean) / std
@@ -163,9 +161,7 @@ def _expr_zscore(expr: pl.Expr, window: int) -> pl.Expr:
 def _expr_rs_vol(expr: pl.Expr, window: int) -> pl.Expr:
     """Build the trailing realized-volatility proxy expression over ``window``."""
     if not isinstance(window, int) or window <= 0:
-        raise ValueError(
-            f"rs_vol window must be a positive integer, got {window!r}."
-        )
+        raise ValueError(f"rs_vol window must be a positive integer, got {window!r}.")
     return expr.rolling_std(window_size=window)
 
 

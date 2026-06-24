@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from datetime import datetime
+
 import polars as pl
 from polars.testing import assert_frame_equal
 

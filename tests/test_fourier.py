@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from datetime import date,datetime
+from datetime import date, datetime
+
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
+
 from polars_features.cross_validation import train_test_split
 from polars_features.seasonality import add_fourier_terms
 
@@ -12,10 +14,7 @@ from polars_features.seasonality import add_fourier_terms
 def test_fourier_with_dates(freq: str, sp: int):
     if freq == "1h":
         timestamps = pl.datetime_range(
-            datetime(2020, 1, 1),
-            datetime(2021, 1, 1),
-            interval=freq,
-            eager=True
+            datetime(2020, 1, 1), datetime(2021, 1, 1), interval=freq, eager=True
         )
     else:
         timestamps = pl.date_range(
