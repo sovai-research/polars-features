@@ -76,7 +76,7 @@ all = [
 ]
 # Development / CI tooling.
 dev = [
-  "ruff>=0.8.0",
+  "ruff>=0.15.19",
   "pytest>=8.0",
   "hypothesis>=6.0",
   "mypy>=1.8",
