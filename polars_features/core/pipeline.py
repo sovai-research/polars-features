@@ -23,6 +23,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
+import polars as pl
+
 from polars_features.core.panel_frame import PanelFrame
 from polars_features.core.protocol import PanelEstimator, PanelTransformer
 
@@ -84,8 +86,14 @@ class Pipeline(PanelTransformer):
     panel_safe: bool = True
     leakage_safe: bool = True
 
-    def __init__(self, steps: list[Step]) -> None:
-        super().__init__()
+    def __init__(
+        self,
+        steps: list[Step],
+        *,
+        entity: str | None = None,
+        time: str | None = None,
+    ) -> None:
+        super().__init__(entity=entity, time=time)
         self._validate_steps(steps)
         self.steps: list[Step] = list(steps)
         # Instance-level safety flags derived from the steps.
@@ -168,13 +176,23 @@ class Pipeline(PanelTransformer):
                 )
         return out
 
-    def predict(self, panel: PanelFrame) -> PanelFrame:
+    def predict(
+        self,
+        X: PanelFrame | pl.DataFrame | pl.LazyFrame,
+        *,
+        entity: str | None = None,
+        time: str | None = None,
+    ) -> PanelFrame:
         """Apply all transformers, then ``predict`` with the final estimator.
 
         Parameters
         ----------
-        panel : PanelFrame
-            Data to predict on (train or test).
+        X : PanelFrame | polars.DataFrame | polars.LazyFrame
+            Data to predict on (train or test). Accepts a :class:`PanelFrame` or
+            a bare polars frame wrapped on the fly using ``entity`` / ``time``
+            (or the keys configured on the constructor).
+        entity, time : str, optional
+            Panel keys for a bare polars frame.
 
         Returns
         -------
@@ -189,7 +207,7 @@ class Pipeline(PanelTransformer):
             If the final step is not a
             :class:`~polars_features.core.protocol.PanelEstimator`.
         """
-        panel = self._check_input(panel, method="predict")
+        panel = self._as_panel(X, method="predict", entity=entity, time=time)
         self._check_fitted("predict")
         last_name, last = self.steps[-1]
         if not isinstance(last, PanelEstimator):

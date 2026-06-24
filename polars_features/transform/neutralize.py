@@ -104,8 +104,10 @@ class Neutralize(PanelTransformer):
         *,
         add_intercept: bool = True,
         suffix: str = "_neutral",
+        entity: str | None = None,
+        time: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(entity=entity, time=time)
         if not isinstance(target, str):
             raise TypeError(
                 f"`target` must be a column name (str), got {type(target).__name__!r}."

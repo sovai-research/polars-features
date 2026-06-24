@@ -154,8 +154,10 @@ class TimeSeriesScaler(PanelTransformer):
         mode: ScalerMode = "zscore",
         by_entity: bool = True,
         suffix: str | None = None,
+        entity: str | None = None,
+        time: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(entity=entity, time=time)
         if mode not in _TS_MODES:
             raise ValueError(f"`mode` must be one of {_TS_MODES}, got {mode!r}.")
         self.columns = _as_column_list(columns)
@@ -305,8 +307,10 @@ class CrossSectionalScaler(PanelTransformer):
         *,
         mode: ScalerMode = "zscore",
         suffix: str | None = None,
+        entity: str | None = None,
+        time: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(entity=entity, time=time)
         if mode not in _TS_MODES:
             raise ValueError(f"`mode` must be one of {_TS_MODES}, got {mode!r}.")
         self.columns = _as_column_list(columns)

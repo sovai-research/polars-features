@@ -311,6 +311,26 @@ class PanelFrame:
         """Alias for :meth:`lazy`; returns the underlying LazyFrame."""
         return self._lf
 
+    def to_native(self, lazy: bool = True) -> pl.LazyFrame | pl.DataFrame:
+        """Return the underlying native polars frame.
+
+        Convenience for users who passed in a bare :class:`polars.DataFrame` /
+        :class:`polars.LazyFrame` and want a native frame back after a
+        transform, without keeping the :class:`PanelFrame` wrapper.
+
+        Parameters
+        ----------
+        lazy : bool, default=True
+            If True (default), return the underlying :class:`polars.LazyFrame`
+            (no work). If False, :meth:`collect` it into a
+            :class:`polars.DataFrame`.
+
+        Returns
+        -------
+        polars.LazyFrame | polars.DataFrame
+        """
+        return self._lf if lazy else self._lf.collect()
+
     # ------------------------------------------------------------------ #
     # Panel-aware operations (return new PanelFrames; data stays lazy)
     # ------------------------------------------------------------------ #

@@ -196,8 +196,10 @@ class CrossSectionalRank(PanelTransformer):
         descending: bool = False,
         normalize: NormalizeMode = "uniform",
         suffix: str = "_rank",
+        entity: str | None = None,
+        time: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(entity=entity, time=time)
         if normalize not in _NORMALIZE:
             raise ValueError(
                 f"`normalize` must be one of {_NORMALIZE}, got {normalize!r}."

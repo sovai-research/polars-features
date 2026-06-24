@@ -154,8 +154,10 @@ class FracDiff(PanelTransformer):
         threshold: float = 1e-5,
         max_width: int | None = None,
         suffix: str = "_fracdiff",
+        entity: str | None = None,
+        time: str | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(entity=entity, time=time)
         if not (0.0 <= d <= 2.0):
             raise ValueError(f"`d` must be in [0, 2], got {d!r}.")
         if threshold <= 0:

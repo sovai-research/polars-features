@@ -37,7 +37,9 @@ from __future__ import annotations
 import abc
 from typing import TYPE_CHECKING, TypeVar
 
-from polars_features.core.panel_frame import PanelFrame
+import polars as pl
+
+from polars_features.core.panel_frame import PanelFrame, as_panel
 
 if TYPE_CHECKING:
     # `Self` is 3.11+. We import it only for type-checkers; at runtime on 3.10
@@ -125,11 +127,19 @@ class PanelTransformer(abc.ABC):
                     "        leakage_safe = True\n"
                 )
 
-    def __init__(self) -> None:
+    def __init__(
+        self, *, entity: str | None = None, time: str | None = None
+    ) -> None:
         # `_fitted` flips to True after a successful `fit`. Subclasses store
         # learned parameters as instance attributes (sklearn convention:
         # trailing-underscore names) during `_fit`.
         self._fitted: bool = False
+        # Optional default panel keys. When set, the public methods accept a
+        # bare ``pl.DataFrame``/``pl.LazyFrame`` and wrap it into a PanelFrame
+        # using these keys, so users can configure the keys once on the
+        # transformer instead of at every call site.
+        self._entity: str | None = entity
+        self._time: str | None = time
 
     # ------------------------------------------------------------------ #
     # Hooks for subclasses
@@ -155,9 +165,91 @@ class PanelTransformer(abc.ABC):
     # ------------------------------------------------------------------ #
     # Contract enforcement
     # ------------------------------------------------------------------ #
+    def _as_panel(
+        self,
+        X: object,
+        *,
+        method: str,
+        entity: str | None = None,
+        time: str | None = None,
+    ) -> PanelFrame:
+        """Normalise ``X`` into a :class:`PanelFrame`.
+
+        ``X`` may be a :class:`PanelFrame` (returned as-is, the "old way") or a
+        bare :class:`polars.DataFrame` / :class:`polars.LazyFrame`, which is
+        wrapped using the supplied ``entity`` / ``time`` (falling back to the
+        instance defaults set on the constructor). This is what makes
+        ``PanelFrame`` *optional sugar* rather than a mandatory wrapper.
+
+        Parameters
+        ----------
+        X : PanelFrame | polars.DataFrame | polars.LazyFrame
+            The input frame.
+        method : str
+            Calling method name, used only for error messages.
+        entity, time : str, optional
+            Per-call key overrides. They are only meaningful for bare frames.
+
+        Raises
+        ------
+        ValueError
+            If ``X`` is already a :class:`PanelFrame` *and* conflicting
+            ``entity`` / ``time`` keys are passed, or if a bare frame is given
+            with no resolvable keys.
+        TypeError
+            If ``X`` is neither a :class:`PanelFrame` nor a polars frame.
+        """
+        if isinstance(X, PanelFrame):
+            # The old, mandatory-wrapper path. Honour the PanelFrame's own keys.
+            # If the caller *also* passed keys, they must match (no silent
+            # override of a validated PanelFrame's contract).
+            if entity is not None and entity != X.entity_col:
+                raise ValueError(
+                    f"{method}: `entity={entity!r}` conflicts with the supplied "
+                    f"PanelFrame's entity column {X.entity_col!r}. Omit `entity=` "
+                    "when passing a PanelFrame (its keys win), or pass a bare "
+                    "DataFrame/LazyFrame instead."
+                )
+            if time is not None and time != X.time_col:
+                raise ValueError(
+                    f"{method}: `time={time!r}` conflicts with the supplied "
+                    f"PanelFrame's time column {X.time_col!r}. Omit `time=` when "
+                    "passing a PanelFrame (its keys win), or pass a bare "
+                    "DataFrame/LazyFrame instead."
+                )
+            return X
+
+        if not isinstance(X, (pl.DataFrame, pl.LazyFrame)):
+            raise TypeError(
+                f"{method} expects a PanelFrame, polars.DataFrame, or "
+                f"polars.LazyFrame, got {type(X).__name__!r}. Either wrap your "
+                "data, e.g. `PanelFrame(df, entity='id', time='date')`, or pass a "
+                "polars frame with `entity=`/`time=` keys."
+            )
+
+        ent = entity if entity is not None else self._entity
+        tme = time if time is not None else self._time
+        try:
+            return as_panel(X, entity=ent, time=tme)
+        except ValueError as exc:
+            # `as_panel` falls back to col0/col1 when keys are omitted; it only
+            # raises here when the frame has fewer than two columns. Re-raise
+            # with guidance that points at the estimator entry point.
+            raise ValueError(
+                f"{method}: could not build a PanelFrame from the given frame. "
+                "Pass `entity=`/`time=` (or set them on the transformer's "
+                "constructor), or wrap the data in a PanelFrame explicitly. "
+                f"Original error: {exc}"
+            ) from exc
+
     @staticmethod
     def _check_input(panel: object, *, method: str) -> PanelFrame:
-        """Validate that ``panel`` is a :class:`PanelFrame`."""
+        """Validate that ``panel`` is a :class:`PanelFrame` (internal use).
+
+        Retained for internal step-to-step threading inside
+        :class:`~polars_features.core.pipeline.Pipeline`, where the value passed
+        between steps is always already a :class:`PanelFrame`.
+        """
         if not isinstance(panel, PanelFrame):
             raise TypeError(
                 f"{method} expects a PanelFrame, got {type(panel).__name__!r}. "
@@ -212,58 +304,93 @@ class PanelTransformer(abc.ABC):
     # ------------------------------------------------------------------ #
     # Public API (sklearn-shaped)
     # ------------------------------------------------------------------ #
-    def fit(self, panel: PanelFrame) -> Self:
-        """Learn parameters from ``panel`` (training data only).
+    def fit(
+        self,
+        X: PanelFrame | pl.DataFrame | pl.LazyFrame,
+        *,
+        entity: str | None = None,
+        time: str | None = None,
+    ) -> Self:
+        """Learn parameters from ``X`` (training data only).
 
         Parameters
         ----------
-        panel : PanelFrame
-            Training panel. Parameters are learned **only** from these rows.
+        X : PanelFrame | polars.DataFrame | polars.LazyFrame
+            Training data. A :class:`PanelFrame` is used as-is (its keys win); a
+            bare polars frame is wrapped on the fly using ``entity`` / ``time``
+            (or the keys configured on the constructor). Parameters are learned
+            **only** from these rows.
+        entity, time : str, optional
+            Panel keys to use when ``X`` is a bare polars frame. Ignored (and
+            forbidden if conflicting) when ``X`` is already a :class:`PanelFrame`.
 
         Returns
         -------
         Self
             The fitted transformer, for chaining.
         """
-        panel = self._check_input(panel, method="fit")
+        panel = self._as_panel(X, method="fit", entity=entity, time=time)
         self._fit(panel)
         self._fitted = True
         return self
 
-    def transform(self, panel: PanelFrame) -> PanelFrame:
-        """Apply the learned transform to ``panel``.
+    def transform(
+        self,
+        X: PanelFrame | pl.DataFrame | pl.LazyFrame,
+        *,
+        entity: str | None = None,
+        time: str | None = None,
+    ) -> PanelFrame:
+        """Apply the learned transform to ``X``.
 
         Parameters
         ----------
-        panel : PanelFrame
+        X : PanelFrame | polars.DataFrame | polars.LazyFrame
             Data to transform (train or test). No parameters are learned here.
+            Accepts a :class:`PanelFrame` or a bare polars frame (see
+            :meth:`fit`).
+        entity, time : str, optional
+            Panel keys for a bare polars frame (see :meth:`fit`).
 
         Returns
         -------
         PanelFrame
-            The transformed panel (lazy where possible).
+            The transformed panel (lazy where possible). Call ``.collect()`` /
+            ``.to_native()`` on it to get a plain polars frame back.
 
         Raises
         ------
         RuntimeError
             If called before :meth:`fit`.
         """
-        panel = self._check_input(panel, method="transform")
+        panel = self._as_panel(X, method="transform", entity=entity, time=time)
         self._check_fitted("transform")
         return self._transform(panel)
 
-    def fit_transform(self, panel: PanelFrame) -> PanelFrame:
-        """Fit on ``panel`` and immediately transform it.
+    def fit_transform(
+        self,
+        X: PanelFrame | pl.DataFrame | pl.LazyFrame,
+        *,
+        entity: str | None = None,
+        time: str | None = None,
+    ) -> PanelFrame:
+        """Fit on ``X`` and immediately transform it.
 
-        Equivalent to ``self.fit(panel).transform(panel)``. Safe to use on
-        training data; do **not** use it on a test fold, as that would fit on
-        test data.
+        Equivalent to ``self.fit(X).transform(X)``. Safe to use on training
+        data; do **not** use it on a test fold, as that would fit on test data.
+
+        Parameters
+        ----------
+        X : PanelFrame | polars.DataFrame | polars.LazyFrame
+            See :meth:`fit`.
+        entity, time : str, optional
+            Panel keys for a bare polars frame (see :meth:`fit`).
 
         Returns
         -------
         PanelFrame
         """
-        panel = self._check_input(panel, method="fit_transform")
+        panel = self._as_panel(X, method="fit_transform", entity=entity, time=time)
         return self.fit(panel).transform(panel)
 
     # ------------------------------------------------------------------ #
@@ -305,13 +432,22 @@ class PanelEstimator(PanelTransformer):
         """
         raise NotImplementedError
 
-    def predict(self, panel: PanelFrame) -> PanelFrame:
-        """Predict on ``panel`` using the fitted parameters.
+    def predict(
+        self,
+        X: PanelFrame | pl.DataFrame | pl.LazyFrame,
+        *,
+        entity: str | None = None,
+        time: str | None = None,
+    ) -> PanelFrame:
+        """Predict on ``X`` using the fitted parameters.
 
         Parameters
         ----------
-        panel : PanelFrame
-            Data to predict on (train or test).
+        X : PanelFrame | polars.DataFrame | polars.LazyFrame
+            Data to predict on (train or test). Accepts a :class:`PanelFrame` or
+            a bare polars frame (see :meth:`fit`).
+        entity, time : str, optional
+            Panel keys for a bare polars frame (see :meth:`fit`).
 
         Returns
         -------
@@ -323,7 +459,7 @@ class PanelEstimator(PanelTransformer):
         RuntimeError
             If called before :meth:`fit`.
         """
-        panel = self._check_input(panel, method="predict")
+        panel = self._as_panel(X, method="predict", entity=entity, time=time)
         self._check_fitted("predict")
         return self._predict(panel)
 
