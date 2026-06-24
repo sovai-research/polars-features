@@ -34,7 +34,7 @@ classifiers = [
 ]
 dependencies = [
   "cloudpickle",
-  "flaml>=2.0.2",
+  "flaml>=2.6.0",
   "holidays",
   "numpy",
   "polars>=1.0.0",
