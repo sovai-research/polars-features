@@ -18,16 +18,61 @@ from typing import Literal
 
 import polars as pl
 
-__all__ = ["XSExprNamespace", "register"]
+__all__ = [
+    "XSExprNamespace",
+    "XSLazyFrameNamespace",
+    "XSDataFrameNamespace",
+    "register",
+]
+
+_RankMethod = Literal["average", "min", "max", "dense", "ordinal", "random"]
 
 class XSExprNamespace:
     def __init__(self, expr: pl.Expr) -> None: ...
     def rank(
         self,
         *,
-        method: Literal["average", "min", "max", "dense", "ordinal", "random"] = ...,
+        method: _RankMethod = ...,
         normalize: bool = ...,
     ) -> pl.Expr: ...
     def demean(self) -> pl.Expr: ...
+
+class XSLazyFrameNamespace:
+    def __init__(self, lf: pl.LazyFrame) -> None: ...
+    def rank(
+        self,
+        column: str,
+        *,
+        over: str | None = ...,
+        method: _RankMethod = ...,
+        normalize: bool = ...,
+        alias: str | None = ...,
+    ) -> pl.LazyFrame: ...
+    def demean(
+        self,
+        column: str,
+        *,
+        over: str | None = ...,
+        alias: str | None = ...,
+    ) -> pl.LazyFrame: ...
+
+class XSDataFrameNamespace:
+    def __init__(self, df: pl.DataFrame) -> None: ...
+    def rank(
+        self,
+        column: str,
+        *,
+        over: str | None = ...,
+        method: _RankMethod = ...,
+        normalize: bool = ...,
+        alias: str | None = ...,
+    ) -> pl.DataFrame: ...
+    def demean(
+        self,
+        column: str,
+        *,
+        over: str | None = ...,
+        alias: str | None = ...,
+    ) -> pl.DataFrame: ...
 
 def register() -> None: ...

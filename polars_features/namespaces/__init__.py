@@ -14,6 +14,16 @@ the following accessors are available on any :class:`polars.Expr`:
   (:class:`~polars_features.namespaces.xs.XSExprNamespace`). Combine with
   ``.over(date)``.
 
+Frame-level ergonomics are also registered on :class:`polars.LazyFrame` and
+:class:`polars.DataFrame` so a bare frame can be operated on directly::
+
+    lf.panel.frac_diff("ret", d=0.4, over="ticker", alias="ret_fd")
+    df.xs.rank("ret", over="date", normalize=True)
+
+These are provided by ``Panel{Lazy,Data}FrameNamespace`` and
+``XS{Lazy,Data}FrameNamespace`` and build the SAME expressions as the expression
+namespaces (shared ``_expr_*`` helpers — no duplication).
+
 Registration is idempotent — re-importing this package will not raise the Polars
 "namespace already registered" error.
 
@@ -29,7 +39,22 @@ that honour ``py.typed`` (present at the package root) will pick up the stubs.
 
 from __future__ import annotations
 
-from polars_features.namespaces.panel import PanelExprNamespace
-from polars_features.namespaces.xs import XSExprNamespace
+from polars_features.namespaces.panel import (
+    PanelDataFrameNamespace,
+    PanelExprNamespace,
+    PanelLazyFrameNamespace,
+)
+from polars_features.namespaces.xs import (
+    XSDataFrameNamespace,
+    XSExprNamespace,
+    XSLazyFrameNamespace,
+)
 
-__all__ = ["PanelExprNamespace", "XSExprNamespace"]
+__all__ = [
+    "PanelExprNamespace",
+    "PanelLazyFrameNamespace",
+    "PanelDataFrameNamespace",
+    "XSExprNamespace",
+    "XSLazyFrameNamespace",
+    "XSDataFrameNamespace",
+]

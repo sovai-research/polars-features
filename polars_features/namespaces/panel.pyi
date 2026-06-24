@@ -16,12 +16,73 @@ from __future__ import annotations
 
 import polars as pl
 
-__all__ = ["PanelExprNamespace", "register"]
+__all__ = [
+    "PanelExprNamespace",
+    "PanelLazyFrameNamespace",
+    "PanelDataFrameNamespace",
+    "register",
+]
 
 class PanelExprNamespace:
     def __init__(self, expr: pl.Expr) -> None: ...
     def frac_diff(self, d: float, *, threshold: float = ...) -> pl.Expr: ...
     def zscore(self, window: int) -> pl.Expr: ...
     def rs_vol(self, window: int) -> pl.Expr: ...
+
+class PanelLazyFrameNamespace:
+    def __init__(self, lf: pl.LazyFrame) -> None: ...
+    def frac_diff(
+        self,
+        column: str,
+        *,
+        d: float,
+        over: str | None = ...,
+        alias: str | None = ...,
+        threshold: float = ...,
+    ) -> pl.LazyFrame: ...
+    def zscore(
+        self,
+        column: str,
+        *,
+        window: int,
+        over: str | None = ...,
+        alias: str | None = ...,
+    ) -> pl.LazyFrame: ...
+    def rs_vol(
+        self,
+        column: str,
+        *,
+        window: int,
+        over: str | None = ...,
+        alias: str | None = ...,
+    ) -> pl.LazyFrame: ...
+
+class PanelDataFrameNamespace:
+    def __init__(self, df: pl.DataFrame) -> None: ...
+    def frac_diff(
+        self,
+        column: str,
+        *,
+        d: float,
+        over: str | None = ...,
+        alias: str | None = ...,
+        threshold: float = ...,
+    ) -> pl.DataFrame: ...
+    def zscore(
+        self,
+        column: str,
+        *,
+        window: int,
+        over: str | None = ...,
+        alias: str | None = ...,
+    ) -> pl.DataFrame: ...
+    def rs_vol(
+        self,
+        column: str,
+        *,
+        window: int,
+        over: str | None = ...,
+        alias: str | None = ...,
+    ) -> pl.DataFrame: ...
 
 def register() -> None: ...
