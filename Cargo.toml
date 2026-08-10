@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "0.28", features = ["abi3-py310", "extension-module"] }
-pyo3-polars = { version = "0.27", features = ["derive"] }
+pyo3-polars = { version = "0.28", features = ["derive"] }
 # This crate is a Series-level `#[polars_expr]` plugin (it never touches
 # LazyFrame), so we deliberately avoid the `lazy`/`performant` features. Those
 # pull in polars-lazy -> polars-mem-engine, whose 0.54.4 match arms for
