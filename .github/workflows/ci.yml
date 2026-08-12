@@ -175,7 +175,7 @@ jobs:
           uv run maturin develop --release
 
       - name: Run benchmarks under CodSpeed
-        uses: CodSpeedHQ/action@v3
+        uses: CodSpeedHQ/action@v4
         with:
           # Token only required for private repos; harmless if unset on public.
           token: ${{ secrets.CODSPEED_TOKEN }}
