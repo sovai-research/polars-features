@@ -22,4 +22,4 @@ faer-ext = { version = "0.8", features = ["ndarray"] }
 ndarray = "0.17"
 serde = { version = "1", features = ["derive"] }
 hashbrown = "0.15"
-numpy = "0.28"
+numpy = "0.29"
