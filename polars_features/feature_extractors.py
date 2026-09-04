@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -14,7 +13,8 @@ try:  # polars>=1.0 moved type aliases to the private `_typing` module
 except ImportError:  # pragma: no cover - older polars
     from polars.type_aliases import ClosedInterval
 from polars_features import _numpy_stats
-from polars_features._compat import register_plugin_function, rle_fields
+from polars_features._compat import rle_fields
+from polars_features._deps import have
 from polars_features._utils import warn_is_unstable
 from polars_features.registry import FeatureSpec, registry
 from polars_features.type_aliases import DetrendMethod
@@ -73,6 +73,185 @@ def _lempel_ziv_complexity_batch(s: pl.Series) -> pl.Series:
     return pl.Series([_lempel_ziv_complexity_count(bits)], dtype=pl.UInt32)
 
 
+def _cusum_events_py(
+    values: np.ndarray, threshold: float, warmup_period: int, drift: float
+) -> np.ndarray:
+    """Pure-Python/numpy CUSUM change-point filter.
+
+    Exact transcription of the former Rust kernel
+    (``src/changepoint_detection/cusum.rs``). ``values`` is a float64 array in
+    which nulls are represented as ``NaN`` (treated as the Rust ``None``).
+
+    Returns an ``int32`` array of the same length with ``1`` at each detected
+    change point and ``0`` elsewhere.
+    """
+    n = values.shape[0]
+    events = np.zeros(n, dtype=np.int32)
+
+    s_pos = 0.0
+    s_neg = 0.0
+    t = 0
+    mu = 0.0
+    sigma = 0.0
+    obs: list[float] = []
+
+    # numpy IEEE division (inf/nan on divide-by-zero) matches the Rust f64
+    # behaviour; Python's ``float`` division would instead raise. Values are kept
+    # as ``np.float64`` scalars so the no-sigma-guard division mirrors Rust.
+    for i in range(n):
+        value = values[i]
+        is_null = bool(np.isnan(value))
+        warming_up = t < warmup_period
+        warmup_end = t == warmup_period
+
+        if warming_up:
+            if not is_null:
+                obs.append(value)
+            events[i] = 0
+            t += 1
+            continue
+
+        if warmup_end:
+            # Two-pass population mean/std over collected observations, once —
+            # summed left-to-right to match the Rust ``obs.iter().sum()`` order.
+            count = len(obs)
+            total = 0.0
+            for x in obs:
+                total += x
+            mu = total / count
+            sq = 0.0
+            for x in obs:
+                sq += (x - mu) ** 2
+            sigma = math.sqrt(sq / count)
+            t += 1
+            # fall through to process THIS value (no continue)
+
+        if not is_null:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                v = (value - mu) / sigma  # no zero-sigma guard (match Rust exactly)
+            s_pos = max(s_pos + v - drift, 0.0)
+            s_neg = min(s_neg + v + drift, 0.0)
+            if s_pos > threshold:
+                events[i] = 1
+                s_pos = 0.0
+                s_neg = 0.0
+                t = 0
+                obs = []
+            elif s_neg < -threshold:
+                events[i] = 1
+                s_neg = 0.0
+                s_pos = 0.0
+                t = 0
+                obs = []
+            else:
+                events[i] = 0
+        else:
+            events[i] = 0
+
+    return events
+
+
+_cusum_events_numba = None
+
+
+def _get_cusum_numba() -> Callable[[np.ndarray, float, int, float], np.ndarray] | None:
+    """Return a numba-compiled CUSUM kernel if ``numba`` is installed, else None.
+
+    numba is the optional ``fast`` extra; it must never be imported eagerly or
+    become a hard dependency. Compilation is deferred to first use and cached.
+    """
+    global _cusum_events_numba
+    if _cusum_events_numba is not None:
+        return _cusum_events_numba
+    if not have("numba"):
+        return None
+    import numba  # noqa: PLC0415  (lazy, optional-extra import)
+
+    @numba.njit(cache=True)
+    def _kernel(
+        values: np.ndarray, threshold: float, warmup_period: int, drift: float
+    ) -> np.ndarray:  # pragma: no cover - exercised only when numba installed
+        n = values.shape[0]
+        events = np.zeros(n, dtype=np.int32)
+
+        s_pos = 0.0
+        s_neg = 0.0
+        t = 0
+        mu = 0.0
+        sigma = 0.0
+        obs = np.empty(n, dtype=np.float64)
+        obs_count = 0
+
+        for i in range(n):
+            value = values[i]
+            is_null = np.isnan(value)
+            warming_up = t < warmup_period
+            warmup_end = t == warmup_period
+
+            if warming_up:
+                if not is_null:
+                    obs[obs_count] = value
+                    obs_count += 1
+                events[i] = 0
+                t += 1
+                continue
+
+            if warmup_end:
+                # Two-pass population mean/std, summed left-to-right to match Rust.
+                total = 0.0
+                for j in range(obs_count):
+                    total += obs[j]
+                mu = total / obs_count
+                sq = 0.0
+                for j in range(obs_count):
+                    sq += (obs[j] - mu) ** 2
+                sigma = math.sqrt(sq / obs_count)
+                t += 1
+
+            if not is_null:
+                v = (value - mu) / sigma  # IEEE division (inf/nan on /0), matches Rust
+                s_pos = max(s_pos + v - drift, 0.0)
+                s_neg = min(s_neg + v + drift, 0.0)
+                if s_pos > threshold:
+                    events[i] = 1
+                    s_pos = 0.0
+                    s_neg = 0.0
+                    t = 0
+                    obs_count = 0
+                elif s_neg < -threshold:
+                    events[i] = 1
+                    s_neg = 0.0
+                    s_pos = 0.0
+                    t = 0
+                    obs_count = 0
+                else:
+                    events[i] = 0
+            else:
+                events[i] = 0
+
+        return events
+
+    _cusum_events_numba = _kernel
+    return _kernel
+
+
+def _cusum_events(
+    values: np.ndarray, threshold: float, warmup_period: int, drift: float
+) -> np.ndarray:
+    """CUSUM change-point filter, dispatching to the numba fast-path if available.
+
+    Falls back to the pure-Python/numpy loop when numba (the ``fast`` extra) is
+    not installed. Both paths produce identical ``int32`` event arrays.
+    """
+    values = np.ascontiguousarray(values, dtype=np.float64)
+    kernel = _get_cusum_numba()
+    if kernel is not None:
+        return np.asarray(
+            kernel(values, float(threshold), int(warmup_period), float(drift))
+        )
+    return _cusum_events_py(values, float(threshold), int(warmup_period), float(drift))
+
+
 TIME_SERIES_T = pl.Series | pl.Expr
 FLOAT_EXPR = float | pl.Expr
 FLOAT_INT_EXPR = int | float | pl.Expr
@@ -84,13 +263,6 @@ MAP_LIST_EXPR = Mapping[str, list[float]] | pl.Expr
 
 
 # from polars.type_aliases import IntoExpr
-
-try:
-    from polars.utils.udfs import _get_shared_lib_location
-
-    lib = _get_shared_lib_location(__file__)
-except ImportError:
-    lib = Path(__file__).parent
 
 
 def absolute_energy(x: TIME_SERIES_T) -> FLOAT_INT_EXPR:
@@ -2965,18 +3137,17 @@ class FeatureExtractor:
         -------
         An expression of the output
         """
-        return register_plugin_function(
-            args=[self._expr],
-            plugin_path=lib,
-            function_name="cusum",
-            kwargs={
-                "threshold": threshold,
-                "drift": drift,
-                "warmup_period": warmup_period,
-            },
-            is_elementwise=False,
-            cast_to_supertype=True,
-        )
+
+        def _batch(s: pl.Series) -> pl.Series:
+            events = _cusum_events(
+                s.cast(pl.Float64).to_numpy(),
+                threshold,
+                warmup_period,
+                drift,
+            )
+            return pl.Series(events, dtype=pl.Int32)
+
+        return self._expr.map_batches(_batch, return_dtype=pl.Int32)
 
     def frac_diff(
         self,

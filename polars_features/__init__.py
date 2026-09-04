@@ -1,4 +1,4 @@
-"""PanelKit: leak-safe, Rust-fast feature engineering and ML for panel data, built on Polars.
+"""PanelKit: leak-safe, fast feature engineering and ML for panel data, built on Polars.
 
 PanelKit turns a long-format ``(entity, time, *features)`` panel into a first-class,
 lazy, leak-safe object. It provides the :class:`PanelFrame` view, a leak-safe
@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import warnings
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = ["__version__"]
 
