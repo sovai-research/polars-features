@@ -1,6 +1,11 @@
 # Misc
+ann_embs
 functime_embs
 catboost_info
+
+# Built Python wheels / compiled extension modules (never commit build artifacts)
+*.whl
+*.abi3.so
 bin/
 .data
 

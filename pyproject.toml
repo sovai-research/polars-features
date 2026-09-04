@@ -7,7 +7,7 @@ name = "polars_features"
 # NOTE: Pinned for now. maturin can later read the version from Cargo.toml
 # (`version = "..."` under [tool.maturin]) or derive it from git tags at
 # release time -- that dynamic-versioning setup is handled elsewhere.
-version = "0.1.0"
+version = "0.3.0"
 description = "Leak-safe, Rust-fast feature engineering and ML for panel data, built on Polars."
 requires-python = ">=3.10"
 authors = [{ name = "Sov.ai", email = "research@sov.ai" }]
@@ -63,6 +63,11 @@ signatures = ["iisignature"]
 viz = ["plotly"]
 # Cross-dataframe interop.
 interop = ["narwhals"]
+# CAFE imputation backend (cafe_impute / CafeImputer). MIT, Sov.ai.
+cafe = ["cafe-impute>=0.1"]
+# Non-linear dimensionality reduction (reduce.PanelUMAP). PCA/SVD/FA/NMF use the
+# already-required scikit-learn; only UMAP needs this extra.
+dimreduce = ["umap-learn>=0.5"]
 # Convenience extra unioning all optional feature sets above.
 all = [
   "openai",
@@ -73,6 +78,8 @@ all = [
   "iisignature",
   "plotly",
   "narwhals",
+  "cafe-impute>=0.1",
+  "umap-learn>=0.5",
 ]
 # Development / CI tooling.
 dev = [

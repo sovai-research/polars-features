@@ -9,7 +9,9 @@ Attribution
 ------------------------------------------------------------------------
 
 PanelKit is a derivative work of and is built on the foundations of
-functime, which is no longer maintained.
+functime, which is actively maintained (v1.0.0, May 2026). PanelKit reuses
+and credits functime's engine and interoperates with functime and Nixtla
+rather than replacing them.
 
     functime
     Copyright 2023-2024 functime contributors
@@ -32,6 +34,10 @@ Third-party notices
 
 This software is built on top of Polars (https://pola.rs/), licensed
 under the MIT License.
+
+CAFE imputation (the optional `cafe_impute` / `CafeImputer` components) is
+powered by `cafe-impute`, developed at Sov.ai and licensed under the MIT
+License. It is an optional dependency installed via the `cafe` extra.
 
 The catch22 feature set, when implemented in PanelKit, is a clean-room
 reimplementation from the published description in:

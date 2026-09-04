@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-BASE ?= master
+BASE ?= main
 PY ?= python3
 
 edit:
@@ -13,13 +13,13 @@ build:
 
 build-test:
 	maturin develop --release
-	$(PY) -m pip install ".[test]"
+	$(PY) -m pip install ".[dev]"
 
 clean:
 	rm -rf build/
 	rm -rf dist/
 	rm -rf *.egg-info
-	$(PY) -m pip uninstall functime -y
+	$(PY) -m pip uninstall polars_features -y
 
 rebuild: clean build
 
