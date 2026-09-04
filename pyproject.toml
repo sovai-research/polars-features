@@ -1,14 +1,11 @@
 [build-system]
-requires = ["maturin>=1.3.2,<2"]
-build-backend = "maturin"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "polars_features"
-# NOTE: Pinned for now. maturin can later read the version from Cargo.toml
-# (`version = "..."` under [tool.maturin]) or derive it from git tags at
-# release time -- that dynamic-versioning setup is handled elsewhere.
-version = "0.3.0"
-description = "Leak-safe, Rust-fast feature engineering and ML for panel data, built on Polars."
+version = "0.4.0"
+description = "Leak-safe, fast feature engineering and ML for panel data, Polars-native and pure-Python."
 requires-python = ">=3.10"
 authors = [{ name = "Sov.ai", email = "research@sov.ai" }]
 readme = "README.md"
@@ -28,23 +25,18 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
-  "Programming Language :: Rust",
   "Intended Audience :: Financial and Insurance Industry",
   "Typing :: Typed",
 ]
+# Light core: the mandatory footprint is numpy + polars only. Everything heavier
+# (scikit-learn, scipy, flaml, holidays, tqdm, boosters, plotting, LLM, ...) is an
+# optional extra below, imported lazily at first use via
+# `polars_features._deps.require`, which raises an actionable
+# `pip install 'polars-features[<extra>]'` hint when it is missing. The
+# `recommended` extra restores the old batteries-included experience.
 dependencies = [
-  # NOTE: `flaml`, `holidays`, `scikit-learn`, `scipy`, and `tqdm` are kept here
-  # for now, but a future (breaking) release will slim the hard dependency set --
-  # each is already available behind a named extra below (forecasting/seasonality/
-  # ml/scipy/progress) and imported lazily via `polars_features._deps.require`.
-  # `cloudpickle` was dropped in favor of stdlib `pickle` (see CHANGELOG).
-  "flaml>=2.0.2",
-  "holidays",
   "numpy",
   "polars>=1.0.0",
-  "scikit-learn>=1.2.2",
-  "scipy",
-  "tqdm",
 ]
 
 [project.urls]
@@ -77,6 +69,8 @@ catboost = ["catboost"]
 xgboost = ["xgboost"]
 # --- approximate-nearest-neighbor reduction (forecasting.lance -> `import lance`). ---
 ann = ["pylance"]
+# --- optional JIT acceleration for the pure-Python CUSUM change-point kernel. ---
+fast = ["numba"]
 # LLM-assisted features. The current code targets the OpenAI SDK; anthropic is
 # included as the recommended provider going forward.
 llm = ["openai", "anthropic", "tiktoken", "tenacity"]
@@ -101,7 +95,7 @@ recommended = ["polars_features[ml,scipy,seasonality,cafe]"]
 # The kitchen sink: every real optional feature set (self-referential extras
 # require pip>=21.2). Excludes the reserved/unused `signatures` extra.
 all = [
-  "polars_features[ml,scipy,progress,seasonality,forecasting,automl,lightgbm,catboost,xgboost,ann,llm,gpu,viz,cafe,dimreduce]",
+  "polars_features[ml,scipy,progress,seasonality,forecasting,automl,lightgbm,catboost,xgboost,ann,fast,llm,gpu,viz,cafe,dimreduce]",
 ]
 # Development / CI tooling.
 dev = [
@@ -113,12 +107,12 @@ dev = [
   "maturin>=1.3.2,<2",
 ]
 
-[tool.maturin]
-module-name = "polars_features._polars_features_rust"
-features = ["pyo3/extension-module"]
-exclude = ["docs/**", "data/**", "tests/**"]
-# Ship the typing marker so downstream type checkers treat the package as typed.
-include = ["polars_features/py.typed"]
+[tool.hatch.build.targets.wheel]
+# Pure-Python distribution: one universal py3-none-any wheel, no compiler needed.
+packages = ["polars_features"]
+
+[tool.hatch.build.targets.sdist]
+include = ["polars_features", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md"]
 
 [tool.ruff]
 line-length = 88
@@ -165,9 +159,7 @@ warn_unused_ignores = true
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# The compiled Rust extension module has no stubs.
 module = [
-  "polars_features._polars_features_rust",
   "polars_features._plotting",
 ]
 ignore_missing_imports = true
