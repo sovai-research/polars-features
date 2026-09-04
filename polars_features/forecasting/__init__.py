@@ -23,14 +23,14 @@ from .snaive import snaive
 try:
     from .lance import ann
 except ImportError:
-    msg = "Missing ann extras: `pip install functime[ann]`"
+    msg = "Missing ann extras: `pip install polars_features[ann]`"
     ann = ImportError(msg)
 
 try:
     from .automl import auto_lightgbm
     from .lightgbm import flaml_lightgbm, lightgbm
 except ImportError:
-    msg = "Missing lightgbm extras: `pip install functime[lgb]`"
+    msg = "Missing lightgbm extras: `pip install polars_features[lgb]`"
     auto_lightgbm = ImportError(msg)
     flaml_lightgbm = ImportError(msg)
     lightgbm = ImportError(msg)
@@ -38,12 +38,14 @@ except ImportError:
 try:
     from .catboost import catboost
 except ImportError:
-    catboost = ImportError("Missing catboost extras: `pip install functime[cat]`")
+    catboost = ImportError(
+        "Missing catboost extras: `pip install polars_features[cat]`"
+    )
 
 try:
     from .xgboost import xgboost
 except ImportError:
-    xgboost = ImportError("Missing xgboost extras: `pip install functime[xgb]`")
+    xgboost = ImportError("Missing xgboost extras: `pip install polars_features[xgb]`")
 
 
 __all__ = [

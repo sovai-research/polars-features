@@ -39,16 +39,19 @@ or as integer time-index positions when ``return_indices=True``.
 
 from __future__ import annotations
 
+import copy
 import itertools
 import math
-from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+import warnings
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import polars as pl
 
 from polars_features.core.panel_frame import PanelFrame, as_panel
+from polars_features.core.protocol import PanelTransformer
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -60,6 +63,9 @@ __all__ = [
     "sliding_window_split",
     "deflated_sharpe_ratio",
     "probability_of_backtest_overfitting",
+    "CVReport",
+    "cross_validate",
+    "validate",
 ]
 
 # A fold is (train_panel, test_panel) or (train_time_idx, test_time_idx).
@@ -73,6 +79,59 @@ IndexFold = tuple["NDArray[np.int64]", "NDArray[np.int64]"]
 def _unique_times(panel: PanelFrame) -> np.ndarray:
     """Return the sorted unique time values of ``panel`` as a numpy array."""
     return panel.time_index().to_numpy()
+
+
+def _sharpe(
+    returns: np.ndarray | Sequence[float],
+    *,
+    periods_per_year: float | None = None,
+    ddof: int = 1,
+) -> float:
+    """Sharpe of a return series. NaN (not 0) on degenerate/empty input.
+
+    Naive ``mu / sd``. If ``periods_per_year`` is given the result is annualised
+    by ``sqrt(periods_per_year)``; otherwise it is per-observation (the frequency
+    DSR/PSR expect). Returns ``nan`` when fewer than 2 finite points or ``sd == 0``
+    so downstream stats can drop it rather than treat luck as skill.
+    """
+    r = np.asarray(returns, dtype=float)
+    r = r[np.isfinite(r)]
+    if r.size < 2:
+        return float("nan")
+    sd = r.std(ddof=ddof)
+    if not (sd > 0):
+        return float("nan")
+    sr = r.mean() / sd
+    if periods_per_year is not None:
+        sr *= math.sqrt(periods_per_year)
+    return float(sr)
+
+
+def _perf_stat(
+    rows: np.ndarray,
+    statistic: str | Callable[[np.ndarray], np.ndarray],
+) -> np.ndarray:
+    """Column-wise performance statistic for a ``(T, S)`` slice.
+
+    ``"mean"`` -> per-column mean; ``"sharpe"`` -> per-column :func:`_sharpe`
+    (per-observation, degenerate columns become ``nan``); a callable is applied
+    to the ``(T, S)`` matrix and must return an ``(S,)`` vector.
+    """
+    if callable(statistic):
+        out = np.asarray(statistic(rows), dtype=float)
+        if out.shape != (rows.shape[1],):
+            raise ValueError(
+                "custom `statistic` must return one value per strategy column "
+                f"(expected shape {(rows.shape[1],)}, got {out.shape})."
+            )
+        return out
+    if statistic == "mean":
+        return rows.mean(axis=0)
+    if statistic == "sharpe":
+        return np.array([_sharpe(rows[:, j]) for j in range(rows.shape[1])])
+    raise ValueError(
+        f"unknown `statistic` {statistic!r}; use 'mean', 'sharpe', or a callable."
+    )
 
 
 def _subset_by_times(panel: PanelFrame, times: Sequence) -> PanelFrame:
@@ -165,6 +224,114 @@ def _purge_embargo_positions(
     return train
 
 
+def _purge_embargo_positions_t1(
+    n_times: int,
+    test_positions: np.ndarray,
+    times: np.ndarray,
+    t1: np.ndarray,
+    embargo: int,
+) -> np.ndarray:
+    """Return train positions after **label-driven** purge + embargo.
+
+    Instead of a scalar ``horizon``, each observation carries an explicit label
+    *end* time ``t1``: the label for the observation at time ``times[j]`` spans
+    the closed interval ``[times[j], t1[j]]`` (de Prado, 7.4.1). A training
+    observation is purged when its label interval overlaps **any** test
+    observation's label interval, i.e.
+
+    .. math:: t_j \\le t1_i \\quad\\text{and}\\quad t_i \\le t1_j
+
+    for some test observation ``i`` (standard closed-interval intersection). The
+    embargo is applied on the position axis exactly as in
+    :func:`_purge_embargo_positions`.
+
+    Parameters
+    ----------
+    n_times : int
+        Number of unique time steps.
+    test_positions : ndarray of int
+        Positions (into the sorted unique-time index) belonging to the test set.
+    times : ndarray
+        The sorted unique time *values* (label start times), aligned to
+        positions ``0..n_times-1``.
+    t1 : ndarray
+        Label *end* time values, aligned to the same positions. Must be
+        comparable to ``times`` (same dtype / axis).
+    embargo : int
+        Embargo in time-steps applied after each contiguous test block.
+
+    Returns
+    -------
+    ndarray of int
+        Sorted training positions.
+    """
+    test_set = {int(p) for p in test_positions}
+    blocked = set(test_set)
+
+    test_arr = np.array(sorted(test_set), dtype=np.int64)
+    ti = times[test_arr]  # test label start times
+    ei = t1[test_arr]  # test label end times
+
+    for j in range(n_times):
+        if j in test_set:
+            continue
+        tj = times[j]
+        ej = t1[j]
+        # Overlap with any test interval [ti_k, ei_k]: tj <= ei_k and ti_k <= ej.
+        if bool(np.any((tj <= ei) & (ti <= ej))):
+            blocked.add(j)
+
+    if embargo > 0:
+        for _start, end in _contiguous_blocks(test_arr):
+            lo = end + 1
+            hi = min(n_times - 1, end + embargo)
+            for j in range(lo, hi + 1):
+                blocked.add(j)
+
+    return np.array([p for p in range(n_times) if p not in blocked], dtype=np.int64)
+
+
+def _resolve_t1(t1: object, pf: PanelFrame, times: np.ndarray) -> np.ndarray | None:
+    """Resolve a ``t1`` spec into an end-time array aligned to ``times``.
+
+    ``t1`` may be:
+
+    * ``None`` — return ``None`` (the scalar-``horizon`` path is used instead).
+    * a column name (``str``) present in ``pf`` — the label end time per row; it
+      is aggregated to the **max** end time per unique time (the most
+      conservative purge for a shared-time-axis panel).
+    * an array-like / :class:`polars.Series` of length ``len(times)`` — used
+      directly as the per-time end times.
+    """
+    if t1 is None:
+        return None
+    n_times = times.shape[0]
+    if isinstance(t1, str):
+        agg = (
+            pf.lazy()
+            .group_by(pf.time_col)
+            .agg(pl.col(t1).max().alias("__t1_end__"))
+            .sort(pf.time_col)
+            .collect()
+        )
+        arr = agg["__t1_end__"].to_numpy()
+        if arr.shape[0] != n_times:
+            raise ValueError(
+                f"resolving `t1={t1!r}` produced {arr.shape[0]} end-times but "
+                f"there are {n_times} unique times; every time must have a label "
+                "end time."
+            )
+        return arr
+    arr = t1.to_numpy() if isinstance(t1, pl.Series) else np.asarray(t1)
+    if arr.shape[0] != n_times:
+        raise ValueError(
+            f"`t1` has length {arr.shape[0]} but there are {n_times} unique "
+            "times; `t1` must align with the sorted unique-time index (pass a "
+            "column name to derive it per-time instead)."
+        )
+    return arr
+
+
 # --------------------------------------------------------------------------- #
 # PurgedKFold
 # --------------------------------------------------------------------------- #
@@ -215,6 +382,7 @@ class PurgedKFold:
         *,
         horizon: int = 0,
         embargo: int = 0,
+        t1: object | None = None,
         return_indices: bool = False,
     ) -> None:
         if n_splits < 2:
@@ -226,6 +394,9 @@ class PurgedKFold:
         self.n_splits = n_splits
         self.horizon = horizon
         self.embargo = embargo
+        # Optional per-time label end times (event-based purge). When given it
+        # supersedes the scalar ``horizon`` (see :func:`_purge_embargo_positions_t1`).
+        self.t1 = t1
         self.return_indices = return_indices
 
     def get_n_splits(self) -> int:
@@ -266,10 +437,16 @@ class PurgedKFold:
         pf = as_panel(panel)
         times = _unique_times(pf)
         n_times = times.shape[0]
+        t1_arr = _resolve_t1(self.t1, pf, times)
         for test_pos in self._test_position_folds(n_times):
-            train_pos = _purge_embargo_positions(
-                n_times, test_pos, self.horizon, self.embargo
-            )
+            if t1_arr is None:
+                train_pos = _purge_embargo_positions(
+                    n_times, test_pos, self.horizon, self.embargo
+                )
+            else:
+                train_pos = _purge_embargo_positions_t1(
+                    n_times, test_pos, times, t1_arr, self.embargo
+                )
             if self.return_indices:
                 yield train_pos, test_pos
             else:
@@ -342,6 +519,7 @@ class CombinatorialPurgedCV:
         *,
         horizon: int = 0,
         embargo: int = 0,
+        t1: object | None = None,
         return_indices: bool = False,
     ) -> None:
         if n_groups < 2:
@@ -359,6 +537,9 @@ class CombinatorialPurgedCV:
         self.n_test_groups = n_test_groups
         self.horizon = horizon
         self.embargo = embargo
+        # Optional per-time label end times (event-based purge), overriding the
+        # scalar ``horizon`` when supplied.
+        self.t1 = t1
         self.return_indices = return_indices
 
     @property
@@ -394,7 +575,12 @@ class CombinatorialPurgedCV:
             )
         ]
 
-    def _iter_folds(self, n_times: int) -> Iterator[_CPCVFold]:
+    def _iter_folds(
+        self,
+        n_times: int,
+        times: np.ndarray | None = None,
+        t1_arr: np.ndarray | None = None,
+    ) -> Iterator[_CPCVFold]:
         groups = self._group_positions(n_times)
         for test_combo in itertools.combinations(
             range(self.n_groups), self.n_test_groups
@@ -402,9 +588,14 @@ class CombinatorialPurgedCV:
             test_pos = np.sort(np.concatenate([groups[g] for g in test_combo])).astype(
                 np.int64
             )
-            train_pos = _purge_embargo_positions(
-                n_times, test_pos, self.horizon, self.embargo
-            )
+            if t1_arr is None:
+                train_pos = _purge_embargo_positions(
+                    n_times, test_pos, self.horizon, self.embargo
+                )
+            else:
+                train_pos = _purge_embargo_positions_t1(
+                    n_times, test_pos, times, t1_arr, self.embargo
+                )
             yield _CPCVFold(
                 test_groups=test_combo,
                 train_positions=train_pos,
@@ -452,7 +643,8 @@ class CombinatorialPurgedCV:
         pf = as_panel(panel)
         times = _unique_times(pf)
         n_times = times.shape[0]
-        for fold in self._iter_folds(n_times):
+        t1_arr = _resolve_t1(self.t1, pf, times)
+        for fold in self._iter_folds(n_times, times, t1_arr):
             if self.return_indices:
                 yield fold.train_positions, fold.test_positions, fold.test_groups
             else:
@@ -823,6 +1015,7 @@ def probability_of_backtest_overfitting(
     *,
     n_partitions: int = 16,
     higher_is_better: bool = True,
+    statistic: str | Callable[[np.ndarray], np.ndarray] = "mean",
 ) -> float:
     """Probability of Backtest Overfitting (PBO) via CSCV.
 
@@ -845,6 +1038,13 @@ def probability_of_backtest_overfitting(
     higher_is_better : bool, default=True
         Whether larger performance values are better (e.g. Sharpe, returns). If
         False (e.g. loss), the sign of the selection is flipped.
+    statistic : {"mean", "sharpe"} or callable, default="mean"
+        Column-wise performance statistic used to rank strategies within each IS
+        / OS slice. ``"mean"`` reproduces the block-mean behaviour; ``"sharpe"``
+        ranks by per-observation Sharpe (recommended for return matrices, since
+        two strategies with equal means but different vols are then separated). A
+        callable receives the ``(T_slice, S)`` slice and must return an ``(S,)``
+        vector.
 
     Returns
     -------
@@ -911,12 +1111,12 @@ def probability_of_backtest_overfitting(
         is_rows = np.vstack([blocks[i] for i in range(n_partitions) if i in is_set])
         os_rows = np.vstack([blocks[i] for i in range(n_partitions) if i not in is_set])
 
-        # Performance per strategy = mean over the slice (proxy for Sharpe-like
-        # aggregate; matches the de Prado reference using a chosen statistic).
-        is_perf = is_rows.mean(axis=0)
-        os_perf = os_rows.mean(axis=0)
+        # Performance per strategy from the chosen statistic (mean by default,
+        # Sharpe recommended for return matrices).
+        is_perf = _perf_stat(is_rows, statistic)
+        os_perf = _perf_stat(os_rows, statistic)
 
-        n_star = int(np.argmax(is_perf))
+        n_star = int(np.nanargmax(is_perf))
         # Rank of the IS-best strategy OS (1 = worst .. S = best).
         order = np.argsort(np.argsort(os_perf))  # 0-based ranks
         rank = int(order[n_star]) + 1
@@ -927,3 +1127,478 @@ def probability_of_backtest_overfitting(
     logits_arr = np.asarray(logits)
     pbo = float(np.mean(logits_arr <= 0.0))
     return pbo
+
+
+# --------------------------------------------------------------------------- #
+# Cross-validation runner (CPCV / PurgedKFold driver)
+# --------------------------------------------------------------------------- #
+def _neg_mean_squared_error(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """Default fold metric: negative MSE (higher is better)."""
+    yt = np.asarray(y_true, dtype=float)
+    yp = np.asarray(y_pred, dtype=float)
+    return -float(np.mean((yt - yp) ** 2))
+
+
+@dataclass
+class CVReport:
+    """Result of :func:`cross_validate`: per-fold and (for CPCV) per-path scores.
+
+    Attributes
+    ----------
+    metric_name : str
+        Name of the scoring function used for :attr:`fold_scores`.
+    fold_scores : list of float
+        One score per CV split, in split order.
+    fold_test_groups : list
+        For CPCV, the tuple of test-group indices per split; ``None`` for
+        non-combinatorial splitters.
+    n_splits : int
+        Number of splits actually evaluated.
+    n_paths : int, optional
+        Number of reconstructed backtest paths (CPCV only).
+    path_scores : list of float, optional
+        Per-path aggregate performance (mean per-period strategy return).
+    path_sharpes : list of float, optional
+        Per-path Sharpe ratio of the reconstructed return series.
+    performance_matrix : numpy.ndarray, optional
+        ``(n_periods, n_paths)`` matrix of per-period strategy returns, one
+        column per backtest path — the input to
+        :func:`probability_of_backtest_overfitting`.
+    deflated_sharpe : float, optional
+        :func:`deflated_sharpe_ratio` of the best path. Deflated against the
+        honest number of configurations searched (``n_trials``, supplied by the
+        caller) and the *empirical* variance of the path Sharpes
+        (``sharpe_variance``). When ``n_trials`` is not supplied the CPCV
+        ``n_paths`` is used only as a (usually too-small) floor and a warning is
+        recorded in :attr:`extra`.
+    n_trials : int, optional
+        The multiple-testing count actually used to deflate
+        :attr:`deflated_sharpe` (the user's ``n_trials``, or the ``n_paths``
+        floor when omitted).
+    sharpe_variance : float, optional
+        Empirical variance of the path Sharpes (``var(path_sharpes, ddof=1)``)
+        passed to :func:`deflated_sharpe_ratio` as ``V``.
+    pbo : float, optional
+        :func:`probability_of_backtest_overfitting` across the paths.
+    """
+
+    metric_name: str
+    fold_scores: list[float]
+    fold_test_groups: list[tuple[int, ...] | None]
+    n_splits: int
+    n_paths: int | None = None
+    path_scores: list[float] | None = None
+    path_sharpes: list[float] | None = None
+    performance_matrix: NDArray[np.float64] | None = None
+    deflated_sharpe: float | None = None
+    n_trials: int | None = None
+    sharpe_variance: float | None = None
+    pbo: float | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    def summary(self) -> dict[str, Any]:
+        """Return a compact dict of aggregate CV statistics."""
+        fs = np.asarray(self.fold_scores, dtype=float)
+        out: dict[str, Any] = {
+            "metric": self.metric_name,
+            "n_splits": self.n_splits,
+            "mean_score": float(np.nanmean(fs)) if fs.size else float("nan"),
+            "std_score": float(np.nanstd(fs)) if fs.size else float("nan"),
+            "min_score": float(np.nanmin(fs)) if fs.size else float("nan"),
+            "max_score": float(np.nanmax(fs)) if fs.size else float("nan"),
+        }
+        if self.n_paths is not None:
+            ps = np.asarray(self.path_sharpes or [], dtype=float)
+            out.update(
+                {
+                    "n_paths": self.n_paths,
+                    "mean_path_sharpe": (
+                        float(np.nanmean(ps)) if ps.size else float("nan")
+                    ),
+                    "deflated_sharpe": self.deflated_sharpe,
+                    "n_trials": self.n_trials,
+                    "V": self.sharpe_variance,
+                    "pbo": self.pbo,
+                }
+            )
+        return out
+
+
+def _prepare_panel(
+    X: PanelFrame | pl.DataFrame | pl.LazyFrame,
+    y: object,
+    entity: str | None,
+    time: str | None,
+) -> tuple[PanelFrame, str | None]:
+    """Coerce ``X`` to a sorted PanelFrame and resolve the target column.
+
+    Returns the panel and the name of the target column (or ``None`` if ``y`` is
+    ``None``). Array-like ``y`` is attached as a ``__target__`` column, aligned
+    to the panel's sorted ``(entity, time)`` row order.
+    """
+    pf = X if isinstance(X, PanelFrame) else as_panel(X, entity, time)
+    pf = pf.sort_panel()
+    entity_col, time_col = pf.entity_col, pf.time_col
+
+    if y is None:
+        return pf, None
+    if isinstance(y, str):
+        return pf, y
+
+    base = pf.collect()
+    yv = y.to_numpy() if isinstance(y, pl.Series) else np.asarray(y)
+    if yv.shape[0] != base.height:
+        raise ValueError(
+            f"`y` has length {yv.shape[0]} but the panel has {base.height} rows; "
+            "pass a target column name or an array aligned to the panel rows."
+        )
+    base = base.with_columns(pl.Series("__target__", yv))
+    return PanelFrame(
+        base, entity=entity_col, time=time_col, validate=False
+    ), "__target__"
+
+
+def _fit_predict_fold(
+    estimator: Any,
+    train: PanelFrame,
+    test: PanelFrame,
+    *,
+    feature_cols: list[str],
+    target_col: str | None,
+    entity_col: str,
+    time_col: str,
+    is_panel: bool,
+) -> tuple[np.ndarray, pl.DataFrame, np.ndarray | None]:
+    """Fit ``estimator`` on ``train`` and predict ``test``.
+
+    Returns ``(y_pred, pred_frame, y_true)`` where ``pred_frame`` carries
+    ``entity``, ``time``, ``__pred__`` and (if available) ``__target__``.
+    """
+    test_df = test.collect()
+    if is_panel:
+        estimator.fit(train)
+        pred_df = estimator.predict(test).collect()
+        candidates = [c for c in pred_df.columns if c not in (entity_col, time_col)]
+        pred_col = next(
+            (c for c in candidates if "pred" in c.lower()),
+            None,
+        )
+        if pred_col is None:
+            input_cols = set(test.columns)
+            extra = [c for c in candidates if c not in input_cols]
+            pred_col = extra[0] if extra else candidates[-1]
+        y_pred = pred_df.get_column(pred_col).to_numpy().ravel()
+        pred_frame = pred_df.select(entity_col, time_col).with_columns(
+            pl.Series("__pred__", y_pred)
+        )
+    else:
+        x_train = train.collect().select(feature_cols).to_numpy()
+        x_test = test_df.select(feature_cols).to_numpy()
+        if target_col is not None:
+            y_train = train.collect().get_column(target_col).to_numpy().ravel()
+        else:
+            y_train = None
+        estimator.fit(x_train, y_train)
+        y_pred = np.asarray(estimator.predict(x_test)).ravel()
+        pred_frame = test_df.select(entity_col, time_col).with_columns(
+            pl.Series("__pred__", y_pred)
+        )
+
+    if target_col is not None:
+        y_true = test_df.get_column(target_col).to_numpy().ravel()
+        pred_frame = pred_frame.with_columns(pl.Series("__target__", y_true))
+    else:
+        y_true = None
+    return y_pred, pred_frame, y_true
+
+
+def _reconstruct_paths(
+    report: CVReport,
+    cv: CombinatorialPurgedCV,
+    pf: PanelFrame,
+    fold_preds: list[pl.DataFrame],
+    entity_col: str,
+    time_col: str,
+    *,
+    n_trials: int | None = None,
+    periods_per_year: float | None = None,
+) -> None:
+    """Reconstruct CPCV backtest paths and fill overfitting diagnostics.
+
+    For each of the :attr:`CombinatorialPurgedCV.n_paths` paths, the per-group
+    test predictions (one split per group) are stitched into a full-coverage
+    out-of-sample series; a per-period strategy return ``mean_entities(pred *
+    target)`` is formed and fed into :func:`deflated_sharpe_ratio` and
+    :func:`probability_of_backtest_overfitting`.
+    """
+    times = _unique_times(pf)
+    n_times = times.shape[0]
+    group_positions = cv._group_positions(n_times)
+    group_times = {
+        g: pl.Series(values=times[pos].tolist()).implode()
+        for g, pos in enumerate(group_positions)
+    }
+
+    paths = cv.backtest_paths()
+    perf_cols: list[np.ndarray] = []
+    path_sharpes: list[float] = []
+    path_scores: list[float] = []
+    for path in paths:
+        frames: list[pl.DataFrame] = []
+        for split_idx, g in path:
+            frame = fold_preds[split_idx]
+            frames.append(frame.filter(pl.col(time_col).is_in(group_times[g])))
+        full = pl.concat(frames)
+        rets = (
+            full.with_columns(
+                (pl.col("__pred__") * pl.col("__target__")).alias("__ret__")
+            )
+            .group_by(time_col)
+            .agg(pl.col("__ret__").mean())
+            .sort(time_col)
+        )
+        r = rets.get_column("__ret__").to_numpy().astype(float)
+        perf_cols.append(r)
+        path_scores.append(float(np.nanmean(r)) if r.size else float("nan"))
+        path_sharpes.append(_sharpe(r, periods_per_year=periods_per_year))
+
+    report.n_paths = cv.n_paths
+    report.path_scores = path_scores
+    report.path_sharpes = path_sharpes
+
+    lengths = {c.shape[0] for c in perf_cols}
+    matrix = np.column_stack(perf_cols) if len(lengths) == 1 else None
+    report.performance_matrix = matrix
+
+    finite = [s for s in path_sharpes if math.isfinite(s)]
+    if finite:
+        # V = empirical variance of the trial Sharpes (Bailey & de Prado's V),
+        # NOT the single-strategy estimator variance.
+        v_trials = float(np.var(finite, ddof=1)) if len(finite) > 1 else 0.0
+        # n_paths is a geometry constant, never the search count. Use the honest
+        # user N; fall back to n_paths only as a floor, and say so loudly.
+        eff_trials = n_trials if n_trials is not None else cv.n_paths
+        if n_trials is None:
+            msg = (
+                "n_trials not supplied; DSR deflated against n_paths="
+                f"{cv.n_paths} (a CV-geometry floor, likely too small). Pass "
+                "cross_validate(..., n_trials=<configs you searched>) for an "
+                "honest Deflated Sharpe."
+            )
+            report.extra["dsr_n_trials_warning"] = msg
+            warnings.warn(msg, stacklevel=2)
+        report.n_trials = int(eff_trials)
+        report.sharpe_variance = v_trials
+        # For DSR the observed SR must be per-observation; strip annualisation.
+        best = max(finite)
+        if periods_per_year is not None:
+            best = best / math.sqrt(periods_per_year)
+        try:
+            report.deflated_sharpe = deflated_sharpe_ratio(
+                best,
+                n_trials=max(int(eff_trials), 1),
+                n_observations=max(n_times, 2),
+                sharpe_variance_across_trials=v_trials if v_trials > 0 else None,
+            )
+        except (ValueError, ZeroDivisionError):
+            report.deflated_sharpe = None
+
+    if matrix is not None and matrix.shape[1] >= 2:
+        n_part = min(10, matrix.shape[0])
+        if n_part % 2 == 1:
+            n_part -= 1
+        if n_part >= 2:
+            try:
+                report.pbo = probability_of_backtest_overfitting(
+                    matrix, n_partitions=n_part, statistic="sharpe"
+                )
+            except ValueError:
+                report.pbo = None
+
+
+def cross_validate(
+    estimator: Any,
+    X: PanelFrame | pl.DataFrame | pl.LazyFrame,
+    y: object = None,
+    cv: Any = None,
+    *,
+    entity: str | None = None,
+    time: str | None = None,
+    metric: Callable[[np.ndarray, np.ndarray], float] | None = None,
+    n_trials: int | None = None,
+    periods_per_year: float | None = None,
+) -> CVReport:
+    """Run leak-safe cross-validation of ``estimator`` over ``cv``.
+
+    Fits ``estimator`` on each training fold and predicts the test fold. With a
+    :class:`CombinatorialPurgedCV`, the per-split test predictions are recombined
+    into the :attr:`~CombinatorialPurgedCV.n_paths` backtest paths (via
+    :meth:`~CombinatorialPurgedCV.backtest_paths`) and fed into the
+    Deflated-Sharpe / PBO overfitting diagnostics.
+
+    Parameters
+    ----------
+    estimator : object
+        Either a PanelKit estimator/:class:`~polars_features.core.pipeline.Pipeline`
+        (``fit(panel)`` / ``predict(panel) -> PanelFrame``) or any sklearn-shaped
+        object with ``fit(X, y)`` / ``predict(X)`` over numpy arrays. The object
+        is deep-copied per fold so folds are independent.
+    X : PanelFrame | polars.DataFrame | polars.LazyFrame
+        The feature panel (may also carry the target column).
+    y : str | polars.Series | array-like, optional
+        The target: a column name in ``X``, or an array aligned to ``X`` rows.
+        Required for scoring and for CPCV path reconstruction.
+    cv : splitter
+        A :class:`PurgedKFold` or :class:`CombinatorialPurgedCV` (or any object
+        with a compatible ``split``). Must have ``return_indices=False``.
+    entity, time : str, optional
+        Panel keys when ``X`` is a bare frame.
+    metric : callable, optional
+        ``metric(y_true, y_pred) -> float`` for the per-fold score. Defaults to
+        negative mean squared error (higher is better).
+    n_trials : int, optional
+        For CPCV only: the honest number of strategy configurations you searched
+        (hyper-parameter grid, feature sets, …). This is the multiple-testing
+        count ``N`` used to deflate the Sharpe. If omitted, the CPCV ``n_paths``
+        (a CV-geometry constant, **not** a search count) is used only as a floor
+        and a warning is emitted — pass ``n_trials`` for an honest DSR.
+    periods_per_year : float, optional
+        For CPCV only: annualisation factor for the reported path Sharpes. The
+        DSR itself always strips annualisation (it needs the per-observation
+        Sharpe), so this only affects the annualised path Sharpe values.
+
+    Returns
+    -------
+    CVReport
+    """
+    if cv is None:
+        raise ValueError(
+            "`cv` is required (e.g. a PurgedKFold or CombinatorialPurgedCV)."
+        )
+    if getattr(cv, "return_indices", False):
+        raise ValueError(
+            "cross_validate needs a splitter that yields PanelFrames; construct "
+            "`cv` with `return_indices=False`."
+        )
+
+    pf, target_col = _prepare_panel(X, y, entity, time)
+    entity_col, time_col = pf.entity_col, pf.time_col
+    feature_cols = [c for c in pf.feature_cols if c != target_col]
+    is_panel = isinstance(estimator, PanelTransformer)
+
+    if metric is None:
+        metric = _neg_mean_squared_error
+        metric_name = "neg_mean_squared_error"
+    else:
+        metric_name = getattr(metric, "__name__", "metric")
+
+    is_cpcv = hasattr(cv, "backtest_paths") and hasattr(cv, "split_with_groups")
+    if is_cpcv:
+        fold_iter: Iterator[tuple[Any, Any, Any]] = cv.split_with_groups(pf)
+    else:
+        fold_iter = ((tr, te, None) for tr, te in cv.split(pf))
+
+    fold_scores: list[float] = []
+    fold_groups: list[tuple[int, ...] | None] = []
+    fold_preds: list[pl.DataFrame] = []
+    for train, test, groups in fold_iter:
+        est = copy.deepcopy(estimator)
+        y_pred, pred_frame, y_true = _fit_predict_fold(
+            est,
+            train,
+            test,
+            feature_cols=feature_cols,
+            target_col=target_col,
+            entity_col=entity_col,
+            time_col=time_col,
+            is_panel=is_panel,
+        )
+        if y_true is not None:
+            fold_scores.append(float(metric(y_true, y_pred)))
+        else:
+            fold_scores.append(float("nan"))
+        fold_groups.append(groups)
+        fold_preds.append(pred_frame)
+
+    report = CVReport(
+        metric_name=metric_name,
+        fold_scores=fold_scores,
+        fold_test_groups=fold_groups,
+        n_splits=len(fold_scores),
+    )
+    if is_cpcv and target_col is not None:
+        _reconstruct_paths(
+            report,
+            cv,
+            pf,
+            fold_preds,
+            entity_col,
+            time_col,
+            n_trials=n_trials,
+            periods_per_year=periods_per_year,
+        )
+    return report
+
+
+class _Validate:
+    """Convenience namespace for common leak-safe validation recipes."""
+
+    @staticmethod
+    def cpcv(
+        estimator: Any,
+        X: PanelFrame | pl.DataFrame | pl.LazyFrame,
+        y: object = None,
+        *,
+        n_groups: int = 6,
+        n_test_groups: int = 2,
+        horizon: int = 0,
+        embargo: int = 0,
+        t1: object | None = None,
+        entity: str | None = None,
+        time: str | None = None,
+        metric: Callable[[np.ndarray, np.ndarray], float] | None = None,
+        n_trials: int | None = None,
+        periods_per_year: float | None = None,
+    ) -> CVReport:
+        """Combinatorial Purged CV of ``estimator`` -> :class:`CVReport`."""
+        cv = CombinatorialPurgedCV(
+            n_groups=n_groups,
+            n_test_groups=n_test_groups,
+            horizon=horizon,
+            embargo=embargo,
+            t1=t1,
+        )
+        return cross_validate(
+            estimator,
+            X,
+            y,
+            cv,
+            entity=entity,
+            time=time,
+            metric=metric,
+            n_trials=n_trials,
+            periods_per_year=periods_per_year,
+        )
+
+    @staticmethod
+    def purged_kfold(
+        estimator: Any,
+        X: PanelFrame | pl.DataFrame | pl.LazyFrame,
+        y: object = None,
+        *,
+        n_splits: int = 5,
+        horizon: int = 0,
+        embargo: int = 0,
+        t1: object | None = None,
+        entity: str | None = None,
+        time: str | None = None,
+        metric: Callable[[np.ndarray, np.ndarray], float] | None = None,
+    ) -> CVReport:
+        """Purged K-Fold CV of ``estimator`` -> :class:`CVReport`."""
+        cv = PurgedKFold(n_splits=n_splits, horizon=horizon, embargo=embargo, t1=t1)
+        return cross_validate(
+            estimator, X, y, cv, entity=entity, time=time, metric=metric
+        )
+
+
+validate = _Validate()

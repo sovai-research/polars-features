@@ -132,6 +132,11 @@ class PanelTransformer(abc.ABC):
         # learned parameters as instance attributes (sklearn convention:
         # trailing-underscore names) during `_fit`.
         self._fitted: bool = False
+        # The panel the transform was last fitted on. Recorded in `fit` so the
+        # leakage-check flow can pass a meaningful ``train`` into
+        # :meth:`_check_leakage` when a fitted transform is later applied across
+        # a train/test boundary (e.g. by :class:`Pipeline`).
+        self._fit_panel: PanelFrame | None = None
         # Optional default panel keys. When set, the public methods accept a
         # bare ``pl.DataFrame``/``pl.LazyFrame`` and wrap it into a PanelFrame
         # using these keys, so users can configure the keys once on the
@@ -329,6 +334,7 @@ class PanelTransformer(abc.ABC):
         """
         panel = self._as_panel(X, method="fit", entity=entity, time=time)
         self._fit(panel)
+        self._fit_panel = panel
         self._fitted = True
         return self
 

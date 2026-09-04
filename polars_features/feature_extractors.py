@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -21,6 +22,7 @@ from scipy.stats import kurtosis, skew
 from polars_features._compat import register_plugin_function, rle_fields
 from polars_features._polars_features_rust import rs_faer_lstsq1
 from polars_features._utils import warn_is_unstable
+from polars_features.registry import FeatureSpec, registry
 from polars_features.type_aliases import DetrendMethod
 
 # from functime.feature_extractor import FeatureExtractor  # noqa: F401
@@ -325,28 +327,24 @@ def benford_correlation(x: TIME_SERIES_T) -> FLOAT_EXPR:
     """
 
     if isinstance(x, pl.Series):
-        counts = (
-            pl.int_range(1, 10, eager=True, dtype=pl.UInt8)
-            .cast(pl.Utf8)
-            .append(
-                x.cast(pl.Utf8)
-                .str.strip_chars_start("-0.")
-                .filter(x != 0)
-                .str.slice(0, 1)
-            )
-            .unique_counts()
-        )
-        return np.corrcoef(counts - 1, _BENFORD_DIST_SERIES)[0, 1]
+        # Derive the leading digit numerically: d = floor(|x| / 10**floor(log10|x|)).
+        # This is robust to scientific-notation string reprs (e.g. "1e-05"), which
+        # the previous string-stripping approach silently mis-parsed. The +1e-10
+        # nudges log10 past floating-point undershoot at exact powers of ten
+        # (e.g. log10(1000) == 2.9999999... -> a leading digit of 10).
+        arr = x.drop_nulls().to_numpy().astype(np.float64)
+        arr = arr[np.isfinite(arr) & (arr != 0.0)]
+        lead = np.floor(
+            np.abs(arr) / 10.0 ** np.floor(np.log10(np.abs(arr)) + 1e-10)
+        ).astype(np.int64)
+        counts = np.bincount(lead, minlength=10)[1:10]
+        return np.corrcoef(counts, _BENFORD_DIST_SERIES.to_numpy())[0, 1]
     else:
+        absx = x.abs()
+        lead = (absx / pl.lit(10.0).pow((absx.log10() + 1e-10).floor())).floor()
         counts = (
             pl.int_range(1, 10, eager=False)
-            .cast(pl.Utf8)
-            .append(
-                x.cast(pl.Utf8)
-                .str.strip_chars_start("-0.")
-                .filter(x != 0)
-                .str.slice(0, 1)
-            )
+            .append(lead.filter(x.is_finite() & (x != 0)).cast(pl.Int64, strict=False))
             .unique_counts()
         )
         return pl.corr(counts - 1, pl.lit(_BENFORD_DIST_SERIES))
@@ -1279,12 +1277,12 @@ def number_peaks(x: TIME_SERIES_T, support: int) -> INT_EXPR:
 
     Hence in the sequence
 
-    x = [3, 0, 0, 4, 0, 0, 13]
+    ``x = [3, 0, 0, 4, 0, 0, 13]``
 
     4 is a peak of support 1 and 2 because in the subsequences
 
-    [0, 4, 0]
-    [0, 0, 4, 0, 0]
+    ``[0, 4, 0]``
+    ``[0, 0, 4, 0, 0]``
 
     4 is still the highest value. Here, 4 is not a peak of support 3 because 13 is the 3th neighbour to the right of 4
     and its bigger than 4.
@@ -1910,9 +1908,6 @@ def fft_coefficients(x: TIME_SERIES_T) -> MAP_LIST_EXPR:
     ----------
     x : pl.Expr | pl.Series
         Input time series.
-    n_threads : int
-        Number of threads to use.
-        If None, uses all threads available. Defaults to None.
 
     Returns
     -------
@@ -1922,7 +1917,9 @@ def fft_coefficients(x: TIME_SERIES_T) -> MAP_LIST_EXPR:
     fft = np.fft.rfft(x.to_numpy(zero_copy_only=True))
     real = fft.real
     imag = fft.imag
-    angle = np.arctan2(real, imag)
+    # Phase angle of the complex coefficient == np.angle(fft) == atan2(imag, real).
+    # (Previously the arguments were swapped, which silently returned pi/2 - phase.)
+    angle = np.arctan2(imag, real)
     deg_angle = angle * 180 / np.pi
     return {
         "real": fft.real.tolist(),
@@ -1953,7 +1950,7 @@ def realized_volatility(x: pl.Series) -> float:
 
 def return_skew(x: pl.Series) -> float:
     """
-    Skewness of Log Returns
+    Skewness of simple (pct_change) Returns
 
     Parameters
     ----------
@@ -1963,15 +1960,18 @@ def return_skew(x: pl.Series) -> float:
     Returns
     -------
     float
-        Skewness of the log returns.
+        Skewness of the simple (pct_change) returns.
     """
-    returns = np.diff(np.log(x.to_numpy()))
+    # Use simple percentage returns to stay consistent with the
+    # ``.ts.return_skew`` namespace method (``pct_change().skew()``).
+    prices = x.to_numpy()
+    returns = np.diff(prices) / prices[:-1]
     return skew(returns)
 
 
 def return_kurtosis(x: pl.Series) -> float:
     """
-    Kurtosis of Log Returns
+    Kurtosis of simple (pct_change) Returns
 
     Parameters
     ----------
@@ -1981,9 +1981,12 @@ def return_kurtosis(x: pl.Series) -> float:
     Returns
     -------
     float
-        Kurtosis of the log returns.
+        Kurtosis of the simple (pct_change) returns.
     """
-    returns = np.diff(np.log(x.to_numpy()))
+    # Use simple percentage returns to stay consistent with the
+    # ``.ts.return_kurtosis`` namespace method (``pct_change().kurtosis()``).
+    prices = x.to_numpy()
+    returns = np.diff(prices) / prices[:-1]
     return kurtosis(returns)
 
 
@@ -2011,7 +2014,13 @@ def max_drawdown(x: pl.Series) -> float:
     """
     Maximum Drawdown
 
-    Computes the largest peak-to-trough drop in the time series.
+    Computes the largest peak-to-trough drop in the time series as a *ratio*
+    (a non-positive number), matching the ``.ts.max_drawdown`` namespace method:
+
+        ``(x / cummax(x)).min() - 1``
+
+    For example a series that peaks at 100 and troughs at 75 has a max drawdown
+    of ``75 / 100 - 1 == -0.25``.
 
     Parameters
     ----------
@@ -2021,12 +2030,11 @@ def max_drawdown(x: pl.Series) -> float:
     Returns
     -------
     float
-        Maximum drawdown value (in absolute units, not percentage).
+        Maximum drawdown as a ratio in ``[-1, 0]`` (0.0 if never in drawdown).
     """
     prices = x.to_numpy()
     cumulative_max = np.maximum.accumulate(prices)
-    drawdowns = cumulative_max - prices
-    return np.max(drawdowns)
+    return float(np.min(prices / cumulative_max) - 1.0)
 
 
 def signed_mci(
@@ -2225,11 +2233,6 @@ class FeatureExtractor:
         """
         Count the number of values that are above the mean.
 
-        Parameters
-        ----------
-        x : pl.Expr | pl.Series
-            Input time-series.
-
         Returns
         -------
         An expression of the output
@@ -2395,8 +2398,6 @@ class FeatureExtractor:
 
         Parameters
         ----------
-        x : pl.Expr | pl.Series
-            Input time-series.
         threshold: float | pl.Expr
             Either a number, or an expression representing a comparable quantity. If x > threshold,
             then it will be binarized as 1 and 0 otherwise.
@@ -2628,12 +2629,12 @@ class FeatureExtractor:
 
         Hence in the sequence
 
-        x = [3, 0, 0, 4, 0, 0, 13]
+        ``x = [3, 0, 0, 4, 0, 0, 13]``
 
         4 is a peak of support 1 and 2 because in the subsequences
 
-        [0, 4, 0]
-        [0, 0, 4, 0, 0]
+        ``[0, 4, 0]``
+        ``[0, 0, 4, 0, 0]``
 
         4 is still the highest value. Here, 4 is not a peak of support 3 because 13 is the 3th neighbour to the right of 4
         and its bigger than 4.
@@ -2959,12 +2960,26 @@ class FeatureExtractor:
         d : float
             The fractional order of the differencing operator.
         min_weight : float, optional
-            The minimum weight to use for calculations. If specified, the window size is
-            computed from this value and not needed.
+            The minimum weight to use for calculations (the weight-magnitude
+            ``threshold``). If specified, the window size is computed from this
+            value and ``window_size`` is not needed.
         window_size : int, optional
-            The window size of the fractional differencing operator.
-            If specified, the minimum weight is not needed.
+            The window size of the fractional differencing operator (a hard
+            ``max_width`` cap on the kernel). If specified, ``min_weight`` is not
+            needed and the canonical default threshold governs early truncation.
+
+        Notes
+        -----
+        This is a thin, causal, entity-agnostic shim over the shared
+        :func:`polars_features._ffd.frac_diff_expr` builder -- the single source
+        of truth for fractional differencing across every PanelKit surface
+        (``.panel.frac_diff``, :class:`~polars_features.transform.frac_diff.FracDiff`,
+        and :func:`polars_features.preprocessing.fractional_diff`). It returns a
+        bare :class:`polars.Expr`; compose it with ``.over(entity)`` to apply per
+        entity. The first ``width - 1`` rows are emitted as ``null`` (incomplete
+        leading window) -- never zero-filled.
         """
+        from polars_features._ffd import frac_diff_expr
 
         # Assert only one of min_weight or window_size is specified
         if min_weight is not None and window_size is not None:
@@ -2974,18 +2989,9 @@ class FeatureExtractor:
         if min_weight is None and window_size is None:
             raise ValueError("Either min_weight or window_size must be specified.")
 
-        return register_plugin_function(
-            args=[self._expr],
-            plugin_path=lib,
-            function_name="frac_diff",
-            kwargs={
-                "d": d,
-                "min_weight": min_weight,
-                "window_size": window_size,
-            },
-            is_elementwise=False,
-            cast_to_supertype=True,
-        )
+        if min_weight is not None:
+            return frac_diff_expr(self._expr, d=d, threshold=min_weight)
+        return frac_diff_expr(self._expr, d=d, max_width=window_size)
 
     def max_drawdown(self) -> pl.Expr:
         """
@@ -2995,7 +3001,7 @@ class FeatureExtractor:
         -------
         An expression of the output
         """
-        return (self._expr / self._expr.cummax()).min() - 1
+        return (self._expr / self._expr.cum_max()).min() - 1
 
     def num_direction_changes(self) -> pl.Expr:
         """
@@ -3044,3 +3050,210 @@ class FeatureExtractor:
         return (
             self._expr.struct.field("ask_price") - self._expr.struct.field("bid_price")
         ) / 2
+
+
+# ---------------------------------------------------------------------------
+# Catalogue of ``.ts`` scalar-aggregation extractors + bulk ``extract_features``
+# ---------------------------------------------------------------------------
+#
+# Every entry below is a *pure Polars expression* that reduces a per-entity time
+# series to a single scalar, so it composes cleanly under ``group_by(entity)``
+# (and, equivalently, ``.over(entity)``) without leaking information across
+# entities or across time. That makes each one both ``panel_safe`` and
+# ``leakage_safe``. Extractors that emit a list/struct (e.g. ``fft_coefficients``,
+# ``linear_trend``, ``energy_ratios``, ``streak_length_stats``) or that require a
+# Rust plugin (e.g. ``frac_diff``, ``cusum``, ``lempel_ziv_complexity``) are
+# intentionally excluded from the bulk path — they do not reduce to one column.
+#
+# ``params`` records the tunable arguments (all with sensible defaults, so the
+# bulk :func:`extract_features` path can invoke them argument-free).
+
+#: Ordered mapping of registered ``ts`` feature name -> its ``params`` schema.
+#: The order is stable so :func:`extract_features` and the catalogue render
+#: deterministically.
+_TS_SCALAR_AGG_SPECS: dict[str, dict[str, Any]] = {
+    "absolute_energy": {},
+    "absolute_maximum": {},
+    "absolute_sum_of_changes": {},
+    "root_mean_square": {},
+    "benford_correlation": {},
+    "count_above_mean": {},
+    "count_below_mean": {},
+    "first_location_of_maximum": {},
+    "first_location_of_minimum": {},
+    "has_duplicate": {},
+    "has_duplicate_max": {},
+    "has_duplicate_min": {},
+    "last_location_of_maximum": {},
+    "last_location_of_minimum": {},
+    "mean_abs_change": {},
+    "max_abs_change": {},
+    "mean_change": {},
+    "mean_second_derivative_central": {},
+    "percent_reoccurring_points": {},
+    "percent_reoccurring_values": {},
+    "sum_reoccurring_points": {},
+    "sum_reoccurring_values": {},
+    "variation_coefficient": {},
+    "harmonic_mean": {},
+    "range_over_mean": {},
+    "longest_streak_above_mean": {},
+    "longest_streak_below_mean": {},
+    "longest_winning_streak": {},
+    "longest_losing_streak": {},
+    "ratio_n_unique_to_length": {},
+    "max_drawdown": {},
+    "num_direction_changes": {},
+    "return_kurtosis": {},
+    "return_skew": {},
+    "count_above": {"threshold": float},
+    "count_below": {"threshold": float},
+    "ratio_beyond_r_sigma": {"ratio": float},
+    "large_standard_deviation": {"ratio": float},
+    "var_gt_std": {"ddof": int},
+    "symmetry_looking": {"ratio": float},
+    "range_change": {"percentage": bool},
+    "cid_ce": {"normalize": bool},
+}
+
+
+def _ts_scalar_agg_builder(name: str) -> Callable[[pl.Expr], pl.Expr]:
+    """Return a builder that maps ``pl.col(c)`` -> ``pl.col(c).ts.<name>()``.
+
+    Parametrised extractors are invoked with their defaults, so every builder is
+    a plain ``Expr -> Expr`` reduction suitable for ``group_by(...).agg(...)``.
+    """
+
+    def _build(expr: pl.Expr) -> pl.Expr:
+        return getattr(expr.ts, name)()
+
+    _build.__name__ = f"ts_{name}"
+    _build.__qualname__ = f"ts.{name}"
+    return _build
+
+
+#: Ordered mapping of feature name -> ``Expr -> Expr`` scalar-aggregation builder.
+_TS_SCALAR_AGGS: dict[str, Callable[[pl.Expr], pl.Expr]] = {
+    name: _ts_scalar_agg_builder(name) for name in _TS_SCALAR_AGG_SPECS
+}
+
+
+# Register every scalar-aggregation extractor with the process-wide registry so
+# the ``.ts`` catalogue becomes machine-introspectable (previously it was
+# invisible to :class:`~polars_features.registry.FeatureRegistry`). These are all
+# pure per-entity aggregations: panel-safe and leakage-safe by construction.
+for _name, _params in _TS_SCALAR_AGG_SPECS.items():
+    registry.register(
+        FeatureSpec(
+            name=_name,
+            namespace="ts",
+            input_shape="series",
+            output_shape="scalar",
+            params=dict(_params),
+            tier="B",
+            panel_safe=True,
+            leakage_safe=True,
+            source="PanelKit",
+            license="Apache-2.0",
+            backend_fn=_TS_SCALAR_AGGS[_name],
+        ),
+        overwrite=True,
+    )
+del _name, _params
+
+
+def extract_features(
+    df: pl.DataFrame | pl.LazyFrame,
+    *,
+    entity: str | None = None,
+    time: str | None = None,
+    features: str | Sequence[str] = "all",
+    column: str | Sequence[str] | None = None,
+) -> pl.DataFrame | pl.LazyFrame:
+    """Compute registered ``ts`` scalar features per entity in a single lazy pass.
+
+    This is a tsfresh-style bulk extractor, but lazy and panel-safe: it runs one
+    ``group_by(entity).agg(...)`` over the requested value column(s), producing
+    exactly one row per entity with one column per (value column x feature).
+    Because every feature is a pure per-entity aggregation, no information leaks
+    across entities or from the future.
+
+    Parameters
+    ----------
+    df : pl.DataFrame | pl.LazyFrame
+        Long-format panel. A ``DataFrame`` is processed lazily and collected on
+        return; a ``LazyFrame`` stays lazy end-to-end.
+    entity : str, optional
+        Entity (group) column. Defaults to the first column, matching the repo
+        convention.
+    time : str, optional
+        Time column. Defaults to the second column. It is not aggregated; it is
+        only used to exclude it from the auto-selected value columns.
+    features : str | Sequence[str], default "all"
+        Either ``"all"`` (every registered ``ts`` scalar aggregation) or an
+        explicit list of registered feature names to subset.
+    column : str | Sequence[str], optional
+        Value column(s) to featurise. Defaults to every numeric column that is
+        neither ``entity`` nor ``time``. With a single value column the output
+        columns are named ``<feature>``; with several they are namespaced as
+        ``<column>__<feature>``.
+
+    Returns
+    -------
+    pl.DataFrame | pl.LazyFrame
+        One row per entity. Lazy in, lazy out.
+
+    Raises
+    ------
+    ValueError
+        If a requested feature is not a registered ``ts`` scalar aggregation, or
+        if no value columns can be resolved.
+    """
+    lazy_in = isinstance(df, pl.LazyFrame)
+    lf = df if lazy_in else df.lazy()
+
+    schema = lf.collect_schema()
+    names = schema.names()
+    if not names:
+        raise ValueError("extract_features received a frame with no columns.")
+
+    if entity is None:
+        entity = names[0]
+    if time is None:
+        time = names[1] if len(names) > 1 else None
+
+    if column is None:
+        reserved = {entity} | ({time} if time is not None else set())
+        value_cols = [c for c in names if c not in reserved and schema[c].is_numeric()]
+        if not value_cols:
+            raise ValueError(
+                "extract_features could not find any numeric value column to "
+                f"featurise (entity={entity!r}, time={time!r}). Pass `column=`."
+            )
+    elif isinstance(column, str):
+        value_cols = [column]
+    else:
+        value_cols = list(column)
+
+    if isinstance(features, str):
+        feat_names = list(_TS_SCALAR_AGGS) if features == "all" else [features]
+    else:
+        feat_names = list(features)
+
+    unknown = [f for f in feat_names if f not in _TS_SCALAR_AGGS]
+    if unknown:
+        available = ", ".join(_TS_SCALAR_AGGS)
+        raise ValueError(
+            f"Unknown ts feature(s) {unknown!r}. "
+            f"Registered scalar aggregations: {available}."
+        )
+
+    multi = len(value_cols) > 1
+    exprs: list[pl.Expr] = []
+    for col in value_cols:
+        for fname in feat_names:
+            alias = f"{col}__{fname}" if multi else fname
+            exprs.append(_TS_SCALAR_AGGS[fname](pl.col(col)).alias(alias))
+
+    out = lf.group_by(entity, maintain_order=True).agg(*exprs)
+    return out if lazy_in else out.collect()

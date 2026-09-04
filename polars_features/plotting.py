@@ -137,8 +137,10 @@ def plot_forecasts(
 
     Parameters
     ----------
-    y : Union[pl.DataFrame, pl.LazyFrame]
+    y_true : Union[pl.DataFrame, pl.LazyFrame]
         Panel DataFrame of observed values.
+    y_pred : Union[pl.DataFrame, pl.LazyFrame]
+        Panel DataFrame of forecast values.
     num_series : Optional[int]
         Number of entities / time-series to plot. If `None`, plot all entities.
         Defaults to `None`.

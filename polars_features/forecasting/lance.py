@@ -26,7 +26,7 @@ class ANNRegressor:
         refine_factor: int | None = None,
         **kwargs,
     ):
-        self.uri = uri or "functime_embs/knn.lance"
+        self.uri = uri or "ann_embs/knn.lance"
         self.index_type = index_type
         self.metric = metric
         self.num_partitions = num_partitions

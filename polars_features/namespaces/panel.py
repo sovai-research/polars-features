@@ -21,11 +21,14 @@ All operators in this namespace are **causal** (leakage-safe): the value at time
 Architecture / import boundary
 ------------------------------
 This module is part of the ``namespaces`` package — **Tier 1, the Polars-native
-extension layer**. It imports ONLY from :mod:`polars`, the Rust plugin, and
-:mod:`polars_features.registry`. It must NOT import from
+extension layer**. It imports ONLY from :mod:`polars`, the Rust plugin,
+:mod:`polars_features.registry`, and the dependency-free leaf module
+:mod:`polars_features._ffd` (numpy/polars only). It must NOT import from
 ``polars_features.core`` or ``polars_features.transform`` (the estimator layer),
 so the expression layer stays independently splittable into a standalone
-``polars-panel`` plugin later.
+``polars-panel`` plugin later. The frac-diff kernel lives in ``_ffd`` precisely
+so both this layer and the estimator layer share one weight recursion without
+either importing the other.
 
 The expression-building logic is factored into module-level ``_expr_*`` helpers
 so the expression namespace and both frame-level namespaces share **one**
@@ -51,10 +54,12 @@ with Polars (idempotently) and registers each operator as a
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from typing import TypeVar
 
 import polars as pl
 
+from polars_features._ffd import frac_diff_expr
 from polars_features.registry import FeatureSpec, registry
 
 __all__ = [
@@ -72,47 +77,6 @@ _LICENSE = "Apache-2.0"
 _SOURCE = "PanelKit"
 
 
-def _frac_diff_weights(d: float, threshold: float) -> list[float]:
-    """Compute fixed-width fractional-differencing weights.
-
-    Implements the standard expanding-window weight recursion for fractional
-    differencing of order ``d`` (Hosking; popularised for finance by López de
-    Prado), truncated when the absolute weight falls below ``threshold``. This
-    produces a *fixed-width* causal kernel.
-
-    Parameters
-    ----------
-    d : float
-        Order of fractional differencing. ``d == 0`` returns the identity
-        kernel ``[1.0]``; ``d == 1`` approximates a first difference.
-    threshold : float
-        Positive cutoff; weights with ``abs(w) < threshold`` (and all that
-        follow) are dropped.
-
-    Returns
-    -------
-    list[float]
-        Weights ``w[0], w[1], ...`` ordered from the most recent lag (lag 0,
-        always ``1.0``) to the most distant. The kernel length is the window.
-    """
-    if threshold <= 0:
-        raise ValueError(
-            f"frac_diff threshold must be strictly positive, got {threshold!r}."
-        )
-    weights: list[float] = [1.0]
-    k = 1
-    # Cap the kernel width to avoid pathological non-termination for tiny
-    # thresholds / near-integer d.
-    max_width = 10_000
-    while k < max_width:
-        w = -weights[-1] * (d - k + 1) / k
-        if abs(w) < threshold:
-            break
-        weights.append(w)
-        k += 1
-    return weights
-
-
 # ---------------------------------------------------------------------------
 # Shared expression builders.
 #
@@ -120,33 +84,25 @@ def _frac_diff_weights(d: float, threshold: float) -> list[float]:
 # operator's expression tree. The ``.panel`` expression namespace and both
 # frame-level namespaces (LazyFrame/DataFrame) call them, so there is exactly
 # one implementation per operator and no duplication.
+#
+# ``frac_diff`` is the exception: its kernel + causal builder live in the
+# dependency-free leaf module :mod:`polars_features._ffd`
+# (:func:`~polars_features._ffd.frac_diff_expr`) so the estimator layer
+# (:class:`polars_features.transform.frac_diff.FracDiff`) and this namespace
+# layer share ONE weight recursion without either importing the other. The
+# thin ``_expr_frac_diff`` wrapper below adapts that shared builder to this
+# module's ``(expr, d, *, threshold)`` calling convention.
 # ---------------------------------------------------------------------------
 
 
 def _expr_frac_diff(expr: pl.Expr, d: float, *, threshold: float = 1e-5) -> pl.Expr:
     """Build the fixed-width fractional-differencing expression (causal).
 
-    See :meth:`PanelExprNamespace.frac_diff` for the full description.
+    Thin adapter over the shared :func:`polars_features._ffd.frac_diff_expr`
+    builder (the single source of truth). See :meth:`PanelExprNamespace.frac_diff`
+    for the full description.
     """
-    weights = _frac_diff_weights(d, threshold)
-    width = len(weights)
-    # Causal weighted sum: w[0]*x[t] + w[1]*x[t-1] + ...
-    #
-    # Build a *flat* n-ary sum via ``pl.sum_horizontal`` rather than folding
-    # the terms with Python ``+``. A long kernel (small ``threshold`` / small
-    # ``d``) can produce thousands of weights; a left-folded ``a + b + c +
-    # ...`` produces a deeply nested expression tree that overflows the
-    # Rust evaluation stack. ``sum_horizontal`` keeps the tree shallow.
-    terms = [w * expr.shift(lag) for lag, w in enumerate(weights)]
-    out = pl.sum_horizontal(terms)
-    if width <= 1:
-        return out
-    # ``sum_horizontal`` treats shifted-in nulls as 0, which would emit a
-    # value before the kernel has full history. Mask the leading rows that
-    # lack ``width`` observations to ``null`` so the output matches
-    # rolling-window semantics and stays strictly causal.
-    row = pl.int_range(pl.len(), dtype=pl.Int64)
-    return pl.when(row >= width - 1).then(out).otherwise(None)
+    return frac_diff_expr(expr, d=d, threshold=threshold)
 
 
 def _expr_zscore(expr: pl.Expr, window: int) -> pl.Expr:
@@ -165,25 +121,74 @@ def _expr_rs_vol(expr: pl.Expr, window: int) -> pl.Expr:
     return expr.rolling_std(window_size=window)
 
 
+def _normalize_columns(columns: str | Sequence[str], *, op: str) -> list[str]:
+    """Normalise a ``str | Sequence[str]`` column argument to a list of names."""
+    if isinstance(columns, str):
+        return [columns]
+    cols = list(columns)
+    if not cols:
+        raise ValueError(
+            f"panel.{op}: `columns` was empty; pass a column name or a "
+            "non-empty list of column names."
+        )
+    return cols
+
+
+def _resolve_output_names(
+    cols: list[str], *, alias: str | None, suffix: str | None, op: str
+) -> dict[str, str]:
+    """Map each input column to its output column name.
+
+    ``alias`` names the (single) output explicitly; ``suffix`` appends
+    ``<col><suffix>`` for every column; with neither, each column is replaced in
+    place. ``alias`` is single-column only — pass ``suffix`` to engineer many.
+    """
+    if alias is not None:
+        if suffix is not None:
+            raise ValueError(f"panel.{op}: pass either `alias` or `suffix`, not both.")
+        if len(cols) != 1:
+            raise ValueError(
+                f"panel.{op}: `alias` is only valid for a single column; use "
+                f"`suffix=` to feature-engineer multiple columns (got {cols})."
+            )
+        return {cols[0]: alias}
+    if suffix is not None:
+        return {c: f"{c}{suffix}" for c in cols}
+    return {c: c for c in cols}
+
+
 def _apply_over(
     frame: FrameT,
-    expr: pl.Expr,
-    column: str,
+    build: Callable[[str], pl.Expr],
+    columns: str | Sequence[str],
     *,
     over: str | None,
     alias: str | None,
+    suffix: str | None,
+    op: str,
 ) -> FrameT:
-    """Apply a panel ``expr`` to ``frame``, optionally grouped by ``over``.
+    """Apply a per-entity panel op to one or more ``columns`` within ``over``.
 
-    Shared by the LazyFrame and DataFrame ``.panel`` namespaces. When ``over``
-    is given the expression is evaluated per group via ``.over(over)`` (the
-    panel-safe path); when ``None`` it is applied to the whole frame. The result
-    is written to ``alias`` if provided, otherwise it replaces ``column``.
+    Shared by the LazyFrame and DataFrame ``.panel`` namespaces. ``over`` (the
+    entity key, e.g. ``ticker``) is **required**: without it the operator would
+    be computed across the WHOLE frame, bleeding one entity's history into the
+    next — a silent cross-entity leak in a leak-safe library. ``build`` maps a
+    column name to its (ungrouped) expression; the result is grouped by ``over``
+    and written per :func:`_resolve_output_names`.
     """
-    if over is not None:
-        expr = expr.over(over)
-    expr = expr.alias(alias if alias is not None else column)
-    return frame.with_columns(expr)
+    cols = _normalize_columns(columns, op=op)
+    if over is None:
+        raise ValueError(
+            f"panel.{op} requires an `over` entity key (e.g. over='ticker'). "
+            "Without it the operator is computed across the WHOLE frame, "
+            "bleeding one entity's history into the next (a cross-entity leak). "
+            "Pass the entity column via `over=`, or drop to the expression form "
+            f"pl.col(...).panel.{op}(...).over(entity) to control grouping "
+            "yourself."
+        )
+    names = _resolve_output_names(cols, alias=alias, suffix=suffix, op=op)
+    exprs = [build(c).over(over).alias(names[c]) for c in cols]
+    return frame.with_columns(exprs)
 
 
 class PanelExprNamespace:
@@ -207,7 +212,7 @@ class PanelExprNamespace:
 
         The implementation is a causal convolution: the value at row ``t`` is a
         weighted sum of ``x[t], x[t-1], ...`` with the weights from
-        :func:`_frac_diff_weights`. No future rows are used. The first
+        :func:`polars_features._ffd.ffd_weights`. No future rows are used. The first
         ``len(weights) - 1`` rows are ``null`` (insufficient history), matching
         the semantics of a rolling window.
 
@@ -280,13 +285,19 @@ class PanelExprNamespace:
 class _PanelFrameNamespace:
     """Shared frame-level ``.panel`` operators for LazyFrame and DataFrame.
 
-    Each method names the target ``column`` as its first argument, takes an
-    ``over`` entity key (defaulting to ``None`` = no grouping, but grouping is
-    strongly encouraged for panels), an optional ``alias`` (output column name;
-    defaults to replacing ``column``), and the same operator params as the
-    expression-namespace method. The expression itself is built by the shared
-    ``_expr_*`` helpers, so there is no logic duplicated with the expression
-    namespace.
+    Each method names the target ``columns`` (a single name or a list) as its
+    first argument and takes a **required** ``over`` entity key — omitting it
+    raises, because a per-entity op computed across the whole frame would bleed
+    one entity's history into the next (a cross-entity leak). Output naming is
+    controlled by ``alias`` (single column) or ``suffix`` (``f"{col}{suffix}"``
+    per column); with neither, columns are replaced in place. The expression
+    itself is built by the shared ``_expr_*`` helpers, so there is no logic
+    duplicated with the expression namespace.
+
+    The panel-safety guarantee is enforced here: only the ``.over(entity)`` path
+    is reachable from the frame API, so :data:`_SPECS` can honestly declare
+    ``panel_safe=True``. The expression namespace stays unconstrained — the user
+    composes ``.over(...)`` themselves there.
 
     LazyFrame and DataFrame both expose ``with_columns`` with identical
     semantics, so a single implementation serves both via :func:`_apply_over`.
@@ -296,94 +307,129 @@ class _PanelFrameNamespace:
 
     def frac_diff(
         self,
-        column: str,
+        columns: str | Sequence[str],
         *,
         d: float,
         over: str | None = None,
         alias: str | None = None,
+        suffix: str | None = None,
         threshold: float = 1e-5,
     ) -> pl.LazyFrame | pl.DataFrame:
-        """Fixed-width fractional differencing of ``column`` (causal).
+        """Fixed-width fractional differencing of ``columns`` (causal).
 
         Parameters
         ----------
-        column : str
-            Name of the column to fractionally difference.
+        columns : str | Sequence[str]
+            Column name, or list of column names, to fractionally difference.
         d : float, keyword-only
             Order of fractional differencing (typically ``0 < d < 1``).
-        over : str | None, keyword-only, default None
-            Entity key to group by (``.over(over)``). ``None`` applies the
-            operator to the whole frame; pass the entity column for panels.
+        over : str, keyword-only
+            Entity key to group by (``.over(over)``). **Required** — raises
+            :class:`ValueError` if omitted, to prevent a cross-entity leak.
         alias : str | None, keyword-only, default None
-            Output column name. Defaults to replacing ``column`` in place.
+            Output column name (single-column only). Defaults to replacing the
+            column in place.
+        suffix : str | None, keyword-only, default None
+            If given, write each output to ``f"{col}{suffix}"`` (the way to
+            feature-engineer multiple columns in one call).
         threshold : float, keyword-only, default 1e-5
             Weight-magnitude cutoff controlling the kernel width.
 
         Returns
         -------
         pl.LazyFrame | pl.DataFrame
-            The frame with the new/replaced column (same type as the input).
+            The frame with the new/replaced column(s) (same type as the input).
         """
-        expr = _expr_frac_diff(pl.col(column), d, threshold=threshold)
-        return _apply_over(self._frame, expr, column, over=over, alias=alias)
+        return _apply_over(
+            self._frame,
+            lambda c: _expr_frac_diff(pl.col(c), d, threshold=threshold),
+            columns,
+            over=over,
+            alias=alias,
+            suffix=suffix,
+            op="frac_diff",
+        )
 
     def zscore(
         self,
-        column: str,
+        columns: str | Sequence[str],
         *,
         window: int,
         over: str | None = None,
         alias: str | None = None,
+        suffix: str | None = None,
     ) -> pl.LazyFrame | pl.DataFrame:
-        """Causal rolling z-score of ``column`` over a trailing ``window``.
+        """Causal rolling z-score of ``columns`` over a trailing ``window``.
 
         Parameters
         ----------
-        column : str
-            Name of the column to z-score.
+        columns : str | Sequence[str]
+            Column name, or list of column names, to z-score.
         window : int, keyword-only
             Trailing window length in rows; must be a positive integer.
-        over : str | None, keyword-only, default None
-            Entity key to group by. ``None`` applies to the whole frame.
+        over : str, keyword-only
+            Entity key to group by. **Required** — raises :class:`ValueError`
+            if omitted, to prevent a cross-entity leak.
         alias : str | None, keyword-only, default None
-            Output column name. Defaults to replacing ``column`` in place.
+            Output column name (single-column only). Defaults to in place.
+        suffix : str | None, keyword-only, default None
+            If given, write each output to ``f"{col}{suffix}"``.
 
         Returns
         -------
         pl.LazyFrame | pl.DataFrame
-            The frame with the new/replaced column.
+            The frame with the new/replaced column(s).
         """
-        expr = _expr_zscore(pl.col(column), window)
-        return _apply_over(self._frame, expr, column, over=over, alias=alias)
+        return _apply_over(
+            self._frame,
+            lambda c: _expr_zscore(pl.col(c), window),
+            columns,
+            over=over,
+            alias=alias,
+            suffix=suffix,
+            op="zscore",
+        )
 
     def rs_vol(
         self,
-        column: str,
+        columns: str | Sequence[str],
         *,
         window: int,
         over: str | None = None,
         alias: str | None = None,
+        suffix: str | None = None,
     ) -> pl.LazyFrame | pl.DataFrame:
-        """Trailing realized-volatility proxy of ``column`` over ``window``.
+        """Trailing realized-volatility proxy of ``columns`` over ``window``.
 
         Parameters
         ----------
-        column : str
-            Name of the column whose trailing volatility is computed.
+        columns : str | Sequence[str]
+            Column name, or list of column names, whose trailing volatility is
+            computed.
         window : int, keyword-only
             Trailing window length in rows; must be a positive integer.
-        over : str | None, keyword-only, default None
-            Entity key to group by. ``None`` applies to the whole frame.
+        over : str, keyword-only
+            Entity key to group by. **Required** — raises :class:`ValueError`
+            if omitted, to prevent a cross-entity leak.
         alias : str | None, keyword-only, default None
-            Output column name. Defaults to replacing ``column`` in place.
+            Output column name (single-column only). Defaults to in place.
+        suffix : str | None, keyword-only, default None
+            If given, write each output to ``f"{col}{suffix}"``.
 
         Returns
         -------
         pl.LazyFrame | pl.DataFrame
-            The frame with the new/replaced column.
+            The frame with the new/replaced column(s).
         """
-        expr = _expr_rs_vol(pl.col(column), window)
-        return _apply_over(self._frame, expr, column, over=over, alias=alias)
+        return _apply_over(
+            self._frame,
+            lambda c: _expr_rs_vol(pl.col(c), window),
+            columns,
+            over=over,
+            alias=alias,
+            suffix=suffix,
+            op="rs_vol",
+        )
 
 
 class PanelLazyFrameNamespace(_PanelFrameNamespace):
@@ -449,6 +495,10 @@ def _is_registered(cls: type, name: str) -> bool:
     return hasattr(cls, name)
 
 
+# ``panel_safe=True`` is now an enforced guarantee, not a hope: the frame-level
+# ``.panel`` API requires an ``over`` entity key (see ``_apply_over``), so a
+# frame op can no longer be silently computed across entity boundaries. The
+# expression form is panel-safe once the user composes ``.over(entity)``.
 _SPECS: tuple[FeatureSpec, ...] = (
     FeatureSpec(
         name="frac_diff",

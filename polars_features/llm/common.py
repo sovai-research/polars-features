@@ -11,7 +11,7 @@ try:
     from tenacity import retry, stop_after_attempt, wait_random_exponential
 except ModuleNotFoundError as e:
     raise ImportError(
-        "The `llm` feature requires the `openai`, `tenacity`, and `tiktoken` packages. Run `pip install functime[llm]` to install."
+        "The `llm` feature requires the `openai`, `tenacity`, and `tiktoken` packages. Run `pip install polars_features[llm]` to install."
     ) from e
 
 
