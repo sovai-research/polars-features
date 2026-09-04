@@ -165,7 +165,9 @@ class FLAMLRegressor:
         self.tuner = None
 
     def fit(self, X: pl.DataFrame, y: pl.DataFrame):
-        from flaml import AutoML
+        from polars_features._deps import require
+
+        AutoML = require("flaml", feature="FLAML AutoML regressor").AutoML
 
         feat_cols = X.columns[2:]
         target_col = y.columns[-1]

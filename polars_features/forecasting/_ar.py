@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import contextlib
 import logging
 from collections.abc import Callable, Mapping
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import polars as pl
-from tqdm import tqdm, trange
 
+from polars_features._progress import progress, trange
 from polars_features.cross_validation import expanding_window_split
 from polars_features.forecasting._evaluate import evaluate
 from polars_features.forecasting._reduction import (
@@ -17,7 +16,7 @@ from polars_features.forecasting._reduction import (
     make_y_lag,
 )
 
-with contextlib.suppress(ImportError):
+if TYPE_CHECKING:
     from flaml.tune.sample import Domain
 
 
@@ -150,7 +149,7 @@ def fit_cv(  # noqa: Ruff too complex
     scores_path = []
     lags_path = list(range(min_lags, max_lags + 1))
     scores_path = []
-    for lags in (pbar := tqdm(lags_path, desc=f"Evaluating n={min(lags_path)} lags")):
+    for lags in progress(lags_path, desc=f"Evaluating n={min(lags_path)} lags"):
         score, params = evaluate(
             **{
                 "lags": lags,
@@ -175,9 +174,6 @@ def fit_cv(  # noqa: Ruff too complex
             best_score = score
             best_lags = lags
             best_params = params
-        pbar.set_description(
-            f"[Best round: lags={best_lags}, score={best_score:.2f}] Evaluating models with n={lags + 1} lags"
-        )
 
     # Refit
     best_params = best_params or {}

@@ -5,8 +5,8 @@ from typing import Literal
 import lance
 import numpy as np
 import polars as pl
-from tqdm import tqdm
 
+from polars_features._progress import progress
 from polars_features.base import Forecaster
 from polars_features.forecasting._ar import fit_autoreg
 
@@ -76,7 +76,7 @@ class ANNRegressor:
         )
         labels = np.zeros(shape=X.shape[0], dtype=np.float32)
         # TODO: Parallelize
-        for i, emb in tqdm(enumerate(embs), desc="ANN search"):
+        for i, emb in progress(enumerate(embs), desc="ANN search"):
             labels[i] = dataset.to_table(
                 columns=["label"],
                 nearest={

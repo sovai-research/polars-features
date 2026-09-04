@@ -59,7 +59,7 @@ from typing import TypeVar
 
 import polars as pl
 
-from polars_features._ffd import frac_diff_expr
+from polars_features._ffd import DEFAULT_THRESHOLD, frac_diff_expr
 from polars_features.registry import FeatureSpec, registry
 
 __all__ = [
@@ -95,7 +95,9 @@ _SOURCE = "PanelKit"
 # ---------------------------------------------------------------------------
 
 
-def _expr_frac_diff(expr: pl.Expr, d: float, *, threshold: float = 1e-5) -> pl.Expr:
+def _expr_frac_diff(
+    expr: pl.Expr, d: float, *, threshold: float = DEFAULT_THRESHOLD
+) -> pl.Expr:
     """Build the fixed-width fractional-differencing expression (causal).
 
     Thin adapter over the shared :func:`polars_features._ffd.frac_diff_expr`
@@ -201,7 +203,9 @@ class PanelExprNamespace:
     def __init__(self, expr: pl.Expr) -> None:
         self._expr = expr
 
-    def frac_diff(self, d: float, *, threshold: float = 1e-5) -> pl.Expr:
+    def frac_diff(
+        self, d: float, *, threshold: float = DEFAULT_THRESHOLD
+    ) -> pl.Expr:
         """Fixed-width fractional differencing (causal).
 
         Applies a fractional-difference filter of order ``d`` using a truncated,
@@ -220,7 +224,8 @@ class PanelExprNamespace:
         ----------
         d : float
             Order of fractional differencing (typically ``0 < d < 1``).
-        threshold : float, keyword-only, default 1e-5
+        threshold : float, keyword-only, default \
+            :data:`~polars_features._ffd.DEFAULT_THRESHOLD` (``5e-4``)
             Weight-magnitude cutoff controlling the kernel width. Smaller values
             yield a longer kernel (more memory, more leading nulls).
 
@@ -313,7 +318,7 @@ class _PanelFrameNamespace:
         over: str | None = None,
         alias: str | None = None,
         suffix: str | None = None,
-        threshold: float = 1e-5,
+        threshold: float = DEFAULT_THRESHOLD,
     ) -> pl.LazyFrame | pl.DataFrame:
         """Fixed-width fractional differencing of ``columns`` (causal).
 
@@ -332,7 +337,8 @@ class _PanelFrameNamespace:
         suffix : str | None, keyword-only, default None
             If given, write each output to ``f"{col}{suffix}"`` (the way to
             feature-engineer multiple columns in one call).
-        threshold : float, keyword-only, default 1e-5
+        threshold : float, keyword-only, default \
+            :data:`~polars_features._ffd.DEFAULT_THRESHOLD` (``5e-4``)
             Weight-magnitude cutoff controlling the kernel width.
 
         Returns

@@ -45,12 +45,22 @@ from collections.abc import Sequence
 import numpy as np
 import polars as pl
 
-try:  # scipy is a hard dependency of the package
-    from scipy.interpolate import LSQUnivariateSpline
-    from scipy.signal import welch
-except ImportError:  # pragma: no cover - scipy always present in practice
-    LSQUnivariateSpline = None
-    welch = None
+from polars_features import _numpy_stats
+
+
+def _get_lsq_spline():
+    """Lazily import ``scipy.interpolate.LSQUnivariateSpline`` (optional extra).
+
+    Kept out of module import so ``import polars_features.catch22`` does not pull
+    in SciPy. Returns ``None`` when SciPy is not installed, and the single
+    feature that uses it falls back to a zero spline (as before).
+    """
+    try:  # pragma: no cover - trivial import shim
+        from scipy.interpolate import LSQUnivariateSpline
+    except ImportError:  # pragma: no cover - scipy is an optional extra
+        return None
+    return LSQUnivariateSpline
+
 
 __all__ = [
     "CATCH22_NAMES",
@@ -478,6 +488,7 @@ def PD_PeriodicityWang_th0_01(x) -> float:
     th = 0.01
     t = np.arange(n, dtype=float)
     y_spline = np.zeros(n)
+    LSQUnivariateSpline = _get_lsq_spline()
     if LSQUnivariateSpline is not None:
         try:
             knots = np.linspace(0, n - 1, 5)[1:-1]  # 3 interior knots
@@ -595,7 +606,7 @@ def _welch_spectrum(y: np.ndarray):
     ``S`` the power spectral density.
     """
     n = y.size
-    f, pxx = welch(
+    f, pxx = _numpy_stats.welch(
         y,
         window="boxcar",
         nperseg=n,
@@ -608,7 +619,7 @@ def _welch_spectrum(y: np.ndarray):
 
 
 def _welch_cumulative(y: np.ndarray):
-    if welch is None or y.size < 4:
+    if y.size < 4:
         return None
     w, s = _welch_spectrum(y)
     if w.size < 2:
@@ -685,15 +696,17 @@ def _fluctuation_analysis(x, how: str) -> float:
         if n_win < 1:
             continue
         t = np.arange(tau, dtype=float)
-        sq = np.empty(n_win)
-        for w in range(n_win):
-            seg = profile[w * tau : (w + 1) * tau]
-            coef = np.polyfit(t, seg, 1)
-            resid = seg - np.polyval(coef, t)
-            if how == "dfa":
-                sq[w] = np.mean(resid**2)
-            else:  # rsrangefit: squared range of the detrended profile
-                sq[w] = (resid.max() - resid.min()) ** 2
+        # Batched linear detrend: every window of length ``tau`` shares the same
+        # design matrix ``[t, 1]``, so all ``n_win`` OLS line fits are solved in a
+        # single ``lstsq`` instead of calling ``np.polyfit`` once per window.
+        seg_mat = profile[: n_win * tau].reshape(n_win, tau).T  # (tau, n_win)
+        amat = np.vstack([t, np.ones_like(t)]).T  # (tau, 2)
+        coef, *_ = np.linalg.lstsq(amat, seg_mat, rcond=None)  # (2, n_win)
+        resid = seg_mat - amat @ coef  # (tau, n_win)
+        if how == "dfa":
+            sq = np.mean(resid**2, axis=0)
+        else:  # rsrangefit: squared range of the detrended profile
+            sq = (resid.max(axis=0) - resid.min(axis=0)) ** 2
         f = np.sqrt(np.mean(sq))
         if f > 0:
             fluct.append(f)
@@ -872,18 +885,26 @@ def catch22_features(
         x = sub.get_column(column).to_numpy()
         return pl.DataFrame([_compute(x, names)])
 
-    rows: list[dict] = []
-    for key, sub in df.group_by(entity, maintain_order=True):
-        ent = key[0] if isinstance(key, tuple) else key
-        if time is not None:
-            sub = sub.sort(time)
-        x = sub.get_column(column).to_numpy()
-        rows.append({entity: ent, **_compute(x, names)})
+    # Route through the lazy struct-expr path so Polars parallelises the
+    # per-entity feature computation across threads (the former Python `for`
+    # loop over groups was single-threaded). Sorting by [entity, time] yields
+    # each group in time order (equivalent to the old per-group `sub.sort`);
+    # the original first-appearance entity ordering is restored afterwards so
+    # the output is row-for-row identical.
+    sort_keys = [entity, time] if time is not None else [entity]
+    result = (
+        df.lazy()
+        .sort(sort_keys, maintain_order=True)
+        .group_by(entity, maintain_order=True)
+        .agg(catch22_all_expr(column, which=which, catch24=catch24, alias="__c22"))
+        .unnest("__c22")
+        .collect()
+    )
 
-    schema = {entity: df.schema[entity]}
-    for name in names:
-        schema[name] = pl.Float64
-    return pl.DataFrame(rows, schema=schema)
+    order = (
+        df.select(pl.col(entity)).unique(maintain_order=True).with_row_index("__ord")
+    )
+    return result.join(order, on=entity, how="left").sort("__ord").drop("__ord")
 
 
 def catch22_all_expr(

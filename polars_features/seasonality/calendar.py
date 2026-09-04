@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Literal
 
 import polars as pl
-from holidays import country_holidays
 
 from polars_features.base import transformer
 from polars_features.ranges import make_future_ranges
@@ -66,6 +65,10 @@ def add_holiday_effects(country_codes: list[str], as_dummies: bool = False):
     """
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
+        from polars_features._deps import require
+
+        holidays_mod = require("holidays", feature="holiday calendar features")
+        country_holidays = holidays_mod.country_holidays
         # Get min and max timestamps
         time_col = X.columns[1]
         timestamps = (

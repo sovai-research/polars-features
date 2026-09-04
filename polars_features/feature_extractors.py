@@ -13,14 +13,8 @@ try:  # polars>=1.0 moved type aliases to the private `_typing` module
     from polars._typing import ClosedInterval
 except ImportError:  # pragma: no cover - older polars
     from polars.type_aliases import ClosedInterval
-# from numpy.linalg import lstsq
-from scipy.linalg import lstsq
-from scipy.signal import find_peaks_cwt, welch
-from scipy.spatial import KDTree
-from scipy.stats import kurtosis, skew
-
+from polars_features import _numpy_stats
 from polars_features._compat import register_plugin_function, rle_fields
-from polars_features._polars_features_rust import rs_faer_lstsq1
 from polars_features._utils import warn_is_unstable
 from polars_features.registry import FeatureSpec, registry
 from polars_features.type_aliases import DetrendMethod
@@ -43,6 +37,40 @@ def ricker(points: int, a: float) -> np.ndarray:
     mod = 1 - xsq / wsq
     gauss = np.exp(-xsq / (2 * wsq))
     return A * mod * gauss
+
+
+def _lempel_ziv_complexity_count(bits: bytes) -> int:
+    """Lempel-Ziv complexity of a binary sequence (count of distinct phrases).
+
+    Pure-Python transcription of the former ``pl_lempel_ziv_complexity`` Rust
+    kernel (a ``bytes`` + ``set`` implementation is competitive with / faster
+    than the Rust ``HashSet<&[bool]>`` version per the D5 audit). ``bits`` holds
+    one byte (0 or 1) per element.
+    """
+    n = len(bits)
+    ind = 0
+    inc = 1
+    sub_strings: set[bytes] = set()
+    while ind + inc <= n:
+        subseq = bits[ind : ind + inc]
+        if subseq in sub_strings:
+            inc += 1
+        else:
+            sub_strings.add(subseq)
+            ind += inc
+            inc = 1
+    return len(sub_strings)
+
+
+def _lempel_ziv_complexity_batch(s: pl.Series) -> pl.Series:
+    """map_batches kernel: boolean Series -> length-1 UInt32 complexity.
+
+    Nulls are interpreted as ``False`` (0 in the bit sequence), matching the
+    former Rust plugin.
+    """
+    arr = s.fill_null(False).to_numpy()
+    bits = arr.astype(np.uint8).tobytes()
+    return pl.Series([_lempel_ziv_complexity_count(bits)], dtype=pl.UInt32)
 
 
 TIME_SERIES_T = pl.Series | pl.Expr
@@ -158,6 +186,10 @@ def approximate_entropy(
             pl.col(x.name).shift(-i).alias(str(i)) for i in range(1, run_length + 1)
         ).to_numpy()
 
+        from polars_features._deps import require
+
+        KDTree = require("scipy.spatial", feature="approximate_entropy").KDTree
+
         n1 = len(x) - run_length + 1
         data_m = data[:n1, :run_length]
         # Computes phi. Let's not make it into a separate function until we know this will be reused.
@@ -222,7 +254,7 @@ def augmented_dickey_fuller(x: TIME_SERIES_T, n_lags: int) -> float:
         y = data_x.drop_in_place("0").to_numpy(zero_copy_only=True)
         data_x = data_x.to_numpy()  # to NumPy matrix
 
-        coeffs, resids, _, _ = lstsq(data_x, y, cond=None)
+        coeffs, resids, _, _ = _numpy_stats.lstsq(data_x, y, cond=None)
         mse = np.sum(resids**2) / (length - data_x.shape[1])
         ys = data_x[:, 0] - np.mean(data_x[:, 0])
         ss = np.dot(ys, ys)
@@ -298,7 +330,10 @@ def autoregressive_coefficients(x: TIME_SERIES_T, n_lags: int) -> list[float]:
             .to_numpy()
         )
         y_ = y.tail(length).to_numpy(zero_copy_only=True).reshape((-1, 1))
-        out: np.ndarray = rs_faer_lstsq1(data_x, y_)
+        # Replaces the net-negative `rs_faer_lstsq1` Rust kernel: for tall-thin
+        # AR design matrices `np.linalg.lstsq` is far faster (same algorithm,
+        # no pyo3 marshalling) and bit-parity on the coefficients.
+        out: np.ndarray = np.linalg.lstsq(data_x, y_, rcond=None)[0]
         return out.ravel()
     else:
         logger.info(
@@ -708,7 +743,7 @@ def fourier_entropy(x: TIME_SERIES_T, n_bins: int = 10) -> float:
         if len(x) == 1:
             return np.nan
         else:
-            _, pxx = welch(x.to_numpy(), nperseg=min(x.len(), 256))
+            _, pxx = _numpy_stats.welch(x.to_numpy(), nperseg=min(x.len(), 256))
             pxx_as_series = pl.Series(pxx)
             return binned_entropy(pxx_as_series / pxx_as_series.max(), n_bins)
     else:
@@ -1203,8 +1238,11 @@ def number_cwt_peaks(x: TIME_SERIES_T, max_width: int = 5) -> float:
     float
     """
     if isinstance(x, pl.Series):
+        from polars_features._deps import require
+
+        scipy_signal = require("scipy.signal", feature="number_cwt_peaks")
         return len(
-            find_peaks_cwt(
+            scipy_signal.find_peaks_cwt(
                 vector=x.to_numpy(zero_copy_only=True),
                 widths=np.array(list(range(1, max_width + 1))),
                 wavelet=ricker,
@@ -1495,6 +1533,10 @@ def sample_entropy(x: TIME_SERIES_T, ratio: float = 0.2, m: int = 2) -> FLOAT_EX
         if len(x) < m:
             return np.nan
 
+        from polars_features._deps import require
+
+        KDTree = require("scipy.spatial", feature="sample_entropy").KDTree
+
         threshold = ratio * x.std(ddof=0)
         mat = _into_sequential_chunks(x, m)
         tree = KDTree(mat)
@@ -1545,7 +1587,7 @@ def spkt_welch_density(x: TIME_SERIES_T, n_coeffs: int | None = None) -> LIST_EX
     """
     if isinstance(x, pl.Series):
         last_idx = len(x) if n_coeffs is None else n_coeffs
-        _, pxx = welch(x.to_numpy(), nperseg=min(len(x), 256))
+        _, pxx = _numpy_stats.welch(x.to_numpy(), nperseg=min(len(x), 256))
         return pxx[:last_idx]
     else:
         logger.info(
@@ -1966,7 +2008,7 @@ def return_skew(x: pl.Series) -> float:
     # ``.ts.return_skew`` namespace method (``pct_change().skew()``).
     prices = x.to_numpy()
     returns = np.diff(prices) / prices[:-1]
-    return skew(returns)
+    return _numpy_stats.skew(returns)
 
 
 def return_kurtosis(x: pl.Series) -> float:
@@ -1987,7 +2029,7 @@ def return_kurtosis(x: pl.Series) -> float:
     # ``.ts.return_kurtosis`` namespace method (``pct_change().kurtosis()``).
     prices = x.to_numpy()
     returns = np.diff(prices) / prices[:-1]
-    return kurtosis(returns)
+    return _numpy_stats.kurtosis(returns)
 
 
 def num_direction_changes(x: pl.Series) -> int:
@@ -2392,7 +2434,7 @@ class FeatureExtractor:
     ) -> pl.Expr:
         """
         Calculate a complexity estimate based on the Lempel-Ziv compression algorithm. The
-        implementation here is currently a Rust rewrite of Lilian Besson'code. Instead of returning
+        implementation here is a pure-Python transcription of Lilian Besson's code. Instead of returning
         the complexity value, we return a ratio w.r.t the length of the input series. If null is
         encountered, it will be interpreted as 0 in the bit sequence.
 
@@ -2413,11 +2455,9 @@ class FeatureExtractor:
         https://github.com/Naereen/Lempel-Ziv_Complexity/tree/master
         https://en.wikipedia.org/wiki/Lempel%E2%80%93Ziv_complexity
         """
-        out = register_plugin_function(
-            args=[self._expr > threshold],
-            plugin_path=lib,
-            function_name="pl_lempel_ziv_complexity",
-            is_elementwise=False,
+        out = (self._expr > threshold).map_batches(
+            _lempel_ziv_complexity_batch,
+            return_dtype=pl.UInt32,
             returns_scalar=True,
         )
         if as_ratio:

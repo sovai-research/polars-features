@@ -1,17 +1,15 @@
 from __future__ import annotations
 
+import pickle
 import warnings
 from collections.abc import Mapping
 from typing import Any, Literal
 
-import cloudpickle
 import numpy as np
 import polars as pl
 import polars.selectors as cs
-from scipy import optimize
-from scipy.stats import boxcox_normmax, yeojohnson_normmax
-from sklearn.linear_model import LinearRegression, TheilSenRegressor
 
+from polars_features._deps import require
 from polars_features.base import transformer
 from polars_features.base.model import ModelState
 from polars_features.offsets import _strip_freq_alias
@@ -776,6 +774,9 @@ def boxcox(method: str = "mle"):
     """
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
+        optimize = require("scipy.optimize", feature="boxcox")
+        boxcox_normmax = require("scipy.stats", feature="boxcox").boxcox_normmax
+
         def optimizer(fun):
             return optimize.minimize_scalar(
                 fun,
@@ -842,6 +843,7 @@ def boxcox(method: str = "mle"):
 @transformer
 def yeojohnson(brack: tuple = (-2, 2)):
     def transform(X: pl.LazyFrame) -> dict:
+        yeojohnson_normmax = require("scipy.stats", feature="yeojohnson").yeojohnson_normmax
         idx_cols = X.columns[:2]
         entity_col, time_col = idx_cols
         cols = X.select(PL_NUMERIC_COLS(entity_col, time_col)).columns
@@ -1101,9 +1103,15 @@ def deseasonalize_fourier(sp: int, K: int, robust: bool = False):
     Part of this transformer uses sklearn under-the-hood: it is not pure Polars and lazy.
     """
 
-    regressor_cls = LinearRegression if robust else TheilSenRegressor
-
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
+        linear_model = require(
+            "sklearn.linear_model", feature="deseasonalize_fourier"
+        )
+        regressor_cls = (
+            linear_model.LinearRegression
+            if robust
+            else linear_model.TheilSenRegressor
+        )
         X = X.collect()  # Not lazy
         if X.shape[1] > 3:
             raise ValueError(
@@ -1125,7 +1133,7 @@ def deseasonalize_fourier(sp: int, K: int, robust: bool = False):
             return {
                 target_col: y_new.tolist(),
                 "seasonal": y_pred.tolist(),
-                "regressor": cloudpickle.dumps(regressor),
+                "regressor": pickle.dumps(regressor),
             }
 
         entity_col, time_col, target_col = X.columns[:3]
@@ -1185,7 +1193,7 @@ def deseasonalize_fourier(sp: int, K: int, robust: bool = False):
 
         def _reseasonalize(inputs: Mapping[str, Any]):
             # Coerce inputs
-            regressor = cloudpickle.loads(inputs["regressor"])
+            regressor = pickle.loads(inputs["regressor"])
             y = inputs[target_col]
             X = np.array(inputs["fourier"]).reshape((len(y), len(fourier_cols)))
             # Predict

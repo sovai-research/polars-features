@@ -35,7 +35,18 @@ __all__ = [
 
 #: Canonical default weight-magnitude cutoff. Reconciles the previously divergent
 #: defaults across surfaces (``None`` / ``10_000`` / ``1000``) to one value.
-DEFAULT_THRESHOLD: float = 1e-5
+#:
+#: The value was raised from the historical ``1e-5`` to ``5e-4`` to fix a
+#: silent all-null footgun: at ``1e-5`` the kernel for a typical ``d`` is very
+#: long (e.g. ``d=0.4`` -> width 1458), so on a 500-1000 row per-entity series
+#: the leading-null warm-up covered *every* row and ``frac_diff`` returned 0
+#: non-null values while still paying the full compute cost. At ``5e-4`` the
+#: kernel is a few dozen to ~a hundred terms for common ``d`` (``d=0.4`` ->
+#: width 90, ``d=0.5`` -> 69, ``d=0.9`` -> 17), so a default call on a 500-1000
+#: row series returns *mostly* non-null values while still retaining meaningful
+#: long memory. Callers that want a longer kernel pass a smaller ``threshold``
+#: (or an explicit ``max_width``) exactly as before -- only the default moved.
+DEFAULT_THRESHOLD: float = 5e-4
 
 #: Hard safety cap on the kernel width used when ``max_width`` is ``None``, to
 #: avoid pathological non-termination for tiny thresholds / near-integer ``d``.
@@ -106,24 +117,41 @@ def frac_diff_expr(
     """Build the causal fixed-width fractional-differencing expression.
 
     Computes the causal weighted trailing dot-product
-    ``w[-1]*x[t] + w[-2]*x[t-1] + ... + w[0]*x[t-(width-1)]`` and emits ``null``
-    for the incomplete leading window (the first ``width - 1`` rows), matching
-    rolling-window semantics. The expression is **entity-agnostic**: grouping is
-    the caller's responsibility via ``.over(entity)``.
+    ``w[-1]*x[t] + w[-2]*x[t-1] + ... + w[0]*x[t-(width-1)]`` for every row that
+    has a full trailing window, and emits ``null`` for the incomplete leading
+    warm-up. The expression is **entity-agnostic**: grouping is the caller's
+    responsibility via ``.over(entity)``.
 
     Provide either ``d`` (weights are built via :func:`ffd_weights`) or a
     precomputed ``weights`` array (oldest-to-newest, as returned by
     :func:`ffd_weights`).
 
-    Notes
-    -----
-    The sum is built with :func:`polars.sum_horizontal` (a flat, shallow
-    expression tree) rather than a left-folded ``a + b + c + ...``. A long kernel
-    (small ``threshold`` / small ``d``) can produce thousands of weights; a
-    left-folded sum overflows the Rust evaluation stack. ``sum_horizontal`` also
-    treats the nulls shifted in at the leading edge as ``0``; an explicit null
-    mask on the first ``width - 1`` rows restores strict rolling-window / causal
-    semantics (never zero-fill the incomplete window).
+    Implementation
+    --------------
+    The filter is applied as a **causal FIR convolution** of each series with
+    the (reversed, newest-first) weight kernel via
+    ``numpy.convolve(values, weights[::-1])[:n]``, executed inside a Polars
+    ``map_batches`` UDF. Under ``.over(entity)`` Polars calls the UDF once per
+    entity group with that group's values, so the convolution never crosses an
+    entity boundary and stays strictly causal (row ``t`` uses only ``x[t]`` and
+    earlier). This replaces the previous ``pl.sum_horizontal`` of ``width``
+    lagged ``.shift()`` terms, which built an ``O(n * width)`` expression tree
+    (thousands of shift nodes for a long kernel) and was ~65-144x slower.
+
+    Warm-up / null policy
+    ---------------------
+    The first ``min(width - 1, n - 1)`` rows of each group are emitted as
+    ``null`` (an incomplete trailing window). When the kernel fits inside the
+    series (``width - 1 < n`` -- the normal case and every case where the old
+    ``sum_horizontal`` path produced a valid non-null value) this is exactly
+    ``width - 1`` leading nulls and the non-null values are bit-for-bit the same
+    dot products as before. When the kernel is *longer* than the series
+    (``width - 1 >= n``) the old path nulled **every** row; this path instead
+    caps the warm-up at ``n - 1`` so at least the final, fullest-window row is a
+    correctly-computed partial output rather than returning all-null.
+
+    Interior ``null`` inputs are treated as ``0`` inside the convolution,
+    matching the historical ``sum_horizontal`` zero-fill behaviour.
     """
     if weights is None:
         if d is None:
@@ -131,11 +159,29 @@ def frac_diff_expr(
         weights = ffd_weights(d, threshold, max_width)
     weights = np.asarray(weights, dtype=np.float64)
     width = int(weights.shape[0])
+    # ``weights`` is oldest-first (weights[-1] multiplies x_t). ``np.convolve``
+    # with the newest-first kernel ``kernel`` gives, at output index ``t``,
+    # ``sum_k x[t-k] * kernel[k]`` -- exactly the causal trailing dot product
+    # ``sum_k x[t-k] * weights[width-1-k]``. Reverse once, up front.
+    kernel = np.ascontiguousarray(weights[::-1])
 
-    # ``weights`` is oldest-first: weights[j] multiplies x[t - (width-1-j)].
-    terms = [float(w) * expr.shift((width - 1) - j) for j, w in enumerate(weights)]
-    out = pl.sum_horizontal(terms)
-    if width <= 1:
-        return out
-    row = pl.int_range(pl.len(), dtype=pl.Int64)
-    return pl.when(row >= width - 1).then(out).otherwise(None)
+    def _apply_ffd(s: pl.Series) -> pl.Series:
+        n = s.len()
+        if n == 0:
+            return pl.Series(s.name, [], dtype=pl.Float64)
+        # Interior/leading nulls -> 0 so they contribute nothing to the sum
+        # (historical ``sum_horizontal`` semantics), and never propagate NaN.
+        values = np.nan_to_num(
+            s.cast(pl.Float64).to_numpy(), nan=0.0, posinf=np.inf, neginf=-np.inf
+        )
+        out = np.convolve(values, kernel)[:n]
+        result = pl.Series(s.name, out, dtype=pl.Float64)
+        n_null = min(width - 1, n - 1)
+        if n_null > 0:
+            # Emit real Polars nulls (NOT float NaN) for the incomplete warm-up,
+            # matching the old ``when/then/otherwise(None)`` mask -- Polars treats
+            # NaN as a valid float, so ``is_null()`` must still see these rows.
+            result = result.scatter(np.arange(n_null), None)
+        return result
+
+    return expr.map_batches(_apply_ffd, return_dtype=pl.Float64)

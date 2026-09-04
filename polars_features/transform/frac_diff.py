@@ -17,8 +17,8 @@ Implementation note
 A Rust ``frac_diff`` plugin exists in this project, but it is **not compiled**
 in every environment. This module is the portable, pure-Python/Polars
 reference: the binomial weights are computed in NumPy and applied as a causal
-weighted rolling dot-product per entity via ``expr.over(entity_col)``. Results
-should match the compiled plugin up to floating point.
+FIR convolution (``numpy.convolve``) per entity via ``expr.over(entity_col)``.
+Results should match the compiled plugin up to floating point.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import polars as pl
 
-from polars_features._ffd import ffd_weights, frac_diff_expr
+from polars_features._ffd import DEFAULT_THRESHOLD, ffd_weights, frac_diff_expr
 from polars_features.core.panel_frame import PanelFrame
 from polars_features.core.protocol import PanelTransformer
 
@@ -57,8 +57,9 @@ class FracDiff(PanelTransformer):
         feature column.
     d : float, default=0.5
         Differencing order (see :func:`ffd_weights`). Must be in ``[0, 2]``.
-    threshold : float, default=1e-5
-        Weight-magnitude cutoff controlling the fixed window width.
+    threshold : float, default=:data:`~polars_features._ffd.DEFAULT_THRESHOLD` (``5e-4``)
+        Weight-magnitude cutoff controlling the fixed window width. Smaller
+        values yield a longer kernel (more memory, more leading nulls).
     max_width : int, optional
         Hard cap on the window width.
     suffix : str, default="_fracdiff"
@@ -105,7 +106,7 @@ class FracDiff(PanelTransformer):
         columns: str | Sequence[str] | None = None,
         *,
         d: float = 0.5,
-        threshold: float = 1e-5,
+        threshold: float = DEFAULT_THRESHOLD,
         max_width: int | None = None,
         suffix: str = "_fracdiff",
         entity: str | None = None,
@@ -173,8 +174,8 @@ class FracDiff(PanelTransformer):
 
         Delegates to the shared :func:`polars_features._ffd.frac_diff_expr`
         builder (the single source of truth) and applies ``.over(entity_col)``
-        so shifts and the leading-null mask are computed within each entity and
-        never bleed across entity boundaries.
+        so the causal convolution and the leading-null warm-up are computed
+        within each entity and never bleed across entity boundaries.
         """
         assert self.weights_ is not None
         return frac_diff_expr(pl.col(col), weights=self.weights_).over(entity_col)
