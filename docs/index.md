@@ -1,112 +1,122 @@
-# functime
+# PanelKit
 
-![functime](./img/banner.png)
+![PanelKit](./img/banner.png)
 
-## Production-ready time series models
+## Leak-safe, Rust-fast feature engineering and ML for panel data
 
-**functime** is a machine learning library for time-series predictions that [just works](https://functime.ai/).
+**PanelKit** (import package `polars_features`) is a Polars-native toolkit for **panel data** —
+many entities observed over time (stocks, customers, sensors, regions). It treats the
+`(entity, time)` panel as a first-class, lazy, leak-safe object and gives you the whole
+quant-ML workflow — **transform → extract → label → select → model → validate** — with no
+lookahead, ever.
 
-- **Fully-featured:** Powerful and easy-to-use API for forecasting and feature engineering (tsfresh, Catch22).
-- **Fast:** Forecast 100,000 time series in seconds *on your laptop*
-- **Efficient:** Extract 100s of time-series features in parallel using [Polars](https://pola.rs/)
-- **Battle-tested:** Algorithms that deliver real business impact and win competitions
+It is built on the foundations of
+[functime](https://github.com/functime-org/functime) (Apache-2.0, actively maintained) and
+interoperates with functime and Nixtla rather than replacing them.
 
-## Installation
+!!! info "Naming"
+    The project/brand is **PanelKit**. The current import/PyPI package is `polars_features`
+    — the public rename to `panelkit` is planned but not yet effective. Import it as
+    `import polars_features as pk`.
 
-Check out this [guide](./installation.md) to install functime. Requires Python 3.8+.
+## Why PanelKit
 
-## Supported Data Schemas
+- **Leak-safe by construction.** Within-entity ops stay inside their entity and in time
+  order (`panel_safe`); cross-sectional and fit-based ops never see the future or the test
+  fold (`leakage_safe`). Ship the guarantee with a one-line test:
+  [`assert_no_lookahead`](#a-60-second-tour).
+- **Polars-native & lazy.** Every transform is a Polars expression via the `.panel` / `.xs`
+  namespaces — nothing computes until you `.collect()`, so the engine optimizes the whole
+  plan.
+- **Rust-fast.** Panel feature generation runs **10–19× faster than pandas 3.0** on the same
+  workloads, verified for exact numerical equality — see the
+  [benchmarks](./benchmarks/vs_pandas.md).
+- **Panel-first & quant-ML shaped.** The panel is the unit of work: cross-sectional
+  ranking/neutralization, triple-barrier labels, purged & combinatorial cross-validation,
+  and backtest-overfitting diagnostics (Deflated Sharpe, PBO) are built in.
 
-!!! info "Panel Data"
-
-    Forecasters, preprocessors, and splitters take a **panel dataset** where the first two columns represent entity (e.g. commodty name) and time (e.g. date). Subsequent columns represent observed values (e.g. price). The panel DataFrame **must be sorted by entity, time.**
-
-    ```
-    >>> y_panel
-    shape: (47_583, 3)
-
-    commodity_type   time         price
-    ------------------------------------
-    Aluminum         1960-01-01    511.47
-                     1960-02-01    511.47
-                     1960-03-01    511.47
-                     1960-04-01    511.47
-                     1960-05-01    511.47
-    ...                     ...       ...
-    Zinc             2022-11-01   2938.92
-                     2022-12-01   3129.48
-                     2023-01-01   3309.81
-                     2023-02-01   3133.84
-                     2023-03-01   2967.46
-    ```
-
-!!! info "Time Series"
-
-    Feature extractors support both **panel** and **time-series** DataFrames. Time-series Dataframes represents the measurements for a single entity:
-
-    ```
-    >>> y_time_series
-    shape: (756, 3)
-
-    time         price
-    -------------------
-    1960-01-01    511.47
-    1960-02-01    511.47
-    1960-03-01    511.47
-    ...              ...
-    2022-11-01   2938.92
-    2022-12-01   3129.48
-    2023-01-01   3309.81
-    ```
-
-## Features
-
-### Forecasting
-
-Point and probabilistic forecasts using machine learning.
-Includes utilities to support the full forecasting lifecycle: preprocessing, feature extraction, time-series cross-validation / splitters, backtesting, automated hyperparameter tuning, and scoring.
-
-- Every forecaster supports **exogenous features**
-- **Seasonality** effects using [calendar, Fourier, and holiday features](https://docs.functime.ai/seasonality/)
-- **Backtesting** with [expanding window and sliding window splitters](https://docs.functime.ai/ref/cross-validation/)
-- **Automated lags and hyperparameter tuning** using [`FLAML`](https://github.com/microsoft/FLAML)
-- **Probabilistic forecasts** via quantile regression and conformal prediction
-- **Forecast metrics** (e.g. MASE, SMAPE, CRPS) for scoring in parallel
-- Supports **recursive and direct** forecast strategies
-- **Censored model** for zero-inflated forecasts
-
-View the [full walkthrough](./user-guide/forecasting.md) on forecasting with `functime`.
-
-### Feature Extraction
-`functime` has over 100+ time-series feature extractors (e.g. `binned_entropy`, `longest_streak_above_mean`) available for any `Polars` Series. Approximately 85% of the implementations are optimized lazy queries and works on both `polars.Series` and `polars.Expr`.
-
-- Over 100+ time-series features
-- All features are registered under a custom `ts` Polars namespace
-- ~85% optimized lazy queries and works on both `polars.Series` and `polars.Expr`
-- 2x-200x speed-ups compared to `tsfresh`
-- >200x speed-ups compared to `tsfresh` for group by operations
-- Supports univariate feature extraction
-- Supports feature extraction across many time-series (via `group_by`)
-- Supports feature extraction across windows (via `group_by_dynamic`)
-
-View the [full walkthrough](./user-guide/feature-extraction.md) on forecasting with `functime`.
-
-### Preprocessing
-View API reference for [`functime.preprocessing`](https://docs.functime.ai/user-guide/preprocessing/).
-Preprocessors take in a `polars.DataFrame` or `polars.LazyFrame` as input and **always returns a `polars.LazyFrame`**.
-No computation is run until the `.collect()` method is called on the LazyFrame.
-This allows Polars to [optimize the whole query](https://pola-rs.github.io/polars-book/user-guide/lazy/optimizations/) before execution.
+## A 60-second tour
 
 ```python
-from functime.preprocessing import boxcox, impute
+import polars as pl
+import polars_features as pk
 
-# Use df.pipe to chain operations together
-X_new: pl.LazyFrame = (
-    X.pipe(boxcox(method="mle"))
-    .pipe(detrend(method="linear"))
+# A panel: many entities (tickers) observed over time.
+prices = pl.read_parquet("prices.parquet")   # columns: ticker, day, close, volume
+panel = pk.PanelFrame(prices, entity="ticker", time="day")
+
+# Leak-safe feature engineering — the .panel / .xs expression namespaces.
+feats = panel.with_columns(
+    # within-entity, causal: fractional differencing per ticker, in time order
+    pl.col("close").panel.frac_diff(d=0.4).over("ticker").alias("close_fd"),
+    # within-entity, causal: trailing rolling z-score
+    pl.col("close").panel.zscore(window=10).over("ticker").alias("close_z"),
+    # cross-sectional: rank each day across all tickers (no lookahead)
+    pl.col("close").xs.rank(normalize=True).over("day").alias("xs_rank"),
 )
-# Call .collect to execute query
-X_new: pl.DataFrame = X_new.collect(streaming=True)
+
+# Prove a feature never looks ahead (raises if it leaks).
+pk.assert_no_lookahead(
+    pl.col("close").panel.zscore(window=10).over("ticker").alias("z"),
+    panel,
+)
 ```
 
-View [quick examples](./user-guide/preprocessing.md) of time-series preprocessing with `functime`.
+Continue with the [Quickstart](./quickstart.md) for the full path — bulk feature extraction,
+triple-barrier labels, CAFE imputation, and combinatorial purged cross-validation — every
+step runnable.
+
+## The benchmark headline
+
+Panel feature generation (many entities × time) is PanelKit's core workload. Each computation
+is run **both** ways and the results asserted equal (within `1e-6`) *before* timing, so no
+speedup comes from computing something cheaper.
+
+| Workload (2.5M rows) | Speedup vs pandas 3.0 |
+| --- | ---: |
+| Rolling z-score, per entity (window 21) | **10.7×** |
+| Cross-sectional rank, per date | **17.8×** |
+| Bulk: 10 tsfresh-style features per entity | **12.5×** |
+
+Full methodology and 0.5M-row numbers in the [benchmarks](./benchmarks/vs_pandas.md).
+
+## Who is this for
+
+- **Quant researchers** building leak-safe factor and signal pipelines over cross-sections of
+  assets, and validating them with purged / combinatorial CV before they trust a backtest.
+- **ML engineers on panel data** — customers, devices, regions over time — who want
+  sklearn-shaped `fit` / `transform` / `Pipeline` ergonomics that respect entity boundaries.
+- **Anyone moving off pandas** for panel feature engineering who wants Polars speed without
+  hand-rolling leak-safety.
+
+## What's shipped today
+
+The functime-derived engine (100+ `ts` feature extractors, forecasting, preprocessing,
+seasonality, cross-validation, metrics) is available now under the `polars_features` import.
+On top of it, PanelKit adds the leak-safe panel layer:
+
+| Area | Status |
+| --- | --- |
+| `PanelFrame` panel/cross-section object | Shipped (experimental) |
+| `.panel` / `.xs` expression + frame namespaces | Shipped (experimental) |
+| Leak-safe `Pipeline` + `panel_safe` / `leakage_safe` contracts | Shipped (experimental) |
+| Bulk feature extraction (`extract_features`) | Shipped (experimental) |
+| Triple-barrier labeling (`triple_barrier`) | Shipped (experimental) |
+| CAFE imputation (`cafe_impute` / `CafeImputer`, `cafe` extra) | Shipped (experimental) |
+| Leakage verifier (`assert_no_lookahead`) | Shipped (experimental) |
+| `PurgedKFold`, `CombinatorialPurgedCV` + `cross_validate` / `validate` runner | Shipped (experimental) |
+| Deflated Sharpe ratio, Probability of Backtest Overfitting (PBO) | Shipped (experimental) |
+| Feature selection (`select.mrmr` / `mda` / `mdi`), panel models | Shipped (experimental) |
+| catch22 feature set (clean-room) | Shipped (experimental) |
+
+## Where to next
+
+- **[Installation](./installation.md)** — pip, optional extras, and version notes.
+- **[Quickstart](./quickstart.md)** — a runnable 5-minute tour end to end.
+- **[Leakage & correctness-by-construction](./leakage.md)** — the contracts, in depth.
+
+## License
+
+PanelKit is distributed under the **Apache License 2.0**, retained from functime, which is
+credited as the upstream this work derives from. CAFE imputation is powered by the optional
+`cafe-impute` dependency (MIT, Sov.ai), installed via the `cafe` extra.

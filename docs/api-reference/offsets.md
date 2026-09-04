@@ -1,1 +1,1 @@
-::: functime.offsets
+::: polars_features.offsets

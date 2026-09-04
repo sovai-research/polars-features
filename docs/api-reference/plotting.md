@@ -1,1 +1,1 @@
-::: functime.plotting
+::: polars_features.plotting

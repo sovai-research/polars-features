@@ -1,1 +1,1 @@
-:::functime.seasonality
+:::polars_features.seasonality

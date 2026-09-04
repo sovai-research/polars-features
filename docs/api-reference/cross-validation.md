@@ -1,1 +1,1 @@
-::: functime.cross_validation
+::: polars_features.cross_validation

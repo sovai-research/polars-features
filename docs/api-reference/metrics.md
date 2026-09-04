@@ -1,2 +1,2 @@
-::: functime.metrics.point
-<!-- ::: functime.metrics.probabilistic --> -->
+::: polars_features.metrics.point
+<!-- ::: polars_features.metrics.probabilistic -->
