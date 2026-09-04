@@ -5,6 +5,13 @@
 
 ---
 
+> **Part of the "interactions" theme.** HFA is the **order ≥ 2, input-side** half of a
+> library-wide throughline: higher-order structure in the *data* (HFA cumulant factors) and
+> in the *model* (Shapley interactions, [shap-attribution-plan.md](shap-attribution-plan.md)).
+> See [interactions-theme-plan.md](interactions-theme-plan.md) for the shared vocabulary,
+> the functional-decomposition backbone, and the flagship **factor-interactions** workflow
+> (Shapley interactions computed on HFA-derived factors).
+
 ## 1. Objective
 
 Add a first-class **factor-extraction** capability to `polars-features` (PanelKit): a small, cohesive family of leak-safe latent-factor estimators that *emit new factor columns* (`F = X · U`), sharing one `Fit/Transform` contract and one factor-count selector.

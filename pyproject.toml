@@ -33,7 +33,11 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "cloudpickle",
+  # NOTE: `flaml`, `holidays`, `scikit-learn`, `scipy`, and `tqdm` are kept here
+  # for now, but a future (breaking) release will slim the hard dependency set --
+  # each is already available behind a named extra below (forecasting/seasonality/
+  # ml/scipy/progress) and imported lazily via `polars_features._deps.require`.
+  # `cloudpickle` was dropped in favor of stdlib `pickle` (see CHANGELOG).
   "flaml>=2.0.2",
   "holidays",
   "numpy",
@@ -50,36 +54,54 @@ Documentation = "https://github.com/sovai-research/polars-features"
 Changelog = "https://github.com/sovai-research/polars-features/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+# Extra names below intentionally mirror `polars_features._deps._MODULE_TO_EXTRA`
+# so the `require(...)` install hints ("pip install 'polars-features[<extra>]'")
+# always resolve to a real extra.
+
+# --- classical ML: sklearn-backed estimators, selection, reduction, clustering.
+# Everything in models/select/reduce/cluster imports sklearn lazily. ---
+ml = ["scikit-learn>=1.2.2"]
+# --- scientific kernels used by feature_extractors/catch22/evaluation/metrics. ---
+scipy = ["scipy"]
+# --- progress bars (forecasting loops); code degrades to a no-op without it. ---
+progress = ["tqdm"]
+# --- seasonality calendar/holiday effects (fourier terms stay dependency-free). ---
+seasonality = ["holidays"]
+# --- legacy autoregressive forecasting (functime-derived): FLAML `tune` for HPO. ---
+forecasting = ["flaml>=2.0.2", "tqdm"]
+# --- FLAML AutoML path (flaml_lightgbm): needs flaml[automl] + a booster. ---
+automl = ["flaml[automl]>=2.0.2", "lightgbm"]
+# --- gradient-boosting back-ends (each optional, additive) for forecasting/models. ---
+lightgbm = ["lightgbm"]
+catboost = ["catboost"]
+xgboost = ["xgboost"]
+# --- approximate-nearest-neighbor reduction (forecasting.lance -> `import lance`). ---
+ann = ["pylance"]
 # LLM-assisted features. The current code targets the OpenAI SDK; anthropic is
 # included as the recommended provider going forward.
 llm = ["openai", "anthropic", "tiktoken", "tenacity"]
 # GPU acceleration. Polars exposes its GPU engine via the collect engine
 # (`.collect(engine="gpu")`), which pulls in the cudf-polars backend.
 gpu = ["cudf-polars-cu12"]
-# Path-signature transforms. NOTE: signatory / iisignature licenses must be
-# verified before enabling these as a hard dependency in any distribution.
-signatures = ["iisignature"]
 # Plotting utilities (see polars_features/plotting.py -> plotly).
 viz = ["plotly"]
-# Cross-dataframe interop.
-interop = ["narwhals"]
 # CAFE imputation backend (cafe_impute / CafeImputer). MIT, Sov.ai.
 cafe = ["cafe-impute>=0.1"]
 # Non-linear dimensionality reduction (reduce.PanelUMAP). PCA/SVD/FA/NMF use the
-# already-required scikit-learn; only UMAP needs this extra.
+# `ml` extra's scikit-learn; only UMAP needs this extra.
 dimreduce = ["umap-learn>=0.5"]
-# Convenience extra unioning all optional feature sets above.
+# Path-signature transforms. RESERVED / UNUSED: no code imports `iisignature`
+# yet, and signatory / iisignature licenses must be verified before enabling
+# this as a hard dependency. Kept only because `_deps` maps it to this name.
+signatures = ["iisignature"]
+# Batteries-included bundle: the common heavy deps that reproduce the old
+# effective feature set (minus GPU / niche back-ends). Restores the pre-slim
+# experience for users who want `pip install` to "just work".
+recommended = ["polars_features[ml,scipy,seasonality,cafe]"]
+# The kitchen sink: every real optional feature set (self-referential extras
+# require pip>=21.2). Excludes the reserved/unused `signatures` extra.
 all = [
-  "openai",
-  "anthropic",
-  "tiktoken",
-  "tenacity",
-  "cudf-polars-cu12",
-  "iisignature",
-  "plotly",
-  "narwhals",
-  "cafe-impute>=0.1",
-  "umap-learn>=0.5",
+  "polars_features[ml,scipy,progress,seasonality,forecasting,automl,lightgbm,catboost,xgboost,ann,llm,gpu,viz,cafe,dimreduce]",
 ]
 # Development / CI tooling.
 dev = [

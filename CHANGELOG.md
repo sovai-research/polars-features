@@ -12,6 +12,51 @@ on top — it interoperates with functime and Nixtla rather than replacing them.
 package is currently `polars_features`; the public rename to `panelkit` is planned but not yet
 effective.
 
+## [Unreleased] — 0.4.0-dev
+
+### Changed — packaging & lighter import
+
+- **Lighter `import polars_features`.** `scipy`, `scikit-learn`, and `cloudpickle`
+  are no longer imported at `import polars_features` time; heavy back-ends are now
+  loaded lazily at first use via `polars_features._deps.require(...)`, which raises a
+  single actionable `pip install 'polars-features[<extra>]'` hint when a dependency
+  is missing.
+- **Dropped `cloudpickle`** from the hard dependencies — the only use (persisting a
+  fitted sklearn regressor in the deseasonalize/reseasonalize path) is now handled by
+  the stdlib `pickle` module. No functional change; the serialized objects are
+  top-level library classes that `pickle` round-trips identically.
+
+### Added — optional extras
+
+- New named extras so users and tools can already target slim installs and so the
+  `require(...)` install hints resolve to real extras:
+  `ml` (`scikit-learn`), `scipy`, `progress` (`tqdm`), `seasonality` (`holidays`),
+  `forecasting` (`flaml` + `tqdm`), `automl` (`flaml[automl]` + `lightgbm`),
+  `lightgbm`, `catboost`, `xgboost`, and `ann` (`pylance`, for the `forecasting.lance`
+  ANN reduction).
+- The booster / ANN extras (`lightgbm`, `catboost`, `xgboost`, `ann`) previously did
+  not exist even though `forecasting` error messages pointed at them — this makes
+  `pip install 'polars-features[lightgbm]'` (etc.) actually work.
+- `recommended` extra — a batteries-included bundle (`ml` + `scipy` + `seasonality`
+  + `cafe`) that reproduces the old effective feature set for users who want
+  `pip install` to "just work".
+- Refreshed the `all` extra to union every real optional feature set.
+
+### Removed
+
+- Dead `interop` extra (`narwhals`) — `narwhals` is not imported anywhere in the
+  package (it is only duck-typed in comments).
+
+### Notes
+
+- The `signatures` extra (`iisignature`) is retained but **reserved/unused** — no
+  code imports `iisignature` yet and its license must be verified before it is
+  advertised.
+- **Planned (breaking):** a future release will slim the hard dependency set —
+  `flaml`, `holidays`, `scikit-learn`, `scipy`, and `tqdm` will move out of
+  `[project.dependencies]` into the extras above. This has **not** happened yet;
+  those packages are still installed by a bare `pip install polars-features`.
+
 ## [0.3.0] — 2026-09-04
 
 Unsupervised toolkit (clustering, dimensionality reduction, unsupervised feature
