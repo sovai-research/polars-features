@@ -2,7 +2,7 @@
 
 ![PanelKit](./img/banner.png)
 
-## Leak-safe, Rust-fast feature engineering and ML for panel data
+## Leak-safe, fast feature engineering and ML for panel data
 
 **PanelKit** (import package `polars_features`) is a Polars-native toolkit for **panel data** —
 many entities observed over time (stocks, customers, sensors, regions). It treats the
@@ -28,7 +28,7 @@ interoperates with functime and Nixtla rather than replacing them.
 - **Polars-native & lazy.** Every transform is a Polars expression via the `.panel` / `.xs`
   namespaces — nothing computes until you `.collect()`, so the engine optimizes the whole
   plan.
-- **Rust-fast.** Panel feature generation runs **10–19× faster than pandas 3.0** on the same
+- **Polars-fast.** Panel feature generation runs **10–19× faster than pandas 3.0** on the same
   workloads, verified for exact numerical equality — see the
   [benchmarks](./benchmarks/vs_pandas.md).
 - **Panel-first & quant-ML shaped.** The panel is the unit of work: cross-sectional

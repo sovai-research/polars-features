@@ -12,7 +12,32 @@ on top — it interoperates with functime and Nixtla rather than replacing them.
 package is currently `polars_features`; the public rename to `panelkit` is planned but not yet
 effective.
 
-## [Unreleased] — 0.4.0-dev
+## [0.4.0] — 2026-09-04
+
+A "light package" release: a numpy + polars core, ~10× faster import, and a
+pure-Python distribution (the Rust extension is gone). Two **breaking** structural
+changes are called out below.
+
+### Changed — BREAKING: slim hard dependencies
+
+- **`pip install polars-features` now installs only `numpy` + `polars`.**
+  `scikit-learn`, `scipy`, `flaml`, `holidays`, and `tqdm` moved out of the hard
+  dependencies into optional extras (`ml`, `scipy`, `forecasting`, `seasonality`,
+  `progress`). Feature code imports them lazily via `polars_features._deps.require`,
+  which raises a single actionable `pip install 'polars-features[<extra>]'` message
+  when one is missing. **To restore the previous batteries-included behavior:**
+  `pip install 'polars-features[recommended]'` (ml + scipy + seasonality + cafe) or
+  `[all]`.
+
+### Changed — BREAKING: pure-Python distribution (Rust extension removed)
+
+- **The compiled Rust extension (`src/`, Cargo, maturin) has been removed.** PanelKit
+  now ships as a single universal `py3-none-any` wheel — no compiler, no per-platform
+  wheels, trivial installs everywhere. An audit found the crate was net-negative: its
+  fractional-differencing kernel was already dead, its least-squares kernel was 35–500×
+  *slower* than numpy, and Lempel–Ziv showed no gain. The only real win was CUSUM, now
+  reimplemented in pure Python with an optional `numba` fast-path via the new `fast`
+  extra (`pip install 'polars-features[fast]'`). Build backend switched maturin → hatchling.
 
 ### Changed — packaging & lighter import
 
@@ -52,10 +77,8 @@ effective.
 - The `signatures` extra (`iisignature`) is retained but **reserved/unused** — no
   code imports `iisignature` yet and its license must be verified before it is
   advertised.
-- **Planned (breaking):** a future release will slim the hard dependency set —
-  `flaml`, `holidays`, `scikit-learn`, `scipy`, and `tqdm` will move out of
-  `[project.dependencies]` into the extras above. This has **not** happened yet;
-  those packages are still installed by a bare `pip install polars-features`.
+- The hard-dependency slim flagged here as planned is **now done** in this 0.4.0
+  release (see "BREAKING: slim hard dependencies" above).
 
 ## [0.3.0] — 2026-09-04
 

@@ -1,6 +1,6 @@
 # Quickstart
 
-**PanelKit** is leak-safe, Rust-fast feature engineering and ML for panel data, built on
+**PanelKit** is leak-safe, fast feature engineering and ML for panel data, built on
 [Polars](https://pola.rs/). This is a runnable 5-minute tour: build a panel, engineer
 leak-safe features, extract a feature matrix, label events, impute gaps, and validate a model
 with combinatorial purged cross-validation — proving no lookahead along the way.

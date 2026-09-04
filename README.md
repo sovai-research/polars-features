@@ -2,9 +2,9 @@
 
 # PanelKit
 
-**Leak-safe, Rust-fast feature engineering and ML for panel data, built on Polars.**
+**Leak-safe, fast feature engineering and ML for panel data, built on Polars.**
 
-*Built on the foundations of [functime](https://github.com/functime-org/functime). Panel-native data science in Rust + Polars: transform → extract → label → select → model → validate, with no lookahead, ever.*
+*Built on the foundations of [functime](https://github.com/functime-org/functime). Panel-native data science in Polars: transform → extract → label → select → model → validate, with no lookahead, ever.*
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 [![Polars](https://img.shields.io/badge/built%20on-Polars-CD792C.svg)](https://pola.rs/)
