@@ -26,12 +26,50 @@ Returns-panel factors:
 Cross-sectional (``panel_safe=False, leakage_safe=True``):
 
 * :class:`CrossSectionalPCA` -- per-date cross-sectional reduction.
+
+Latent-**factor extraction** (emits new ``factor_1 .. factor_r`` columns rather
+than projecting onto a subset of existing ones). Part of PanelKit's
+*interactions* theme -- higher-order structure in the **data**, with ``order=k``
+mirroring ``max_order=k`` on the model-attribution side:
+
+======================================  ===========================
+your problem                            the extractor
+======================================  ===========================
+"just give me the baseline"             :class:`PCAFactors`
+weak / masked **non-Gaussian** factors  :class:`HFAFactors` (``order=3|4``)
+maximally **independent** components    :class:`ICAFactors`
+heavy tails / contaminated rows         :class:`RobustPCAFactors`
+======================================  ===========================
+
+* :func:`pca_factors`, :func:`hfa_factors`, :func:`ica_factors`,
+  :func:`robust_pca_factors` -- the matrix-in, ``(factors, loadings, extra)``-out
+  functional cores.
+* :func:`n_factors`, :func:`bai_ng`, :func:`eigenvalue_ratio` -- the shared
+  factor-count selectors (Bai--Ng information criteria and the eigenvalue-ratio
+  rule), pure NumPy.
+* :func:`hfa_cumulant_matrix` -- the higher-order multi-cumulant matrix itself,
+  with a blocked accumulation path for large panels.
+
+HFA and the factor-count selectors need nothing beyond ``numpy`` + ``polars``;
+:class:`ICAFactors` lazily requires ``scikit-learn``
+(``pip install 'polars-features[ml]'``).
 """
 
 from __future__ import annotations
 
 import warnings
 
+from polars_features.reduce._estimators import (
+    HFAFactors,
+    ICAFactors,
+    PCAFactors,
+    RobustPCAFactors,
+    pca_factors,
+)
+from polars_features.reduce._hfa import hfa_cumulant_matrix, hfa_factors
+from polars_features.reduce._ica import ica_factors
+from polars_features.reduce._n_factors import bai_ng, eigenvalue_ratio, n_factors
+from polars_features.reduce._robust import robust_pca_factors
 from polars_features.reduce.factors import StatisticalFactors
 from polars_features.reduce.pca import (
     PanelFactorAnalysis,
@@ -54,6 +92,19 @@ __all__ = [
     "StatisticalFactors",
     "CrossSectionalPCA",
     "reduce_features",
+    # --- latent-factor extraction (the "interactions" theme, input side) ---
+    "PCAFactors",
+    "HFAFactors",
+    "ICAFactors",
+    "RobustPCAFactors",
+    "pca_factors",
+    "hfa_factors",
+    "ica_factors",
+    "robust_pca_factors",
+    "hfa_cumulant_matrix",
+    "n_factors",
+    "bai_ng",
+    "eigenvalue_ratio",
 ]
 
 # PanelUMAP is defined unconditionally (its `umap-learn` import is deferred to
