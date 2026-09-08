@@ -146,6 +146,7 @@ class CrossSectionalPCA(PanelTransformer):
         when the date supports fewer components than requested.
         """
         from sklearn.decomposition import PCA
+        from sklearn.preprocessing import StandardScaler
 
         n_ent, n_feat = X.shape
         out = np.full((n_ent, self.n_components), np.nan)
@@ -156,8 +157,6 @@ class CrossSectionalPCA(PanelTransformer):
         col_mean = np.where(np.isnan(col_mean), 0.0, col_mean)
         Xf = np.where(np.isnan(X), col_mean, X)
         if self.standardize:
-            from sklearn.preprocessing import StandardScaler
-
             Xf = StandardScaler().fit_transform(Xf)
         k = min(self.n_components, n_ent, n_feat)
         if k < 1:
@@ -181,20 +180,32 @@ class CrossSectionalPCA(PanelTransformer):
                 f"found in panel. Available columns: {panel.columns}."
             )
         time_col = panel.time_col
-        full = panel.collect().with_row_index("__row")
+        full = panel.collect()
         n_rows = full.height
         out_mat = np.full((n_rows, self.n_components), np.nan)
 
-        for _, sub in full.group_by(pl.col(time_col)):
-            rows = sub.get_column("__row").to_numpy()
-            X = sub.select(self.feature_names_in_).to_numpy().astype(np.float64)
-            out_mat[rows, :] = self._reduce_one(X)
+        # One conversion for the whole feature block, then per-date views by row
+        # index. The previous loop paid a polars `select(...).to_numpy()` (and a
+        # per-group DataFrame materialisation) for every date, which was ~30% of
+        # `transform` on a 2500-date panel. The arithmetic per date is unchanged.
+        X_all = full.select(self.feature_names_in_).to_numpy().astype(np.float64)
+        groups = (
+            full.lazy()
+            .with_row_index("__row")
+            .group_by(pl.col(time_col))
+            .agg(pl.col("__row"))
+            .collect()
+            .get_column("__row")
+        )
+        for rows_series in groups:
+            rows = rows_series.to_numpy()
+            out_mat[rows, :] = self._reduce_one(X_all[rows])
 
         comp_cols = [
             pl.Series(name=name, values=out_mat[:, i])
             for i, name in enumerate(self.component_names_)
         ]
-        base = full.drop("__row")
+        base = full
         keys = [panel.entity_col, time_col]
         if self.keep_features:
             out = base.with_columns(comp_cols)

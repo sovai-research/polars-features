@@ -1,8 +1,18 @@
 name: CI
 
 # Continuous integration for PanelKit (polars_features).
-# Runs lint/format, type-check, a build+test matrix, and a CodSpeed
-# benchmark-regression gate.
+#
+# 0.4.0 dropped the Rust extension: the distribution is pure Python and ships a
+# single universal `py3-none-any` wheel, so there is no toolchain to install and
+# no per-platform build step. What CI defends instead is the *light core*:
+#
+#   * lint / format / type-check
+#   * the normal test matrix (OS x Python) on the `dev` + `recommended` install
+#   * an **extras matrix** proving the suite behaves on `[]`, `[recommended]`
+#     and `[all]` -- i.e. the bare core really works and the extras really do
+#     light their features up
+#   * the packaging guardrails (import hygiene, dependency drift, wheel shape
+#     and size), which are ordinary pytest files so they also run locally
 
 on:
   pull_request:
@@ -18,12 +28,6 @@ concurrency:
 
 permissions:
   contents: read
-
-env:
-  # Pin the toolchain used everywhere so jobs stay reproducible.
-  RUST_TOOLCHAIN: stable
-  # Keep cargo output quiet and fail fast.
-  CARGO_TERM_COLOR: always
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -68,26 +72,16 @@ jobs:
       - name: Set up Python
         run: uv python install 3.10
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: typecheck
-
-      - name: Create venv & install (with dev extra)
-        # Building the extension gives mypy the real package layout to inspect.
-        # ignore_missing_imports is set in pyproject for the compiled module.
+      - name: Create venv & install (dev + recommended)
         run: |
           uv venv
-          uv pip install -e ".[dev]"
+          uv pip install -e ".[dev,recommended]"
 
       - name: mypy
         run: uv run mypy polars_features
 
   # ---------------------------------------------------------------------------
-  # Build (maturin develop) + test matrix.
+  # Main test matrix. Pure-Python install: no compiler, no toolchain.
   # ---------------------------------------------------------------------------
   test:
     name: Test py${{ matrix.python-version }} on ${{ matrix.os }}
@@ -108,45 +102,150 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          # Separate cache per OS/py to avoid cross-contamination.
-          key: test-${{ matrix.os }}-py${{ matrix.python-version }}
-
-      - name: Create venv
-        run: uv venv
-
-      - name: Build Rust extension + install (with dev extra)
-        # `maturin develop` compiles the pyo3-polars crate and installs the
-        # extension into the active venv in editable/dev mode.
+      - name: Create venv & install (dev + recommended + test-only deps)
+        # pandas is a *test-only* dependency (tests/conftest.py builds pandas
+        # fixtures and benchmarks compare against it). It must never become a
+        # runtime dependency -- tests/test_import_hygiene.py enforces that.
         run: |
-          uv pip install -e ".[dev]"
-          uv run maturin develop --release
+          uv venv
+          uv pip install -e ".[dev,recommended]" pandas build
 
       - name: Run tests
-        run: uv run pytest -q
+        # The 40-minute forecasting suite runs nightly, not per-PR.
+        run: uv run pytest -q --ignore=tests/test_forecasting.py
 
   # ---------------------------------------------------------------------------
-  # CodSpeed benchmark-regression gate.
+  # Extras matrix (Wave 4): prove the bare core works and the extras light up.
   #
-  # NOTE: This runs `pytest --codspeed`, which requires benchmarks marked with
-  # the `@pytest.mark.benchmark`/`pytest-codspeed` fixtures. The repo currently
-  # ships tests/test_benchmarks.py but there is no dedicated benchmarks/ dir;
-  # if no codspeed-compatible benchmarks are discovered the step is a no-op and
-  # the job is allowed to pass (continue-on-error) so it acts as a placeholder
-  # until real benches land.
-  #
-  # One-time setup: install the CodSpeed GitHub App on the repo and (for private
-  # repos) add CODSPEED_TOKEN as a repo secret. See https://codspeed.io/docs
+  #   []             -> numpy + polars only. Runs the subset of the suite that
+  #                     does not need an optional dependency (see the ignore
+  #                     list below); every ignored file is ignored because it
+  #                     imports an sklearn/scipy/holidays-backed module at
+  #                     module scope. Shrinking that list (by adding
+  #                     `pytest.importorskip` guards) is tracked work.
+  #   [recommended]  -> ml + scipy + seasonality + cafe: the batteries-included
+  #                     experience. Full suite must pass.
+  #   [all]          -> every optional feature set. Advisory only: `all` pulls
+  #                     `gpu` (cudf-polars-cu12) and `ann` (pylance), which are
+  #                     large and not installable on every hosted runner, so the
+  #                     job reports rather than blocks.
+  # ---------------------------------------------------------------------------
+  extras-matrix:
+    name: Extras ${{ matrix.variant.label }}
+    runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.variant.advisory }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - label: "bare core []"
+            spec: "."
+            advisory: false
+          - label: "[recommended]"
+            spec: ".[recommended]"
+            advisory: false
+          - label: "[all]"
+            spec: ".[all]"
+            advisory: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Create venv & install ${{ matrix.variant.label }}
+        # Test tooling (pytest/hypothesis/pandas/build) is installed in every
+        # variant; it is deliberately NOT part of the package's dependencies.
+        run: |
+          uv venv
+          uv pip install "${{ matrix.variant.spec }}" pytest hypothesis pandas build
+
+      - name: Guardrails (import hygiene, dependency drift, wheel shape)
+        run: |
+          uv run pytest -q \
+            tests/test_import_hygiene.py \
+            tests/test_dependency_drift.py \
+            tests/test_wheel_guardrails.py
+
+      - name: Show optional-feature availability
+        # Prints which optional modules resolved in this variant, so the log
+        # itself is evidence that `[recommended]`/`[all]` really light up.
+        run: uv run python benchmarks/show_capabilities.py
+
+      - name: Run suite (bare core subset)
+        if: matrix.variant.label == 'bare core []'
+        # Each ignore is an optional-dependency import at module scope.
+        run: |
+          uv run pytest -q \
+            --ignore=tests/test_forecasting.py \
+            --ignore=tests/test_benchmarks.py \
+            --ignore=tests/test_evaluation.py \
+            --ignore=tests/test_mda_permute.py \
+            --ignore=tests/test_models.py \
+            --ignore=tests/test_plotting.py \
+            --ignore=tests/test_preprocessing.py \
+            --ignore=tests/test_reduce.py \
+            --ignore=tests/test_select.py \
+            --ignore=tests/test_select_unsup.py \
+            --ignore=tests/test_reduce_factor_leakage.py \
+            --ignore=tests/test_cross_validation.py \
+            --ignore=tests/test_calendar.py \
+            --ignore=tests/test_cluster.py \
+            --ignore=tests/test_forecasting_light.py
+
+      - name: Run suite (with extras)
+        if: matrix.variant.label != 'bare core []'
+        run: uv run pytest -q --ignore=tests/test_forecasting.py
+
+  # ---------------------------------------------------------------------------
+  # Packaging: build the universal wheel + sdist once and archive them, so the
+  # artifacts a release would publish are exercised on every PR.
+  # ---------------------------------------------------------------------------
+  package:
+    name: Build universal wheel & sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Build
+        run: |
+          uv venv
+          uv pip install build
+          uv run python -m build
+
+      - name: Assert the wheel is universal
+        run: |
+          ls -l dist/
+          test "$(ls dist/*.whl | wc -l)" -eq 1
+          ls dist/*.whl | grep -q 'py3-none-any\.whl'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  # ---------------------------------------------------------------------------
+  # Speed smoke test. Runs the pandas-comparison harness so an accidental
+  # order-of-magnitude regression in the golden-path operations is visible in
+  # the log. Advisory (hosted-runner timings are noisy), not a gate.
   # ---------------------------------------------------------------------------
   benchmarks:
-    name: CodSpeed benchmarks
+    name: Speed harness (advisory)
     runs-on: ubuntu-latest
-    # Placeholder-friendly: do not fail CI if there are no benches yet.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -159,25 +258,13 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: benchmarks
-
-      - name: Build extension + install (dev + pytest-codspeed)
+      - name: Install (recommended + pandas)
         run: |
           uv venv
-          uv pip install -e ".[dev]"
-          uv pip install pytest-codspeed
-          uv run maturin develop --release
+          uv pip install -e ".[recommended]" pandas
 
-      - name: Run benchmarks under CodSpeed
-        uses: CodSpeedHQ/action@v3
-        with:
-          # Token only required for private repos; harmless if unset on public.
-          token: ${{ secrets.CODSPEED_TOKEN }}
-          # `|| true` keeps the placeholder green when no benches are collected.
-          run: uv run pytest --codspeed || true
+      - name: PanelKit vs pandas
+        run: uv run python benchmarks/bench_vs_pandas.py
+
+      - name: Hotspot profile (small sizes)
+        run: uv run python benchmarks/bench_hotspots.py --rows 200000

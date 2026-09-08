@@ -16,6 +16,9 @@ Covered:
 * :func:`kurtosis`     -> ``scipy.stats.kurtosis`` (Fisher, bias=True)
 * :func:`normaltest_stat` -> ``scipy.stats.normaltest(...)[0]`` (D'Agostino K^2)
 * :func:`welch`        -> ``scipy.signal.welch`` (rfft + periodic window)
+* :func:`chebyshev_neighbour_counts`
+  -> ``scipy.spatial.KDTree(...).query_ball_point(..., p=inf, return_length=True)``
+  (exact integer counts; sorted sweep instead of a k-d tree)
 """
 
 from __future__ import annotations
@@ -32,6 +35,7 @@ __all__ = [
     "kurtosis",
     "normaltest_stat",
     "welch",
+    "chebyshev_neighbour_counts",
 ]
 
 
@@ -270,3 +274,96 @@ def welch(
     pxx = np.mean(segs, axis=0)
     f = np.fft.rfftfreq(nperseg, 1 / fs)
     return f, pxx
+
+
+# ---------------------------------------------------------------------------
+# Chebyshev (L-inf) radius neighbour counts
+# ---------------------------------------------------------------------------
+#: Rough ceiling on the number of pairwise comparisons materialised at once by
+#: :func:`chebyshev_neighbour_counts` (~8 MB of float64 per dimension).
+_NEIGHBOUR_BLOCK_BUDGET = 1_000_000
+
+
+def chebyshev_neighbour_counts(points, radius: float) -> np.ndarray:
+    """Count, for every row of ``points``, the rows within ``radius`` in L-inf.
+
+    Drop-in replacement for::
+
+        KDTree(points).query_ball_point(points, radius, p=np.inf,
+                                        return_length=True)
+
+    which is what ``sample_entropy`` / ``approximate_entropy`` used SciPy for.
+    Each count includes the point itself, exactly like SciPy's.
+
+    Why this is exact
+    -----------------
+    The k-d tree answers ``max_d |x_d - y_d| <= radius``; this function tests
+    ``|x_d - y_d| <= radius`` for every ``d`` and ANDs the results, which is the
+    same predicate on the same floating-point differences.  The result is an
+    integer count, so parity with SciPy is exact rather than approximate.
+
+    Why it is faster
+    ----------------
+    The brute-force form is ``O(n^2 m)``.  Sorting on the first coordinate makes
+    every point's candidate set a *contiguous* slice of the sorted array
+    (``|x_0 - y_0| <= radius`` is a necessary condition), so only that window has
+    to be tested -- ``O(n log n + n w)`` where ``w`` is the mean window size.
+    Points are processed in blocks whose candidate windows are unioned, so the
+    inner work stays as a handful of vectorised numpy ops rather than one
+    Python iteration per point.
+
+    Parameters
+    ----------
+    points : array_like
+        ``(n, m)`` array of points (or ``(n,)``, treated as ``m = 1``).
+    radius : float
+        Inclusive L-inf radius.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``(n,)`` array of ``int64`` counts, in the input row order.
+
+    Notes
+    -----
+    Rows containing NaN never match (NaN comparisons are False), including
+    against themselves.  The entropy callers slice their embedding matrices so
+    no NaN rows reach here.
+    """
+    pts = np.asarray(points, dtype=np.float64)
+    if pts.ndim == 1:
+        pts = pts[:, None]
+    if pts.ndim != 2:
+        raise ValueError(f"points must be 1-D or 2-D, got shape {pts.shape}")
+    n, dim = pts.shape
+    if n == 0:
+        return np.zeros(0, dtype=np.int64)
+
+    order = np.argsort(pts[:, 0], kind="stable")
+    ordered = np.ascontiguousarray(pts[order])
+    key = ordered[:, 0]
+    lo = np.searchsorted(key, key - radius, side="left")
+    hi = np.searchsorted(key, key + radius, side="right")
+
+    # Block size chosen so the widest possible (block x window) tile stays
+    # inside the budget: the union window of a block is at most the block's own
+    # span plus the widest single-point window.
+    widest = int((hi - lo).max()) if n else 1
+    block_size = int(_NEIGHBOUR_BLOCK_BUDGET // max(widest, 1))
+    block_size = int(np.clip(block_size, 1, 8192))
+
+    counts_ordered = np.empty(n, dtype=np.int64)
+    for start in range(0, n, block_size):
+        stop = min(start + block_size, n)
+        left = int(lo[start:stop].min())
+        right = int(hi[start:stop].max())
+        block = ordered[start:stop]
+        window = ordered[left:right]
+        within = np.abs(block[:, None, 0] - window[None, :, 0]) <= radius
+        for d in range(1, dim):
+            within &= np.abs(block[:, None, d] - window[None, :, d]) <= radius
+        counts_ordered[start:stop] = within.sum(axis=1)
+
+    counts = np.empty(n, dtype=np.int64)
+    counts[order] = counts_ordered
+    return counts

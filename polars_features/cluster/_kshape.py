@@ -138,6 +138,54 @@ def _collect_shift(series: np.ndarray, cur_center: np.ndarray) -> np.ndarray:
     return _sbd_align(cur_center, series)
 
 
+def _ncc_many(x: np.ndarray, ys: np.ndarray) -> np.ndarray:
+    """NCC of one series against many, batched.
+
+    ``x`` is ``(length, dims)``, ``ys`` is ``(n, length, dims)``; the result is
+    ``(n, 2 * length - 1)`` and row ``i`` equals ``ncc(x, ys[i])`` exactly -- the
+    same forward transforms, products and inverse transform, just evaluated for
+    every ``i`` in one call instead of re-transforming ``x`` each time.
+    """
+    x = _as2d(x)
+    n = ys.shape[0]
+    x_len = x.shape[0]
+    if n == 0:
+        return np.empty((0, 2 * x_len - 1))
+    fft_size = 1 << (2 * x_len - 1).bit_length()
+    den_x = norm(x)
+    den = den_x * np.array([norm(ys[i]) for i in range(n)])
+    den = np.where(den < 1e-9, np.inf, den)
+
+    fx = fft(x, fft_size, axis=0)  # (fft_size, dims)
+    out = np.empty((n, 2 * x_len - 1))
+    chunk = max(1, int(_NCC_TILE_BUDGET // max(fft_size * ys.shape[2], 1)))
+    for start in range(0, n, chunk):
+        stop = min(start + chunk, n)
+        fy = np.conj(fft(ys[start:stop], fft_size, axis=1))
+        cc = ifft(fx[None, :, :] * fy, axis=1)
+        cc = np.concatenate((cc[:, -(x_len - 1) :], cc[:, :x_len]), axis=1)
+        out[start:stop] = cc.real.sum(axis=-1) / den[start:stop, None]
+    return out
+
+
+def _collect_shift_many(series: np.ndarray, cur_center: np.ndarray) -> np.ndarray:
+    """Align every series in ``series`` (``(n, length, dims)``) to ``cur_center``.
+
+    Batched equivalent of ``[_collect_shift(s, cur_center) for s in series]``:
+    the centroid's forward transform is computed once rather than once per
+    member, which is the dominant cost of the k-Shape centroid update.
+    """
+    if series.shape[0] == 0:
+        return series
+    if np.all(cur_center == 0):
+        return series
+    nc = _ncc_many(cur_center, series)
+    shifts = nc.argmax(axis=1) + 1 - max(cur_center.shape[0], series.shape[1])
+    return np.array(
+        [roll_zeropad(series[i], int(shifts[i])) for i in range(series.shape[0])]
+    )
+
+
 def _extract_shape(
     idx: np.ndarray,
     x: np.ndarray,
@@ -152,13 +200,13 @@ def _extract_shape(
     centroid, z-normalised, and the leading eigenvector of the scatter matrix is
     taken as the new shape, with a sign fix that minimises total distance.
     """
-    members = [_collect_shift(x[i], cur_center) for i in range(len(idx)) if idx[i] == j]
-    if len(members) == 0:
+    member_rows = np.flatnonzero(np.asarray(idx) == j)
+    if member_rows.size == 0:
         # Empty cluster: reseed from a random member (deterministic via rng).
         i = int(rng.integers(0, x.shape[0]))
         return np.squeeze(x[i].copy())
 
-    a = np.array(members)
+    a = _collect_shift_many(x[member_rows], cur_center)
     columns = a.shape[1]
     y = zscore(a, axis=1, ddof=1)
     s = np.dot(y[:, :, 0].transpose(), y[:, :, 0])
@@ -174,14 +222,56 @@ def _extract_shape(
     return zscore(centroid, ddof=1)
 
 
+#: Rough ceiling on the complex128 working set of one :func:`_distance_matrix`
+#: tile (~64 MB), used to pick the series-chunk size.
+_NCC_TILE_BUDGET = 4_000_000
+
+
 def _distance_matrix(x: np.ndarray, centroids: np.ndarray) -> np.ndarray:
-    """Return the ``(m, k)`` SBD distance matrix ``1 - max NCC(series, centroid)``."""
+    """Return the ``(m, k)`` SBD distance matrix ``1 - max NCC(series, centroid)``.
+
+    Mathematically identical to ``1 - ncc(x[p], centroids[q]).max()`` for every
+    pair, but the transforms are computed **once each** instead of once per
+    pair: the naive double loop evaluates ``fft(series)`` ``k`` times and
+    ``fft(centroid)`` ``m`` times.  Here the ``m + k`` forward transforms are
+    done up front and only the ``m * k`` products and inverse transforms remain
+    -- the dominant cost of every Lloyd iteration and of ``predict``.
+
+    The pairwise tile is chunked over series so the complex working set stays
+    bounded regardless of ``m``.
+    """
     m = x.shape[0]
     k = centroids.shape[0]
+    if m == 0 or k == 0:
+        return np.empty((m, k))
+
+    x_len = x.shape[1]
+    fft_size = 1 << (2 * x_len - 1).bit_length()
+
+    # Per-series / per-centroid Frobenius norms, computed exactly as `ncc` does
+    # (`numpy.linalg.norm` on the 2-D slice) so the denominators are bit-identical.
+    nx = np.array([norm(x[p]) for p in range(m)])
+    nc = np.array([norm(centroids[q]) for q in range(k)])
+    den = nx[:, None] * nc[None, :]
+    den = np.where(den < 1e-9, np.inf, den)
+
+    fx = fft(x, fft_size, axis=1)  # (m, fft_size, dims)
+    fc = np.conj(fft(centroids, fft_size, axis=1))  # (k, fft_size, dims)
+
     dist = np.empty((m, k))
-    for p in range(m):
-        for q in range(k):
-            dist[p, q] = 1.0 - ncc(x[p], centroids[q]).max()
+    chunk = max(1, int(_NCC_TILE_BUDGET // max(k * fft_size * x.shape[2], 1)))
+    for start in range(0, m, chunk):
+        stop = min(start + chunk, m)
+        # (chunk, k, fft_size, dims)
+        cc = ifft(fx[start:stop, None] * fc[None, :], axis=2).real
+        # `ncc` keeps shifts -(x_len-1) .. x_len-1, i.e. the tail then the head
+        # of the circular correlation. Only the maximum is needed here, so take
+        # it from each piece instead of materialising the concatenation.
+        best = cc[:, :, :x_len].sum(axis=-1).max(axis=-1)
+        if x_len > 1:
+            tail = cc[:, :, -(x_len - 1) :].sum(axis=-1).max(axis=-1)
+            best = np.maximum(best, tail)
+        dist[start:stop] = 1.0 - best / den[start:stop]
     return dist
 
 

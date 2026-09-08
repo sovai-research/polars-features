@@ -319,6 +319,42 @@ def absolute_sum_of_changes(x: TIME_SERIES_T) -> FLOAT_INT_EXPR:
     return x.diff(n=1, null_behavior="drop").abs().sum()
 
 
+def _chebyshev_counter():
+    """Return a ``(points, radius) -> counts`` Chebyshev-radius neighbour counter.
+
+    Both entropy features need, for every embedded point, the number of points
+    within an L-inf radius (the point itself included).  Two exact backends:
+
+    * SciPy's ``KDTree.query_ball_point(..., p=inf, return_length=True)`` when
+      SciPy is installed.  It prunes whole tree nodes and releases the GIL
+      across ``workers=-1`` threads, and measurement shows it is the faster of
+      the two from roughly 1k points upward (4x at n=2k, 5x at n=20k), so it
+      stays the preferred path.
+    * :func:`polars_features._numpy_stats.chebyshev_neighbour_counts` otherwise
+      -- a sorted-sweep counter that returns **the same integer counts** (see
+      ``tests/test_numpy_stats_parity.py``), so the feature now works in the
+      bare ``numpy + polars`` core instead of raising ImportError.  It is
+      ``O(n log n + n w)`` in the mean window width ``w``; for the usual
+      ``r = 0.2 sigma`` that is still quadratic in ``n``, which is why SciPy is
+      preferred when present.
+    """
+    from polars_features._deps import have
+
+    if have("scipy.spatial"):
+        from scipy.spatial import KDTree
+
+        def count(points: np.ndarray, radius: float) -> np.ndarray:
+            return KDTree(points, leafsize=50).query_ball_point(
+                points, radius, p=np.inf, workers=-1, return_length=True
+            )
+
+        return count
+
+    from polars_features._numpy_stats import chebyshev_neighbour_counts
+
+    return chebyshev_neighbour_counts
+
+
 def approximate_entropy(
     x: TIME_SERIES_T, run_length: int, filtering_level: float, scale_by_std: bool = True
 ) -> float:
@@ -358,27 +394,15 @@ def approximate_entropy(
             pl.col(x.name).shift(-i).alias(str(i)) for i in range(1, run_length + 1)
         ).to_numpy()
 
-        from polars_features._deps import require
-
-        KDTree = require("scipy.spatial", feature="approximate_entropy").KDTree
+        count = _chebyshev_counter()
 
         n1 = len(x) - run_length + 1
         data_m = data[:n1, :run_length]
-        # Computes phi. Let's not make it into a separate function until we know this will be reused.
-        tree = KDTree(data_m, leafsize=50)  # Can play with leafsize to fine tune perf
-        nb_in_radius: np.ndarray = tree.query_ball_point(
-            data_m, r, p=np.inf, workers=-1, return_length=True
-        )
-        phi_m = np.log(nb_in_radius / n1).sum() / n1
+        phi_m = np.log(count(data_m, r) / n1).sum() / n1
 
         n2 = n1 - 1
         data_mp1 = data[:n2, :]
-        # Compute phi
-        tree = KDTree(data_mp1, leafsize=50)
-        nb_in_radius: np.ndarray = tree.query_ball_point(
-            data_mp1, r, p=np.inf, workers=-1, return_length=True
-        )
-        phi_mp1 = np.log(nb_in_radius / n2).sum() / n2
+        phi_mp1 = np.log(count(data_mp1, r) / n2).sum() / n2
 
         return np.abs(phi_m - phi_mp1)
     else:
@@ -1705,31 +1729,13 @@ def sample_entropy(x: TIME_SERIES_T, ratio: float = 0.2, m: int = 2) -> FLOAT_EX
         if len(x) < m:
             return np.nan
 
-        from polars_features._deps import require
-
-        KDTree = require("scipy.spatial", feature="sample_entropy").KDTree
+        count = _chebyshev_counter()
 
         threshold = ratio * x.std(ddof=0)
         mat = _into_sequential_chunks(x, m)
-        tree = KDTree(mat)
-        b = (
-            np.sum(
-                tree.query_ball_point(
-                    mat, r=threshold, p=np.inf, workers=-1, return_length=True
-                )
-            )
-            - mat.shape[0]
-        )
+        b = np.sum(count(mat, threshold)) - mat.shape[0]
         mat = _into_sequential_chunks(x, m + 1)
-        tree = KDTree(mat)
-        a = (
-            np.sum(
-                tree.query_ball_point(
-                    mat, r=threshold, p=np.inf, workers=-1, return_length=True
-                )
-            )
-            - mat.shape[0]
-        )
+        a = np.sum(count(mat, threshold)) - mat.shape[0]
         return np.log(b / a)  # -ln(a/b) = ln(b/a)
     else:
         logger.info(

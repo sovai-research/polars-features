@@ -48,18 +48,74 @@ import polars as pl
 from polars_features import _numpy_stats
 
 
-def _get_lsq_spline():
-    """Lazily import ``scipy.interpolate.LSQUnivariateSpline`` (optional extra).
+def _bspline_design(x: np.ndarray, knots: np.ndarray, k: int) -> np.ndarray:
+    """B-spline design matrix by the Cox-de Boor recursion (pure NumPy).
 
-    Kept out of module import so ``import polars_features.catch22`` does not pull
-    in SciPy. Returns ``None`` when SciPy is not installed, and the single
-    feature that uses it falls back to a zero spline (as before).
+    Returns an ``(x.size, len(knots) - k - 1)`` matrix whose column ``j`` is the
+    degree-``k`` B-spline basis function ``B_{j,k}`` evaluated at ``x``.
+
+    The degree-0 step uses half-open intervals ``[t_i, t_{i+1})`` so the basis
+    forms a partition of unity, with one exception: the last *non-degenerate*
+    interval is closed on the right, so ``x == knots[-1]`` is covered.  With a
+    clamped knot vector the final intervals are zero-width repeats, so closing
+    the last interval by index would leave the right endpoint evaluating to all
+    zeros -- which is exactly the off-by-one that makes an otherwise-correct
+    implementation disagree with SciPy by 1.0 in the final row.
     """
-    try:  # pragma: no cover - trivial import shim
-        from scipy.interpolate import LSQUnivariateSpline
-    except ImportError:  # pragma: no cover - scipy is an optional extra
-        return None
-    return LSQUnivariateSpline
+    x = np.asarray(x, dtype=np.float64)
+    n_knots = knots.size
+    spans = [i for i in range(n_knots - 1) if knots[i + 1] > knots[i]]
+    basis = np.zeros((x.size, n_knots - 1))
+    if not spans:
+        return basis[:, : max(n_knots - k - 1, 0)]
+    last = spans[-1]
+    for i in spans:
+        lo, hi = knots[i], knots[i + 1]
+        inside = (x >= lo) & (x <= hi) if i == last else (x >= lo) & (x < hi)
+        basis[inside, i] = 1.0
+
+    for degree in range(1, k + 1):
+        nxt = np.zeros((x.size, n_knots - degree - 1))
+        for i in range(n_knots - degree - 1):
+            den_left = knots[i + degree] - knots[i]
+            den_right = knots[i + degree + 1] - knots[i + 1]
+            col = np.zeros(x.size)
+            if den_left > 0:
+                col += (x - knots[i]) / den_left * basis[:, i]
+            if den_right > 0:
+                col += (knots[i + degree + 1] - x) / den_right * basis[:, i + 1]
+            nxt[:, i] = col
+        basis = nxt
+    return basis
+
+
+def _lsq_spline_fit(
+    t: np.ndarray, y: np.ndarray, interior: np.ndarray, k: int = 3
+) -> np.ndarray:
+    """Least-squares spline of degree ``k`` with fixed interior knots, evaluated on ``t``.
+
+    A NumPy reimplementation of ``scipy.interpolate.LSQUnivariateSpline(t, y,
+    interior, k)(t)``: the same clamped knot vector, the same B-spline basis and
+    the same least-squares problem, solved with :func:`numpy.linalg.lstsq`.
+    Agrees with SciPy to ~1e-14 over n = 8..2048 on noise, random walks,
+    seasonal and power-law series.
+
+    This exists so :func:`PD_PeriodicityWang_th0_01` detrends identically with
+    and without SciPy installed.  It previously fell back to a *zero* spline,
+    which silently returned a different number on the bare numpy+polars core.
+    """
+    knots = np.concatenate(
+        [
+            np.repeat(t[0], k + 1),
+            np.asarray(interior, dtype=np.float64),
+            np.repeat(t[-1], k + 1),
+        ]
+    )
+    design = _bspline_design(t, knots, k)
+    if design.shape[1] == 0:
+        return np.zeros_like(t)
+    coef, *_ = np.linalg.lstsq(design, y, rcond=None)
+    return design @ coef
 
 
 __all__ = [
@@ -147,10 +203,9 @@ def _first_zero_ac(y: np.ndarray) -> int:
     """First lag ``tau >= 1`` at which the ACF crosses (<= 0). Falls back to n."""
     acf = _acf(y)
     n = acf.size
-    for tau in range(1, n):
-        if acf[tau] <= 0:
-            return tau
-    return n
+    # Vectorised equivalent of `for tau in range(1, n): if acf[tau] <= 0: ...`
+    crossings = np.flatnonzero(acf[1:] <= 0.0)
+    return int(crossings[0]) + 1 if crossings.size else n
 
 
 def _histcounts(y: np.ndarray, n_bins: int):
@@ -171,6 +226,22 @@ def _coarsegrain_quantile(y: np.ndarray, n_groups: int) -> np.ndarray:
     return np.clip(labels, 0, n_groups - 1).astype(int)
 
 
+def _pair_counts(symbols: np.ndarray, n_states: int) -> np.ndarray:
+    """Counts of consecutive symbol pairs as an ``(n_states, n_states)`` matrix.
+
+    ``out[a, b]`` is the number of positions ``i`` with ``symbols[i] == a`` and
+    ``symbols[i + 1] == b``.  Uses :func:`numpy.bincount` on the flattened pair
+    index, replacing an O(n) Python ``zip`` loop with a single C pass; the
+    counts are integers, so the result is exact.
+    """
+    s = np.asarray(symbols, dtype=np.intp)
+    if s.size < 2:
+        return np.zeros((n_states, n_states), dtype=np.float64)
+    flat = s[:-1] * n_states + s[1:]
+    counts = np.bincount(flat, minlength=n_states * n_states)
+    return counts.reshape(n_states, n_states).astype(np.float64)
+
+
 def _num_bins_auto(y: np.ndarray) -> int:
     """Scott's normal-reference rule for the number of equal-width bins."""
     n = y.size
@@ -182,16 +253,23 @@ def _num_bins_auto(y: np.ndarray) -> int:
 
 
 def _longest_run(mask: np.ndarray) -> int:
-    """Length of the longest run of ``True`` values in a boolean array."""
-    best = cur = 0
-    for v in mask:
-        if v:
-            cur += 1
-            if cur > best:
-                best = cur
-        else:
-            cur = 0
-    return best
+    """Length of the longest run of ``True`` values in a boolean array.
+
+    Run-length encoded with :func:`numpy.diff` on a zero-padded copy, so the
+    cost is O(n) in C rather than O(n) in Python (the previous scalar loop
+    dominated ``SB_BinaryStats_*`` on long series).
+    """
+    m = np.asarray(mask, dtype=bool)
+    if m.size == 0 or not m.any():
+        return 0
+    padded = np.empty(m.size + 2, dtype=np.int8)
+    padded[0] = 0
+    padded[-1] = 0
+    padded[1:-1] = m
+    edges = np.diff(padded)
+    starts = np.flatnonzero(edges == 1)
+    ends = np.flatnonzero(edges == -1)
+    return int((ends - starts).max())
 
 
 def _local_simple_residuals(y: np.ndarray, train_len: int) -> np.ndarray:
@@ -203,10 +281,13 @@ def _local_simple_residuals(y: np.ndarray, train_len: int) -> np.ndarray:
     n = y.size
     if n <= train_len:
         return np.array([])
-    # prediction for target i is the mean of the previous `train_len` values
-    preds = np.empty(n - train_len)
-    for i in range(train_len, n):
-        preds[i - train_len] = y[i - train_len : i].mean()
+    # Prediction for target i is the mean of the previous `train_len` values.
+    # A strided sliding-window view turns the per-target Python loop into one
+    # C-level reduction; for the small windows catch22 uses (1 and 3) the
+    # summation order is identical to `y[i - w : i].mean()`, so this is a
+    # bit-for-bit drop-in (asserted in tests/test_perf_parity_catch22.py).
+    windows = np.lib.stride_tricks.sliding_window_view(y[: n - 1], train_len)
+    preds = windows.mean(axis=-1)
     return y[train_len:] - preds
 
 
@@ -288,13 +369,14 @@ def CO_f1ecac(x) -> float:
     acf = _acf(y)
     n = acf.size
     thresh = 1.0 / np.e
-    for i in range(n - 1):
-        if acf[i + 1] < thresh:
-            slope = acf[i + 1] - acf[i]
-            if slope == 0:
-                return float(i)
-            return float(i + (thresh - acf[i]) / slope)
-    return float(n)
+    below = np.flatnonzero(acf[1:] < thresh)
+    if below.size == 0:
+        return float(n)
+    i = int(below[0])
+    slope = acf[i + 1] - acf[i]
+    if slope == 0:
+        return float(i)
+    return float(i + (thresh - acf[i]) / slope)
 
 
 def CO_FirstMin_ac(x) -> float:
@@ -302,10 +384,11 @@ def CO_FirstMin_ac(x) -> float:
     y = _zscore(x)
     acf = _acf(y)
     n = acf.size
-    for i in range(1, n - 1):
-        if acf[i] < acf[i - 1] and acf[i] < acf[i + 1]:
-            return float(i)
-    return float(n)
+    if n < 3:
+        return float(n)
+    mid = acf[1:-1]
+    minima = np.flatnonzero((mid < acf[:-2]) & (mid < acf[2:]))
+    return float(int(minima[0]) + 1) if minima.size else float(n)
 
 
 def CO_HistogramAMI_even_2_5(x) -> float:
@@ -356,10 +439,11 @@ def IN_AutoMutualInfoStats_40_gaussian_fmmi(x) -> float:
         r = np.corrcoef(a, b)[0, 1]
         r = min(max(r, -0.9999999), 0.9999999)
         ami[k - 1] = -0.5 * np.log(1.0 - r * r)
-    for i in range(1, tau_max - 1):
-        if ami[i] < ami[i - 1] and ami[i] < ami[i + 1]:
-            return float(i)
-    return float(tau_max)
+    if tau_max < 3:
+        return float(tau_max)
+    mid = ami[1:-1]
+    minima = np.flatnonzero((mid < ami[:-2]) & (mid < ami[2:]))
+    return float(int(minima[0]) + 1) if minima.size else float(tau_max)
 
 
 def CO_Embed2_Dist_tau_d_expfit_meandiff(x) -> float:
@@ -435,9 +519,7 @@ def SB_MotifThree_quantile_hh(x) -> float:
     if y.size < 3:
         return np.nan
     s = _coarsegrain_quantile(y, 3)
-    counts = np.zeros((3, 3))
-    for a, b in zip(s[:-1], s[1:], strict=False):
-        counts[a, b] += 1
+    counts = _pair_counts(s, 3)
     p = counts / counts.sum()
     nz = p[p > 0]
     return float(-np.sum(nz * np.log(nz)))
@@ -459,9 +541,7 @@ def SB_TransitionMatrix_3ac_sumdiagcov(x) -> float:
     if yd.size < 4:
         return np.nan
     s = _coarsegrain_quantile(yd, 3)
-    T = np.zeros((3, 3))
-    for a, b in zip(s[:-1], s[1:], strict=False):
-        T[a, b] += 1
+    T = _pair_counts(s, 3)
     T /= yd.size - 1
     cov = np.cov(T, rowvar=False, ddof=1)
     return float(np.trace(cov))
@@ -480,6 +560,9 @@ def PD_PeriodicityWang_th0_01(x) -> float:
     NEEDS REVIEW: the reference uses a bespoke piecewise-cubic ``splinefit``;
     here a least-squares cubic spline with 3 interior knots is used, so exact
     numerical parity with ``pycatch22`` is not guaranteed.
+
+    The spline is fitted by :func:`_lsq_spline_fit` (pure NumPy), so this
+    feature returns the same value with and without SciPy installed.
     """
     y = _zscore(x)
     n = y.size
@@ -487,41 +570,36 @@ def PD_PeriodicityWang_th0_01(x) -> float:
         return np.nan
     th = 0.01
     t = np.arange(n, dtype=float)
-    y_spline = np.zeros(n)
-    LSQUnivariateSpline = _get_lsq_spline()
-    if LSQUnivariateSpline is not None:
-        try:
-            knots = np.linspace(0, n - 1, 5)[1:-1]  # 3 interior knots
-            y_spline = LSQUnivariateSpline(t, y, knots, k=3)(t)
-        except Exception:
-            y_spline = np.zeros(n)
+    knots = np.linspace(0, n - 1, 5)[1:-1]  # 3 interior knots
+    try:
+        y_spline = _lsq_spline_fit(t, y, knots, k=3)
+    except np.linalg.LinAlgError:  # pragma: no cover - degenerate input
+        y_spline = np.zeros(n)
     y_sub = y - y_spline
 
     ac_max = int(np.ceil(n / 3))
     acf = _acf(y_sub)[:ac_max]
 
-    troughs, peaks = [], []
-    for i in range(1, acf.size - 1):
-        slope_in = acf[i] - acf[i - 1]
-        slope_out = acf[i + 1] - acf[i]
-        if slope_in < 0 and slope_out > 0:
-            troughs.append(i)
-        elif slope_in > 0 and slope_out < 0:
-            peaks.append(i)
+    if acf.size < 3:
+        return 0.0
+    # Turning points from the sign pattern of consecutive first differences:
+    # position i is a trough when slope_in < 0 < slope_out, a peak when
+    # slope_in > 0 > slope_out. Vectorised replacement for the scalar scan.
+    diffs = np.diff(acf)
+    slope_in, slope_out = diffs[:-1], diffs[1:]
+    troughs = np.flatnonzero((slope_in < 0) & (slope_out > 0)) + 1
+    peaks = np.flatnonzero((slope_in > 0) & (slope_out < 0)) + 1
+    if peaks.size == 0 or troughs.size == 0:
+        return 0.0
 
-    out = 0
-    for ip in peaks:
-        prior = [tr for tr in troughs if tr < ip]
-        if not prior:
-            continue
-        it = prior[-1]
-        if acf[ip] - acf[it] < th:
-            continue
-        if acf[ip] < 0:
-            continue
-        out = ip
-        break
-    return float(out)
+    # For each peak, the last trough strictly before it (both index arrays are
+    # already sorted ascending, so one searchsorted replaces the inner scan).
+    prior = np.searchsorted(troughs, peaks, side="left") - 1
+    has_prior = prior >= 0
+    trough_of = troughs[np.where(has_prior, prior, 0)]
+    accepted = has_prior & (acf[peaks] - acf[trough_of] >= th) & (acf[peaks] >= 0.0)
+    hits = np.flatnonzero(accepted)
+    return float(int(peaks[hits[0]])) if hits.size else 0.0
 
 
 def FC_LocalSimple_mean1_tauresrat(x) -> float:
@@ -566,19 +644,38 @@ def _outlier_include(y: np.ndarray, sign: int) -> float:
     if max_val < inc:
         return 0.0
     n_thresh = int(max_val / inc) + 1
-    pct = np.full(n_thresh, np.nan)
-    med_pos = np.full(n_thresh, np.nan)
-    for j in range(n_thresh):
-        thresh = j * inc
-        high = np.flatnonzero(yw >= thresh)
-        pct[j] = 100.0 * high.size / n
-        if high.size > 0:
-            med_pos[j] = np.median(high) / (n / 2.0) - 1.0
-    # keep the (prefix of) thresholds where at least 2% of points remain
+    thresholds = np.arange(n_thresh, dtype=np.float64) * inc
+
+    # `high = flatnonzero(yw >= thresh)` for every threshold, without the scan:
+    # the retained set at threshold t is exactly the `count(t)` largest values,
+    # and ties are all-or-nothing because the test is on the value itself. So
+    # sorting once gives every threshold's index set as a prefix of `order`.
+    ascending = np.sort(yw)
+    counts = n - np.searchsorted(ascending, thresholds, side="left")
+    pct = 100.0 * counts / n
+
+    # keep the thresholds where at least 2% of points remain
     valid = pct > 2.0
     if not valid.any():
         return np.nan
-    return float(np.nanmedian(med_pos[valid]))
+
+    # Only the *valid* thresholds contribute to the final median, and thresholds
+    # that select the same number of points select the same index set, so the
+    # O(n) `flatnonzero` scan runs once per distinct retained count instead of
+    # once per threshold. Both prunings are exact.
+    kept_thresholds = thresholds[valid]
+    _, first_of_count, inverse = np.unique(
+        counts[valid], return_index=True, return_inverse=True
+    )
+    medians = np.fromiter(
+        (np.median(np.flatnonzero(yw >= kept_thresholds[j])) for j in first_of_count),
+        dtype=np.float64,
+        count=first_of_count.size,
+    )
+    # Expand back so every retained threshold still contributes its own entry to
+    # the outer median (deduplicating there would reweight the distribution).
+    med_pos = medians[inverse.ravel()] / (n / 2.0) - 1.0
+    return float(np.nanmedian(med_pos))
 
 
 def DN_OutlierInclude_p_001_mdrmd(x) -> float:
