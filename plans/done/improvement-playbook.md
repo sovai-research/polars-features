@@ -62,7 +62,7 @@ Baselines to keep current (regenerate before each wave):
 > which optional features are available. Each agent: ranked, buildable recommendations
 > with effort + parity/perf evidence. No code changes.
 
-## Wave 2 — Speed, deepened
+## Wave 2 — Speed, deepened  **[PARTIALLY DONE — 2026-09-08, see status below]**
 
 > Spawn 6 parallel agents (measure-first, then implement with parity) to attack the
 > remaining speed hotspots surfaced by Wave 0's ranking. Candidates to investigate and,
@@ -81,7 +81,7 @@ Baselines to keep current (regenerate before each wave):
 > library code and lazy→eager→lazy round-trips; remove where safe. Deliver before/after
 > timings at 0.5M and 2.5M rows for every change.
 
-## Wave 3 — Efficient replacers (correctness-preserving swaps)
+## Wave 3 — Efficient replacers  **[PARTIALLY DONE — 2026-09-08, see status below]**
 
 > Spawn parallel agents to REPLACE remaining heavy or slow implementations with lean,
 > exact equivalents, each behind a parity harness. Targets: (1) any residual scipy call
@@ -93,7 +93,7 @@ Baselines to keep current (regenerate before each wave):
 > assert byte/atol-1e-9 parity after, and add the golden test to the suite. Report a
 > table: replaced | old dep/impl | new impl | parity error | speedup | dep removed?
 
-## Wave 4 — Packaging, CI, and guardrails
+## Wave 4 — Packaging, CI, and guardrails  **[DONE — 2026-09-08]**
 
 > Spawn agents to harden the light-package gains so they can't silently regress.
 > (1) Add a pytest **import-hygiene guard**: a test asserting `import polars_features`
@@ -141,3 +141,115 @@ Baselines to keep current (regenerate before each wave):
 > baselines were asserted for every numeric change; (e) update CHANGELOG + this
 > playbook (tick done items, add newly-discovered levers). Only then commit in logical
 > chunks and push.
+
+---
+
+## Status log — round of 2026-09-08 (Wave 4 + the clean Wave 2/3 wins)
+
+Measured on CPython 3.13 / numpy 2.5 / polars 1.44, single machine, best-of-N.
+Every numeric change was captured as a golden baseline **before** the change
+(`tests/data/perf_parity_golden.json`) and is asserted afterwards by
+`tests/test_perf_parity_vectorization.py`.
+
+### Wave 4 — shipped in full
+
+- [x] **Import-hygiene guard** — `tests/test_import_hygiene.py`. Fresh-subprocess
+      probes assert `import polars_features` (and each feature module
+      individually) pulls none of {scipy, sklearn, pandas, flaml, tqdm, numba,
+      holidays, umap}, that `_deps.py` loaded straight off disk stays
+      third-party free, and that cold import stays under a budget
+      (**measured 85 ms**; budget 300 ms, override
+      `PANELKIT_IMPORT_BUDGET_MS`) plus a machine-independent
+      "overhead over bare polars <= 150 ms" check.
+- [x] **Wheel-is-universal check** — `tests/test_wheel_guardrails.py`
+      (`slow`-marked, skipped without `build`/`hatchling`). Asserts the tag is
+      `py3-none-any`, `Root-Is-Purelib: true`, no `.so`/`.pyd`/`.dylib`/`.dll`,
+      no nested distributions, and only `polars_features/` + `.dist-info` at
+      top level.
+- [x] **Wheel-size budget** — same file. **Measured 0.46 MB**; budget 1.5 MB
+      (`PANELKIT_WHEEL_BUDGET_MB`).
+- [x] **Dependency-drift test** — `tests/test_dependency_drift.py`. Reads
+      `pyproject.toml` with `tomllib` and `_deps._MODULE_TO_EXTRA` dynamically:
+      hard deps are exactly `{numpy, polars}`; every mapping entry and every
+      `require("...")` call site (found by AST scan) resolves to a declared
+      extra; `recommended`/`all` only reference real extras; no `Cargo.toml`.
+- [x] **CI extras matrix** — `.github/workflows/ci.yml`: `[]`, `[recommended]`,
+      `[all]` jobs, each running the guardrails plus the suite
+      (`[all]` advisory because it pulls `cudf-polars-cu12`/`pylance`).
+      Also dropped the dead Rust/maturin steps, added a `package` job that
+      builds and shape-checks the universal wheel, and replaced the broken
+      CodSpeed placeholder with the speed harness.
+      `.github/workflows/release.yml` rewritten from an abi3 wheel matrix to a
+      single `python -m build` + `twine check` job.
+
+### Wave 2/3 — shipped (all parity-asserted)
+
+| change | file | parity | speedup |
+| --- | --- | --- | --- |
+| catch22 `FC_LocalSimple_*` residuals: per-target loop -> sliding-window mean | `catch22.py` | bit-exact | 9.5x @ n=512, 15x @ 2k, **13-86x @ 8k** |
+| catch22 `SB_MotifThree` / `SB_TransitionMatrix`: zip loop -> `bincount` | `catch22.py` | bit-exact | 3.1x @ 512, 13x @ 8k |
+| catch22 `_longest_run`: scalar loop -> run-length encode | `catch22.py` | bit-exact | 1.2x @ 512, 5.5x @ 8k |
+| catch22 `CO_FirstMin_ac` / `CO_f1ecac` / `_first_zero_ac` / `IN_AutoMutualInfoStats` scans -> `flatnonzero` | `catch22.py` | bit-exact | 1.9x @ 512, 3.9x @ 8k |
+| catch22 `PD_PeriodicityWang` peak/trough scan -> diff-sign + `searchsorted` | `catch22.py` | bit-exact | 1.3x @ 512, 1.6x @ 8k |
+| catch22 `DN_OutlierInclude_*`: threshold loop -> sorted counts + dedup | `catch22.py` | bit-exact | 1.5x @ 512, 1.1x @ 32k |
+| **catch22_all overall** | | bit-exact | **1.20x @ 512, 1.41x @ 2k, 1.96x @ 8k** |
+| k-Shape `_distance_matrix`: m*k pairwise FFTs -> m+k batched forwards | `cluster/_kshape.py` | bit-exact | **8.9x / 14.3x / 8.0x / 14.4x** |
+| k-Shape `_extract_shape` alignment: per-member `ncc` -> `_ncc_many` | `cluster/_kshape.py` | bit-exact | part of the fit win |
+| **k-Shape `fit` (5 Lloyd iters) overall** | | bit-exact | **4.0x / 6.0x / 4.1x / 8.9x** |
+| `sample_entropy` / `approximate_entropy`: scipy-optional | `feature_extractors.py`, `_numpy_stats.py` | bit-exact | see note |
+| `CrossSectionalPCA._transform`: per-date polars `select().to_numpy()` -> one conversion + row-index views | `reduce/xs.py` | <= 1e-13 (LAPACK layout noise) | 1.28x / 2.04x / 1.60x |
+
+New helper: `_numpy_stats.chebyshev_neighbour_counts` — an **exact** (integer,
+verified over 60 randomised trials incl. heavy ties) scipy-free replacement for
+`KDTree.query_ball_point(..., p=inf, return_length=True)`.
+
+### Measured-and-rejected / deferred (evidence, not opinion)
+
+1. **"KDTree entropy is O(n^2), a sorted-window replacement is the target"** —
+   *the premise is wrong*. SciPy's k-d tree prunes whole nodes and threads
+   (`workers=-1`); the sorted-window sweep is exact but **slower**: 2.6 -> 20 ms
+   at n=2k, 44 -> 210 ms at n=20k. Shipped as a *fallback* only, with SciPy kept
+   as the fast path, so the feature now works in the bare core (bare-core
+   `tests/test_tsfresh.py` went from 8 failed / 221 passed to **229 passed**).
+   Next lever if the numpy path must get faster: a uniform cell-list (cell size
+   `r`, 3^m neighbour cells) or offline 2-D orthogonal range counting.
+2. **`CrossSectionalPCA` -> batched numpy SVD** — the ~10x win is real (sklearn
+   objects are 61% of `transform`: 1.83 s of 2.98 s at 2.5M rows / 2500 dates)
+   but **cannot hold parity**. sklearn 1.9 picks `covariance_eigh` for these
+   shapes, and the solver choice is both shape- and version-dependent, so the
+   current output is not even stable across sklearn versions. Needs a deliberate
+   product decision + CHANGELOG entry, not a silent perf swap.
+3. **k-Shape `eigh`** — after the FFT batching, `numpy.linalg.eigh` on the
+   (length x length) scatter matrix is **55% of `fit`** (0.52 s of 0.95 s at
+   m=1000, length=512). Only the top eigenvector is needed. Levers: the Gram
+   reformulation (`M = Z^T Z`, eigendecompose the smaller side when
+   `n_members < length`), or `scipy.linalg.eigh(subset_by_index=...)` behind the
+   `scipy` extra. Both change the last digits, so same parity caveat as (2).
+4. **k-Shape NCC via `rfft`/`irfft`** — a further **1.65x** on
+   `_distance_matrix` (the product is Hermitian, so half the spectrum suffices).
+   Max deviation 2.2e-16 and cluster assignments were unchanged in testing, but
+   labels are discrete, so this needs a deliberate tolerance decision.
+5. **`IN_AutoMutualInfoStats` per-lag `np.corrcoef`** — 40 lags x O(n); a
+   vectorised/FFT correlation would change the last digits of `r` and then a
+   discrete first-local-minimum index. Left alone.
+6. **`SC_FluctAnal_*` per-tau `lstsq`** — replacing the SVD-based `lstsq` with a
+   precomputed projection matrix is ~2x on that feature but not bit-exact, and
+   the feature returns a discrete breakpoint ratio. Left alone.
+
+### New P1 finding (correctness, not speed)
+
+`PD_PeriodicityWang_th0_01` **returns a different number depending on whether
+SciPy is installed** — the `LSQUnivariateSpline` detrend silently degrades to a
+zero spline. Measured divergence on the golden bank: 140.0 -> 0.0 (`walk_512`),
+170.0 -> 64.0 (`walk_1024`), 80.0 -> 20.0 (`const_run_300`). Pinned by
+`test_periodicity_wang_depends_on_scipy` so it cannot regress unnoticed. Fix =
+a numpy LSQ cubic B-spline (fixed knots -> design matrix + `lstsq`), which would
+also close the last SciPy hole in `catch22`.
+
+### New harnesses
+
+- `benchmarks/bench_hotspots.py` — ranked per-operation profile of the golden
+  path on a synthetic panel (`--rows`, `--only`); degrades gracefully in the
+  bare core.
+- `benchmarks/show_capabilities.py` — prints which optional modules resolved,
+  driven by `_deps._MODULE_TO_EXTRA`; used by the CI extras matrix.
