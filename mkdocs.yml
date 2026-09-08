@@ -56,6 +56,8 @@ nav:
     - Panel data: concepts/panel-data.md
     - The two-tier API: concepts/two-tier-api.md
     - Leak-safety: concepts/leak-safety.md
+    - Interactions (higher-order structure): concepts/interactions.md
+    - The background-set leak: concepts/attribution-leakage.md
   - Leakage & Correctness: leakage.md
   - User Guide:
     - Feature Engineering: user-guide/features.md
@@ -63,7 +65,12 @@ nav:
     - Labeling: user-guide/labeling.md
     - Feature Selection: user-guide/selection.md
     - Panel ML Models: user-guide/models.md
+    - Feature Attribution: user-guide/attribution.md
+    - Latent Factors: user-guide/factors.md
     - Validation: user-guide/validation.md
+    - Honest Validation: user-guide/honest-validation.md
+    - Econometrics: user-guide/econometrics.md
+    - Econometric Features: user-guide/econ-features.md
     - Preprocessing: user-guide/preprocessing.md
     - Forecasting: user-guide/forecasting.md
     - Seasonality: user-guide/seasonality.md
@@ -90,7 +97,11 @@ nav:
     - reduce: api-reference/reduce.md
     - cluster: api-reference/cluster.md
     - models: api-reference/models.md
+    - explain: api-reference/explain.md
     - cross_validation: api-reference/cross-validation.md
+    - validation: api-reference/validation.md
+    - econ: api-reference/econ.md
+    - econ.features: api-reference/econ-features.md
     - leak verifiers: api-reference/testing.md
     - evaluation: api-reference/evaluation.md
     - metrics: api-reference/metrics.md

@@ -108,12 +108,19 @@ On top of it, PanelKit adds the leak-safe panel layer:
 | Deflated Sharpe ratio, Probability of Backtest Overfitting (PBO) | Shipped (experimental) |
 | Feature selection (`select.mrmr` / `mda` / `mdi`), panel models | Shipped (experimental) |
 | catch22 feature set (clean-room) | Shipped (experimental) |
+| Latent factors (`reduce.HFAFactors` / `PCAFactors` / `ICAFactors`) | Shipped (experimental) |
+| Leak-safe SHAP attribution (`explain.TreeAttributor`, `TimeAwareBackground`) | Shipped (experimental) |
+| Honest validation (`validation`: CPCV, Romano-Wolf, SPA/MCS, bootstraps) | Shipped (experimental) |
+| Time-series conformal (ACI / Conformal-PID / NexCP / CQR) | Shipped (experimental) |
+| Panel econometrics (`econ`: HDFE, CCE/MG/PMG, Fama-MacBeth, IVX, DML) | Shipped (experimental) |
+| Causal econometric features (`econ.features`: unit roots, HAR-RV, EVT, ...) | Shipped (experimental) |
 
 ## Where to next
 
 - **[Installation](./installation.md)** — pip, optional extras, and version notes.
 - **[Quickstart](./quickstart.md)** — a runnable 5-minute tour end to end.
 - **[Leakage & correctness-by-construction](./leakage.md)** — the contracts, in depth.
+- **[Interactions](./concepts/interactions.md)** — higher-order structure in the data (HFA) and in the model (Shapley interactions).
 
 ## License
 

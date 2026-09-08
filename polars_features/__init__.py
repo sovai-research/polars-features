@@ -205,3 +205,27 @@ except ImportError as exc:
     _warn_unavailable("polars_features.cluster", exc)
 else:
     __all__ += ["cluster"]
+
+# --- Feature attribution (leak-safe, panel-aware SHAP) ----------------------
+try:
+    from polars_features import explain as explain
+except ImportError as exc:
+    _warn_unavailable("polars_features.explain", exc)
+else:
+    __all__ += ["explain"]
+
+# --- Honest validation & selection ------------------------------------------
+try:
+    from polars_features import validation as validation
+except ImportError as exc:
+    _warn_unavailable("polars_features.validation", exc)
+else:
+    __all__ += ["validation"]
+
+# --- Panel & time-series econometrics ---------------------------------------
+try:
+    from polars_features import econ as econ
+except ImportError as exc:
+    _warn_unavailable("polars_features.econ", exc)
+else:
+    __all__ += ["econ"]

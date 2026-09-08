@@ -12,6 +12,162 @@ on top — it interoperates with functime and Nixtla rather than replacing them.
 package is currently `polars_features`; the public rename to `panelkit` is planned but not yet
 effective.
 
+## [Unreleased]
+
+Five design plans implemented in one round. Four new capability pillars land
+(`explain`, `validation`, `econ`, factor extraction in `reduce`), two long-standing
+numerical bugs are closed, and the light-core gains from 0.4.0 are locked behind
+CI guardrails. No change to the mandatory footprint: `[project.dependencies]` is
+still exactly `{numpy, polars}`.
+
+### Added — `reduce`: leak-safe latent factor extraction
+
+- `PCAFactors`, `HFAFactors`, `ICAFactors`, `RobustPCAFactors` plus the
+  `pca_factors` / `hfa_factors` / `ica_factors` / `robust_pca_factors` functional
+  cores. All emit `factor_1..r` columns from train-fit, sign-fixed loadings.
+- **HFA** (higher-order multi-cumulant factor analysis), `order=3|4` — eigenanalysis
+  of a cumulant matrix rather than the covariance matrix, recovering weak and
+  Gaussian-masked non-Gaussian factors where PCA fails. Pure NumPy, with a blocked
+  accumulation path (`block_rows=`) bounding peak memory at O(block·n) and a hard row
+  guard. Clean-room from the published equations. `order=4` applies an Isserlis-derived
+  Gaussian correction (`3·tr(S²)S² + 6·S⁴`) — without it the order-4 matrix is a
+  polynomial in the covariance and merely re-finds the masking factor.
+- Shared factor-count selectors `n_factors` / `bai_ng` (Bai–Ng IC_p1, IC_p2) /
+  `eigenvalue_ratio` (Ahn–Horenstein). `n_factors=None` resolves on training rows only.
+
+### Added — `explain`: leak-safe, panel-aware feature attribution
+
+- `TimeAwareBackground` makes the SHAP reference set a fold-bound, past-only
+  (`t' < t`, optional embargo), deterministically sampled, auditable object —
+  closing the background-set leak that every other SHAP library leaves open.
+- `TreeAttributor` (`PanelTransformer`, `panel_safe`/`leakage_safe`) dispatches to the
+  models' own exact native TreeSHAP (XGBoost/LightGBM/CatBoost) and emits
+  `shap_<feature>` columns keyed by `(entity, time)`, or a tidy long frame.
+  `.check_efficiency()` verifies `E[f] + Σφ = f(x)` on the raw margin scale.
+- Panel-native aggregation: `group_shap` (additive, exact) vs `joint_group_shap`
+  (groups as coalition players), and `window_shap` on each entity's own calendar.
+- `attribution_stability` / `background_sensitivity` / `attribution_drift` separate
+  reference-induced oscillation from genuine regime drift.
+- `interaction_values` / `interaction_matrix`: any-order Shapley interactions via
+  `shapiq` interop (`max_order=k`).
+- New optional extra `explain` (`shap`, `shapiq`). The `TreeAttributor` fast path
+  needs neither.
+
+### Added — `validation`: the honest validation & selection layer
+
+- CPCV backtest-path reconstruction, purged walk-forward and conformal-calibration
+  splits, Probabilistic/Deflated Sharpe, PBO, Romano-Wolf stepdown (FWER),
+  Benjamini-Hochberg/Yekutieli (FDR), Diebold-Mariano (HAC + Harvey-Leybourne-Newbold),
+  Hansen's SPA, the Model Confidence Set, CRPS/pinball/interval score/PIT, and
+  moving-block/circular/stationary/wild/sieve bootstraps that never resample across a
+  fold boundary. Pure NumPy + Polars — SPA and MCS are implemented natively rather than
+  wrapped from `arch`, so the fold-boundary guarantee extends to them.
+- `conformal`: time-series conformal prediction — ACI (Gibbs-Candès), Conformal-PID,
+  NexCP and CQR, plus `conformal_calibration_split` so the calibration block is purged
+  and embargoed. Coverage now holds under drift where naive split conformal collapses
+  (0.89 vs 0.52 on a volatility ramp).
+
+### Added — `econ`: panel & time-series econometrics
+
+- **HDFE** — N-way fixed-effect absorption by alternating projections (Gaure/reghdfe)
+  with classical, HC1, one-way and two-way (Cameron-Gelbach-Miller) clustered and
+  Driscoll-Kraay standard errors; matches dense dummy-variable OLS to machine precision.
+  `HDFETransformer` emits leak-controlled partialled-out features.
+- **Heterogeneous panels** — Mean Group, Pesaran CCE-MG/CCEP and Pooled Mean Group,
+  plus LLC / IPS / CIPS panel unit-root tests and the Pesaran CD test. Critical values
+  are simulated from the estimator pipeline itself, not tabulated.
+- **Fama-MacBeth** — per-date cross-sectional regression with Newey-West standard
+  errors; winsorising and standardising are per-date, never global.
+- **Diebold-Yilmaz connectedness** — generalised-FEVD spillover networks over a rolling
+  VAR; total/directional/net connectedness as cross-entity features. Clean-room.
+- **IVX** — predictive-regression inference that stays correctly sized under
+  near-unit-root, endogenous predictors (5.6–7.1% empirical size at nominal 5%, vs
+  8–27% for OLS); the IVX-Wald statistic doubles as a screening score (`IVXSelector`).
+- **Double ML** — cross-fitted partially-linear DML over PanelKit's purged and embargoed
+  splitters, plus post-double-selection LASSO with the rigorous (plug-in) penalty.
+
+### Added — `econ.features`: causal econometric feature generators
+
+- Unit-root battery (ADF/KPSS/PP/DF-GLS/Ng-Perron/Zivot-Andrews with embedded
+  critical-value tables), GPH & local-Whittle long-memory estimators, HAR-RV /
+  bipower / jumps, Nelson-Siegel(-Svensson) curve factors, Amihud/Roll/Amivest
+  liquidity, EVT Hill/POT-GPD VaR-ES, and a causal (trailing-window) seasonal-trend
+  decomposition. A two-sided STL leaks and is deliberately not offered.
+- `StationarityDifferencer`, `AutoFracDiff`, `HARModel`, `NelsonSiegel` and
+  `CausalSeasonalDecomposer` — `PanelTransformer`s that learn on train and freeze.
+- `polars_features._ffd.estimate_ffd_order` — data-driven fractional-differencing
+  order, wiring the long-memory estimators into the existing frac-diff filter.
+
+### Added — the "interactions" theme
+
+- `docs/concepts/interactions.md`: the shared functional-decomposition narrative tying
+  `reduce`/HFA (higher-order structure in the *data*, `order=k`) to `explain`/Shapley
+  interactions (higher-order structure in the *model*, `max_order=k`).
+
+### Added — packaging guardrails
+
+- Import-hygiene, dependency-drift and wheel-shape/size tests
+  (`tests/test_import_hygiene.py`, `test_dependency_drift.py`,
+  `test_wheel_guardrails.py`), plus a CI extras matrix that installs `[]`,
+  `[recommended]` and `[all]` and runs the suite in each. Measured: 85 ms import,
+  0.46 MB wheel.
+- `benchmarks/bench_hotspots.py` (ranked per-operation profile) and
+  `benchmarks/show_capabilities.py` (optional-feature probe).
+- `_numpy_stats.chebyshev_neighbour_counts`: exact, SciPy-free L-inf neighbour counts,
+  so `sample_entropy` / `approximate_entropy` now work on the bare numpy+polars core
+  (SciPy stays the faster backend when installed). Bare-core `test_tsfresh.py` went
+  from 8 failed / 221 passed to 229 passed.
+
+### Fixed
+
+- **frac-diff divergence** (one of two known numerical bugs): `ffd_weights` now rejects
+  `d < 0`, whose binomial weights are not summable and made the truncated fixed-width
+  filter diverge — at `d=-0.5` it ran to the 100 000-term safety cap and nulled every
+  row of a normal-length series. Two further defects found in the same function:
+  `max_width` was checked *after* appending (so `max_width=1` returned two weights),
+  and a legal `d` with an unreachable `threshold` silently returned a 100 000-tap
+  kernel instead of raising. Regression tests carry hand-computed golden weights.
+- **Deflated Sharpe `N`/`V`** (the second known bug): the formula itself was verified
+  correct against Bailey & López de Prado (2014) and pinned with independently computed
+  golden values. The real defect was the `(N, V)` *pairing* in `_reconstruct_paths`,
+  which combined the user's trial count `N` with the variance of one strategy's CPCV
+  path Sharpes as a proxy for `V`. `cross_validate` / `validate.cpcv` now accept
+  `trial_sharpes=`, deriving both from the same sample.
+
+### Changed
+
+- catch22 is 1.2×–2.0× faster (bit-exact): the remaining Python scans in
+  `FC_LocalSimple_*`, `SB_MotifThree`, `SB_TransitionMatrix`, `_longest_run`,
+  `CO_FirstMin_ac`, `CO_f1ecac`, `PD_PeriodicityWang` and `DN_OutlierInclude_*`
+  are vectorised.
+- k-Shape clustering is 4×–9× faster to fit and 8×–14× faster to score (bit-exact):
+  forward FFTs are computed once per series/centroid instead of once per pair.
+- `reduce.CrossSectionalPCA.transform` is 1.3×–2.0× faster (one array conversion
+  instead of one per date).
+- CI/release workflows dropped the dead Rust/maturin steps; releases now build a
+  single universal `py3-none-any` wheel.
+- Removed the dangling `narwhals` -> `interop` row from `_deps._MODULE_TO_EXTRA`
+  (the `interop` extra went away in 0.4.0) and the corresponding docs entry.
+
+### Fixed — catch22 is now SciPy-independent
+
+- `catch22.PD_PeriodicityWang_th0_01` returned *different values* depending on whether
+  SciPy was installed: its `LSQUnivariateSpline` detrend degraded silently to a zero
+  spline on the bare core (140.0 -> 0.0 on a 512-point random walk). The least-squares
+  cubic spline is now fitted in pure NumPy (`catch22._lsq_spline_fit`, a Cox-de Boor
+  B-spline design matrix + `lstsq`), matching SciPy to ~1e-14 over n = 8..2048 and
+  reproducing every SciPy-captured golden value exactly. This closes the last SciPy
+  hole in catch22: all 24 features now compute on numpy + polars alone.
+
+### Deferred from the implemented plans
+
+Every milestone that assumed a compiled extension was dropped, since 0.4.0 ships a
+pure-Python wheel: the native Arrow/Polars TreeSHAP kernel and the sparse
+Möbius/Fourier (SPEX) engine (`explain` M6/M7), the Rust HFA cumulant contraction
+(`reduce` M6), vendoring the `tsecon` crates and its golden-fixture CI harness
+(econometrics M7), and `augurs`-backed MSTL. DCC-GARCH, vine copulas and Bayesian
+VAR/FAVAR remain out of scope by design.
+
 ## [0.4.0] — 2026-09-04
 
 A "light package" release: a numpy + polars core, ~10× faster import, and a

@@ -36,7 +36,11 @@ pip install "polars_features[llm,cafe]"
 - `gpu`: Polars GPU engine via the `cudf-polars` backend (`.collect(engine="gpu")`).
 - `viz`: plotting utilities, powered by [`plotly`](https://plotly.com/python/).
 - `signatures`: path-signature transforms via `iisignature`.
-- `interop`: cross-dataframe interop via [`narwhals`](https://narwhals-dev.github.io/narwhals/).
+- `explain`: feature-attribution fallbacks for `polars_features.explain` --
+  [`shap`](https://shap.readthedocs.io/) for non-booster models and
+  [`shapiq`](https://shapiq.readthedocs.io/) for any-order Shapley interactions.
+  The `TreeAttributor` fast path needs neither: it calls the boosters' own
+  native exact TreeSHAP.
 - `all`: convenience extra unioning every optional feature set above.
 - `dev`: development / CI tooling (ruff, pytest, hypothesis, mypy, pre-commit, maturin).
 
