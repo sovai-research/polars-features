@@ -101,6 +101,7 @@ nav:
     - cross_validation: api-reference/cross-validation.md
     - validation: api-reference/validation.md
     - econ: api-reference/econ.md
+    - detect: api-reference/detect.md
     - econ.features: api-reference/econ-features.md
     - leak verifiers: api-reference/testing.md
     - evaluation: api-reference/evaluation.md

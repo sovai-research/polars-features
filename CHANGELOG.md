@@ -20,6 +20,44 @@ numerical bugs are closed, and the light-core gains from 0.4.0 are locked behind
 CI guardrails. No change to the mandatory footprint: `[project.dependencies]` is
 still exactly `{numpy, polars}`.
 
+### Added — `detect`: causal bubble, regime and changepoint detection
+
+A fifth capability pillar. Every statistic is a function of data up to `t` and
+nothing after it: recomputing a feature with more data appended returns the
+**bitwise identical** value, asserted across fifteen expanding cut points and
+every public entry point.
+
+- **`bsadf_sequence` / `bsadf_panel`** — the backward sup-ADF (Phillips, Shi &
+  Yu 2015). Built on a prefix-sum sufficient-statistic engine (`cumulative_moments`,
+  `window_adf`): every one of the `~T²/2` nested windows costs `O(1)` to assemble,
+  and `SSR = s − β̂'b` removes the residual pass entirely. `T = 1000` exhaustive
+  (452,676 windows) in **~0.02 s of pure NumPy**, against 0.78 s for the fastest
+  published C++ implementation, which is still `O(T³)` because it forms residuals
+  in its inner loop. Agreement with per-window OLS: 1e-14.
+- **`mc_table`** — one-pass nested critical values. On a driftless null the BSADF
+  sequence is itself point-in-time, so paths nest and one simulation yields `cv[t]`
+  for every `t`; draws are time-major so a wider table slices bitwise to a narrower
+  one. Reproduces the published finite-sample 95% GSADF value at `T = 400`,
+  `r0 = 0.10` as **2.2197**. A shipped fixed-point table serves the default call in
+  0.4 ms, fingerprint-guarded against kernel drift.
+  `kurozumi_boundary` and `training_max_cv` simulate nothing at all.
+- **`focus`** — functional-pruning CUSUM: provably equivalent to running Page's
+  CUSUM at every magnitude and every window length at once, no tuning parameter,
+  `O(log n)` amortised. Exact against brute-force GLR (0.0), 100k points in 0.075 s.
+- **`page_cusum`** in closed form (Lindley's recursion is a reflection, so it is two
+  cumulative aggregations — `page_cusum_expr` gives the Polars expression),
+  `shiryaev_roberts` in log space, `hb_cusum` with an analytic Chu–Stinchcombe–White
+  boundary, `end_of_sample_S`, and one-sided `spot_variance` / `volatility_rescale`.
+- **`breadth`, `residualise`, `panel_features`** — cross-sectional aggregation by
+  participation rather than by mean, and backward-looking factor residualisation
+  with betas frozen at `t`.
+
+Deliberately refused: full-sample `GSADF` as a per-row feature, and episode peak /
+end / duration. `min_window` is a required absolute integer — the conventional
+`⌊T(0.01 + 1.8/√T)⌋` rule revises 41.2% of already-published cells when the sample
+grows. No bootstrap critical values ship, because the standard wild bootstrap fits
+its null on the whole sample.
+
 ### Added — `reduce`: leak-safe latent factor extraction
 
 - `PCAFactors`, `HFAFactors`, `ICAFactors`, `RobustPCAFactors` plus the
