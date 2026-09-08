@@ -34,9 +34,10 @@ _MODULE_TO_EXTRA: dict[str, str] = {
     "openai": "llm",
     "anthropic": "llm",
     "tiktoken": "llm",
-    "narwhals": "interop",
     "iisignature": "signatures",
     "numba": "fast",
+    "shapiq": "explain",
+    "shap": "explain",
 }
 
 #: PyPI distribution name (for the pip hint). The import package is `polars_features`
@@ -44,7 +45,9 @@ _MODULE_TO_EXTRA: dict[str, str] = {
 _DIST_NAME = "polars-features"
 
 
-def require(module: str, *, extra: str | None = None, feature: str | None = None) -> ModuleType:
+def require(
+    module: str, *, extra: str | None = None, feature: str | None = None
+) -> ModuleType:
     """Import and return an optional dependency, or raise a helpful error.
 
     Parameters
