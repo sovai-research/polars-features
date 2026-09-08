@@ -233,7 +233,9 @@ def test_projection_importance_shape_and_determinism():
         assert imp.columns == ["feature", "importance", "importance_percentile"]
         assert imp.height == 6
         imp2 = projection_importance(df, method=method, entity="id", time="t")
-        assert imp.get_column("feature").to_list() == imp2.get_column("feature").to_list()
+        assert (
+            imp.get_column("feature").to_list() == imp2.get_column("feature").to_list()
+        )
 
 
 def test_select_top_by_k_and_variability():

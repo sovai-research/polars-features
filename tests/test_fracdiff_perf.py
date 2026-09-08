@@ -135,7 +135,10 @@ def test_kernel_longer_than_series_returns_partial_not_all_null() -> None:
     assert weights.shape[0] > n
     out = (
         df.with_columns(
-            pl.col("px").pipe(frac_diff_expr, weights=weights).over("entity").alias("fd")
+            pl.col("px")
+            .pipe(frac_diff_expr, weights=weights)
+            .over("entity")
+            .alias("fd")
         )
         .get_column("fd")
         .to_numpy()
@@ -159,16 +162,20 @@ def test_perf_half_million_rows_is_fast() -> None:
     # Warm any import/JIT costs, then time a single full evaluation.
     _ = _panel_out(df.head(2000), 0.4, DEFAULT_THRESHOLD)
     t0 = time.perf_counter()
-    out = df.lazy().with_columns(
-        pl.col("px").panel.frac_diff(0.4).over("entity").alias("fd")
-    ).collect()
+    out = (
+        df.lazy()
+        .with_columns(pl.col("px").panel.frac_diff(0.4).over("entity").alias("fd"))
+        .collect()
+    )
     elapsed = time.perf_counter() - t0
 
     assert out.get_column("fd").is_not_null().sum() > 0
     # The old sum_horizontal path cost ~2.5s here (and returned all-null at the
     # old default). Generous bound to stay non-flaky on shared CI while still
     # catching an O(n*width) expression-tree regression.
-    assert elapsed < 1.5, f"frac_diff on 0.5M rows took {elapsed:.3f}s (expected < 1.5s)"
+    assert elapsed < 1.5, (
+        f"frac_diff on 0.5M rows took {elapsed:.3f}s (expected < 1.5s)"
+    )
 
 
 # --------------------------------------------------------------------------- #

@@ -81,7 +81,9 @@ def _ts_expr_out(df: pl.DataFrame, d: float, thr: float) -> np.ndarray:
 
 def _fracdiff_class_out(df: pl.DataFrame, d: float, thr: float) -> np.ndarray:
     panel = PanelFrame(df, entity="entity", time="time").sort_panel()
-    out = FracDiff(columns=["px"], d=d, threshold=thr, suffix="_fd").fit_transform(panel)
+    out = FracDiff(columns=["px"], d=d, threshold=thr, suffix="_fd").fit_transform(
+        panel
+    )
     return out.lazy().collect().get_column("px_fd").to_numpy()
 
 
@@ -152,9 +154,7 @@ def test_per_entity_causality_future_rows_do_not_change_past(d: float) -> None:
         # of the extended frame (both sorted entity, time; A sorts first).
         base_a = base[:200]
         ext_a = ext[:200]
-        np.testing.assert_allclose(
-            base_a, ext_a, atol=1e-9, rtol=0.0, equal_nan=True
-        )
+        np.testing.assert_allclose(base_a, ext_a, atol=1e-9, rtol=0.0, equal_nan=True)
 
 
 def test_weight_recursion_reference_values() -> None:

@@ -155,19 +155,25 @@ def run(n_entities: int, n_time: int) -> None:
     rows = n_entities * n_time
     plf, pdf = make_panel(n_entities, n_time)
     print(f"\n### Panel: {n_entities:,} entities x {n_time:,} steps = {rows:,} rows")
-    print(f"{'workload':<34}{'pandas (s)':>12}{'PanelKit (s)':>14}{'speedup':>10}   check")
+    print(
+        f"{'workload':<34}{'pandas (s)':>12}{'PanelKit (s)':>14}{'speedup':>10}   check"
+    )
 
     # W1
     t_pd, r_pd = best_of(lambda: w1_pd(pdf))
     t_pk, r_pk = best_of(lambda: w1_pk(plf))
     chk = _agree(r_pd["z"].to_numpy(), r_pk["z"].to_numpy(), "z")
-    print(f"{'1. rolling z-score / entity':<34}{t_pd:>12.3f}{t_pk:>14.3f}{t_pd / t_pk:>9.1f}x   {chk}")
+    print(
+        f"{'1. rolling z-score / entity':<34}{t_pd:>12.3f}{t_pk:>14.3f}{t_pd / t_pk:>9.1f}x   {chk}"
+    )
 
     # W2
     t_pd, r_pd = best_of(lambda: w2_pd(pdf))
     t_pk, r_pk = best_of(lambda: w2_pk(plf))
     chk = _agree(r_pd["xs_rank"].to_numpy(), r_pk["xs_rank"].to_numpy(), "rank")
-    print(f"{'2. cross-sectional rank / date':<34}{t_pd:>12.3f}{t_pk:>14.3f}{t_pd / t_pk:>9.1f}x   {chk}")
+    print(
+        f"{'2. cross-sectional rank / date':<34}{t_pd:>12.3f}{t_pk:>14.3f}{t_pd / t_pk:>9.1f}x   {chk}"
+    )
 
     # W3
     t_pd, r_pd = best_of(lambda: w3_pd(pdf), repeat=2)
@@ -179,11 +185,13 @@ def run(n_entities: int, n_time: int) -> None:
         r_pk_pd["longest_streak_above_mean"].to_numpy(),
         "streak",
     )
-    print(f"{'3. 10 features / entity (bulk)':<34}{t_pd:>12.3f}{t_pk:>14.3f}{t_pd / t_pk:>9.1f}x   {chk}")
+    print(
+        f"{'3. 10 features / entity (bulk)':<34}{t_pd:>12.3f}{t_pk:>14.3f}{t_pd / t_pk:>9.1f}x   {chk}"
+    )
 
 
 if __name__ == "__main__":
     print("PanelKit vs pandas — panel feature generation")
     print(f"polars {pl.__version__} | pandas {pd.__version__}")
-    run(2_000, 260)     # ~0.5M rows  (2y daily on 2k names)
-    run(5_000, 500)     # ~2.5M rows
+    run(2_000, 260)  # ~0.5M rows  (2y daily on 2k names)
+    run(5_000, 500)  # ~2.5M rows

@@ -843,7 +843,9 @@ def boxcox(method: str = "mle"):
 @transformer
 def yeojohnson(brack: tuple = (-2, 2)):
     def transform(X: pl.LazyFrame) -> dict:
-        yeojohnson_normmax = require("scipy.stats", feature="yeojohnson").yeojohnson_normmax
+        yeojohnson_normmax = require(
+            "scipy.stats", feature="yeojohnson"
+        ).yeojohnson_normmax
         idx_cols = X.columns[:2]
         entity_col, time_col = idx_cols
         cols = X.select(PL_NUMERIC_COLS(entity_col, time_col)).columns
@@ -1104,13 +1106,9 @@ def deseasonalize_fourier(sp: int, K: int, robust: bool = False):
     """
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
-        linear_model = require(
-            "sklearn.linear_model", feature="deseasonalize_fourier"
-        )
+        linear_model = require("sklearn.linear_model", feature="deseasonalize_fourier")
         regressor_cls = (
-            linear_model.LinearRegression
-            if robust
-            else linear_model.TheilSenRegressor
+            linear_model.LinearRegression if robust else linear_model.TheilSenRegressor
         )
         X = X.collect()  # Not lazy
         if X.shape[1] > 3:

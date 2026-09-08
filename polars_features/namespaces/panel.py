@@ -203,9 +203,7 @@ class PanelExprNamespace:
     def __init__(self, expr: pl.Expr) -> None:
         self._expr = expr
 
-    def frac_diff(
-        self, d: float, *, threshold: float = DEFAULT_THRESHOLD
-    ) -> pl.Expr:
+    def frac_diff(self, d: float, *, threshold: float = DEFAULT_THRESHOLD) -> pl.Expr:
         """Fixed-width fractional differencing (causal).
 
         Applies a fractional-difference filter of order ``d`` using a truncated,

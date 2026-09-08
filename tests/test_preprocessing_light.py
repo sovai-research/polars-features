@@ -63,9 +63,7 @@ def test_import_does_not_pull_cloudpickle() -> None:
         "assert 'cloudpickle' not in sys.modules, 'cloudpickle eagerly imported'; "
         "print('ok')"
     )
-    proc = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True
-    )
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert proc.returncode == 0, proc.stderr
 
 

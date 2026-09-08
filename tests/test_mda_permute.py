@@ -73,9 +73,7 @@ def test_global_shuffle_breaks_group_multiset():
     groups = np.repeat([0, 1, 2], 20)
     # Each group's values live in a disjoint band so a cross-group swap is
     # detectable: group g holds values in [100*g, 100*g + 20).
-    values = np.concatenate(
-        [np.arange(20) + 100 * g for g in range(3)]
-    ).astype(float)
+    values = np.concatenate([np.arange(20) + 100 * g for g in range(3)]).astype(float)
 
     global_shuffled = _permute_within(values, None, rng)
 
@@ -154,7 +152,15 @@ def test_mda_rejects_bad_permute_within():
     df = _synthetic_panel(seed=6)
     cv = PurgedKFold(n_splits=3, horizon=1, embargo=1)
     try:
-        mda(LinearRegression(), df, "y", cv, permute_within="nope", entity="id", time="t")
+        mda(
+            LinearRegression(),
+            df,
+            "y",
+            cv,
+            permute_within="nope",
+            entity="id",
+            time="t",
+        )
     except ValueError as exc:
         assert "permute_within" in str(exc)
     else:  # pragma: no cover - the call must raise

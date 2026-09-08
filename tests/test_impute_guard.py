@@ -70,11 +70,6 @@ def test_leaky_still_produces_output_when_acknowledged() -> None:
     # bfill fills backward: A -> [1, 4, 4, 4]; the leak is real, which is why it
     # is gated, but the operation itself must remain functional.
     transformer = impute("bfill", allow_leaky=True)
-    out = (
-        _panel_with_gaps()
-        .pipe(transformer)
-        .collect()
-        .sort("entity", "time")
-    )
+    out = _panel_with_gaps().pipe(transformer).collect().sort("entity", "time")
     a = out.filter(pl.col("entity") == "A").get_column("px").to_list()
     assert a[:2] == [1.0, 4.0]  # the null at t=1 was filled from the future (t=3)

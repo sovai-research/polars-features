@@ -163,9 +163,7 @@ def select_top(
         return names[:k]
     if variability is not None:
         if not 0.0 < variability <= 1.0:
-            raise ValueError(
-                f"`variability` must be in (0, 1], got {variability!r}."
-            )
+            raise ValueError(f"`variability` must be in (0, 1], got {variability!r}.")
         imp = ranked.get_column(importance_col).to_numpy().astype(float)
         total = float(imp.sum())
         if total <= 0.0:
@@ -249,8 +247,7 @@ def pfa(
         raise ValueError(f"`k` must be a positive integer, got {k!r}.")
     if k > len(feats):
         raise ValueError(
-            f"`k`={k} exceeds the number of candidate features "
-            f"({len(feats)}: {feats})."
+            f"`k`={k} exceeds the number of candidate features ({len(feats)}: {feats})."
         )
 
     mat = _impute_column_mean(_feature_matrix(panel, feats))
@@ -325,8 +322,7 @@ def variance(
         raise ValueError(f"`k` must be a positive integer, got {k!r}.")
     if k > len(feats):
         raise ValueError(
-            f"`k`={k} exceeds the number of candidate features "
-            f"({len(feats)}: {feats})."
+            f"`k`={k} exceeds the number of candidate features ({len(feats)}: {feats})."
         )
     var_row = (
         panel.lazy().select([pl.col(f).var().alias(f) for f in feats]).collect().row(0)
@@ -463,7 +459,9 @@ def projection_importance(
             SparseRandomProjection,
         )
 
-        cls = GaussianRandomProjection if method == "gaussian" else SparseRandomProjection
+        cls = (
+            GaussianRandomProjection if method == "gaussian" else SparseRandomProjection
+        )
         proj = cls(n_components=min(nc, n_features), random_state=random_state).fit(mat)
         comp = proj.components_  # (n_components, n_features), possibly sparse
         if hasattr(comp, "power"):  # scipy sparse (SparseRandomProjection)
@@ -484,7 +482,7 @@ def projection_importance(
 
         nc_svd = max(1, min(nc, n_features - 1)) if n_features > 1 else 1
         proj = TruncatedSVD(n_components=nc_svd, random_state=random_state).fit(mat)
-        energy = np.sum(proj.components_ ** 2, axis=0)
+        energy = np.sum(proj.components_**2, axis=0)
 
     energy = np.asarray(energy, dtype=float)
     out = pl.DataFrame(
