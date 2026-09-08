@@ -5,8 +5,8 @@ from typing import Literal
 
 import polars as pl
 import polars.selectors as cs
-from scipy.stats import norm, normaltest
 
+from polars_features._numpy_stats import norm_ppf, normaltest_stat
 from polars_features.base.metric import METRIC_TYPE
 from polars_features.metrics import (
     mae,
@@ -80,7 +80,7 @@ def acf_confint_formula(acf: pl.Expr, length: pl.Expr, ppf: float) -> pl.Expr:
 
 def acf(X: pl.DataFrame, max_lags: int, alpha: float = 0.05) -> pl.DataFrame:
     entity_col, _, target_col = X.columns
-    ppf = norm.ppf(1 - alpha / 2.0)
+    ppf = norm_ppf(1 - alpha / 2.0)
     result = (
         X.lazy()
         # Defensive downcast and demean
@@ -175,7 +175,7 @@ def normality_test(X: pl.DataFrame) -> pl.DataFrame:
     results = X.group_by(entity_col).agg(
         pl.col(target_col)
         .map_batches(
-            lambda s: pl.Series([normaltest(s.to_numpy())[0]]),
+            lambda s: pl.Series([normaltest_stat(s.to_numpy())]),
             return_dtype=pl.Float64,
         )
         .alias("normal_test")

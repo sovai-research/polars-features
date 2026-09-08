@@ -7,8 +7,8 @@ from functools import partial
 from typing import Any, Literal
 
 import polars as pl
-from flaml import tune
 
+from polars_features._deps import require
 from polars_features.base.forecaster import (
     FORECAST_STRATEGIES,
     SUPPORTED_FREQ,
@@ -190,6 +190,7 @@ class auto_lightgbm(AutoForecaster):
 
     @property
     def default_search_space(self):
+        tune = require("flaml.tune", feature="AutoML forecasters")
         max_depth = self.kwargs.get("max_depth", 0)
         return {
             "reg_alpha": tune.loguniform(0.001, 20.0),
@@ -229,6 +230,7 @@ class auto_knn(AutoForecaster):
 
     @property
     def default_search_space(self):
+        tune = require("flaml.tune", feature="AutoML forecasters")
         return {"leaf_size": tune.choice([30, 60, 120, 400])}
 
     @property
@@ -253,6 +255,7 @@ class auto_lasso(AutoForecaster):
 
     @property
     def default_search_space(self):
+        tune = require("flaml.tune", feature="AutoML forecasters")
         return {
             "alpha": tune.loguniform(0.001, 20.0),
             "fit_intercept": tune.choice([True, False]),
@@ -272,6 +275,7 @@ class auto_ridge(AutoForecaster):
 
     @property
     def default_search_space(self):
+        tune = require("flaml.tune", feature="AutoML forecasters")
         return {
             "alpha": tune.loguniform(0.001, 20.0),
             "fit_intercept": tune.choice([True, False]),
@@ -291,6 +295,7 @@ class auto_elastic_net(AutoForecaster):
 
     @property
     def default_search_space(self):
+        tune = require("flaml.tune", feature="AutoML forecasters")
         return {
             "alpha": tune.loguniform(0.001, 20.0),
             "l1_ratio": tune.uniform(0, 1.0),

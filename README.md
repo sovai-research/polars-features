@@ -2,9 +2,9 @@
 
 # PanelKit
 
-**Leak-safe, Rust-fast feature engineering and ML for panel data, built on Polars.**
+**Leak-safe, fast feature engineering and ML for panel data, built on Polars.**
 
-*Built on the foundations of [functime](https://github.com/functime-org/functime) (no longer maintained). Panel-native data science in Rust + Polars: transform → extract → label → select → model → validate, with no lookahead, ever.*
+*Built on the foundations of [functime](https://github.com/functime-org/functime). Panel-native data science in Polars: transform → extract → label → select → model → validate, with no lookahead, ever.*
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 [![Polars](https://img.shields.io/badge/built%20on-Polars-CD792C.svg)](https://pola.rs/)
@@ -25,7 +25,7 @@ PanelKit is a feature-engineering and machine-learning toolkit for **panel data*
 - **Panel/cross-section as a first-class object** — the panel (entity × time) is the unit of work, not a bag of rows.
 - **Correct by construction** — operations are panel-aware and leak-safe. No lookahead, ever.
 
-> **Heritage.** PanelKit is built on the foundations of [**functime**](https://github.com/functime-org/functime), an excellent but now-unmaintained Polars-native time-series library (Apache-2.0). We retain its license, credit it prominently, and are extending it into a maintained, panel-first platform. See [`NOTICE`](./NOTICE).
+> **Heritage.** PanelKit is built on the foundations of [**functime**](https://github.com/functime-org/functime), an excellent Polars-native time-series library (Apache-2.0). functime is actively maintained (v1.0.0, May 2026); PanelKit reuses and credits its feature-extraction and forecasting engine, retains its license, and adds a panel-first, leak-safe feature-engineering / labeling / validation layer on top. See [`NOTICE`](./NOTICE).
 
 ## Installation
 
@@ -39,19 +39,19 @@ pip install polars_features
 > import polars_features  # PanelKit
 > ```
 
-Optional extras (gradient-boosting backends, LLM analysis) carried over from functime:
+Optional extras (LLM analysis, CAFE imputation, GPU, plotting, path signatures):
 
 ```bash
-pip install "polars_features[lgb,xgb,cat,llm]"
+pip install "polars_features[llm,cafe]"   # or [all] for everything
 ```
 
 ## 60-second quickstart
 
-> **Status:** the example below shows the **target ergonomics** for PanelKit's panel API. The high-level `PanelFrame` / `Pipeline` / `triple_barrier` / `validate.cpcv` surface is **roadmap (coming soon)** — see [What's shipped today](#whats-shipped-today) for the functime-derived API you can run right now.
+> **Status:** the panel core — `PanelFrame`, the leak-safe `Pipeline`, `PurgedKFold` / `CombinatorialPurgedCV`, the de Prado overfitting metrics, and the `.panel` / `.xs` namespaces — is **shipped (experimental)** today. Labeling (`triple_barrier`), bulk `extract_features`, CAFE imputation, catch22, the `assert_no_lookahead` verifier, and the `cross_validate` / `validate` CPCV runner are **landing in this release**. The exact call signatures below (e.g. `pk.transform.winsorize`, `pk.select.mrmr`, `pk.models.lgbm_classifier`) show the target ergonomics and may still shift — see [What's shipped today](#whats-shipped-today).
 
 ```python
 import polars as pl
-import polars_features as pk  # roadmap API (coming soon)
+import polars_features as pk  # panel core shipped (experimental)
 
 # A panel: many entities (e.g. tickers) observed over time.
 prices = pl.read_parquet("prices.parquet")  # columns: ticker, date, close, volume, ...
@@ -126,12 +126,20 @@ scores = mase(y_true=y_test, y_pred=y_pred, y_train=y_train)
 | Forecasting (linear, GBM, conformal, censored) | Shipped (from functime) |
 | Preprocessing, seasonality, cross-validation, metrics | Shipped (from functime) |
 | LLM forecast analysis | Shipped (from functime) |
-| Modern packaging, CI, wheels (Phase 0) | In progress |
-| `PanelFrame` panel/cross-section object | Roadmap |
-| Leak-safe `Pipeline` + `panel_safe` / `leakage_safe` contracts | Roadmap |
-| Labeling (`triple_barrier`), CPCV validation | Roadmap |
-| Module taxonomy (`transform`, `interact`, `map`, `extract`, `select`, `synthesize`, `compare`, `label`, `signal_eval`, `models`, `model_selection`, `neutralize`) | Roadmap |
-| catch22 (clean-room from Lubba et al. 2019, Apache-2.0) | Roadmap |
+| Modern packaging, CI, wheels (Phase 0) | Shipped |
+| `PanelFrame` panel/cross-section object | Shipped (experimental) |
+| Leak-safe `Pipeline` + `panel_safe` / `leakage_safe` contracts | Shipped (experimental) |
+| `.panel` / `.xs` expression + frame namespaces | Shipped (experimental) |
+| `PurgedKFold`, `CombinatorialPurgedCV` (CPCV) splitters | Shipped (experimental) |
+| Deflated Sharpe ratio, Probability of Backtest Overfitting (PBO) | Shipped (experimental) |
+| CAFE imputation (`cafe_impute` / `CafeImputer`) | Landing this release |
+| Bulk feature extraction (`extract_features`) | Landing this release |
+| Cross-sectional `.xs` ops | Landing this release |
+| Labeling: triple-barrier (`triple_barrier`) | Landing this release |
+| Leakage verifier (`assert_no_lookahead`) | Landing this release |
+| CPCV runner (`cross_validate` / `validate` / `CVReport`) | Landing this release |
+| catch22 (clean-room from Lubba et al. 2019, Apache-2.0) | Landing this release |
+| Module taxonomy (`transform`, `interact`, `map`, `extract`, `select`, `synthesize`, `compare`, `label`, `signal_eval`, `models`, `model_selection`, `neutralize`) | In progress |
 
 See [`CHANGELOG.md`](./CHANGELOG.md) and the docs for the full roadmap.
 
@@ -139,6 +147,7 @@ See [`CHANGELOG.md`](./CHANGELOG.md) and the docs for the full roadmap.
 
 PanelKit is opinionated about **panel-native correctness and ML workflow**, and deliberately *depends on* the ecosystem rather than competing with it:
 
+- **`functime`** — PanelKit is built on functime's Polars-native feature-extraction and forecasting engine, and functime is actively maintained (v1.0.0, May 2026). We reuse and credit it under Apache-2.0 and add the panel object, leakage safety, labeling, and validation on top — we interoperate with functime, we don't replace it.
 - **`polars-ds` / `polars_ta`** — we build on and recommend these for general Polars-native data-science and technical-analysis primitives; PanelKit focuses on the panel object, leakage safety, labeling, and validation that sit *above* them.
 - **Nixtla (`statsforecast`, `mlforecast`, ...)** — Nixtla owns forecasting; PanelKit's center of gravity is leak-safe **feature engineering, labeling, selection, and cross-sectional ML** for panels. We interoperate, we don't reinvent forecasting.
 - **`tsfresh` / `pycatch22`** — PanelKit's extractors are Polars-native and far faster; catch22 features are being clean-room reimplemented from the paper (not vendored from GPL `pycatch22`).
@@ -154,3 +163,5 @@ PanelKit is opinionated about **panel-native correctness and ML workflow**, and 
 ## License
 
 PanelKit is distributed under the **Apache License 2.0**, retained from functime. functime is credited as the upstream this work is derived from — see [`NOTICE`](./NOTICE) and [`LICENSE`](./LICENSE).
+
+CAFE imputation (`cafe_impute` / `CafeImputer`) is powered by [`cafe-impute`](https://pypi.org/project/cafe-impute/) (MIT, Sov.ai), an optional dependency installed via the `cafe` extra.

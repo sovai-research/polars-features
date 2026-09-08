@@ -1,14 +1,11 @@
 [build-system]
-requires = ["maturin>=1.3.2,<2"]
-build-backend = "maturin"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "polars_features"
-# NOTE: Pinned for now. maturin can later read the version from Cargo.toml
-# (`version = "..."` under [tool.maturin]) or derive it from git tags at
-# release time -- that dynamic-versioning setup is handled elsewhere.
-version = "0.1.0"
-description = "Leak-safe, Rust-fast feature engineering and ML for panel data, built on Polars."
+version = "0.4.0"
+description = "Leak-safe, fast feature engineering and ML for panel data, Polars-native and pure-Python."
 requires-python = ">=3.10"
 authors = [{ name = "Sov.ai", email = "research@sov.ai" }]
 readme = "README.md"
@@ -28,19 +25,18 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
-  "Programming Language :: Rust",
   "Intended Audience :: Financial and Insurance Industry",
   "Typing :: Typed",
 ]
+# Light core: the mandatory footprint is numpy + polars only. Everything heavier
+# (scikit-learn, scipy, flaml, holidays, tqdm, boosters, plotting, LLM, ...) is an
+# optional extra below, imported lazily at first use via
+# `polars_features._deps.require`, which raises an actionable
+# `pip install 'polars-features[<extra>]'` hint when it is missing. The
+# `recommended` extra restores the old batteries-included experience.
 dependencies = [
-  "cloudpickle",
-  "flaml>=2.0.2",
-  "holidays",
   "numpy",
   "polars>=1.0.0",
-  "scikit-learn>=1.2.2",
-  "scipy",
-  "tqdm",
 ]
 
 [project.urls]
@@ -50,29 +46,61 @@ Documentation = "https://github.com/sovai-research/polars-features"
 Changelog = "https://github.com/sovai-research/polars-features/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+# Extra names below intentionally mirror `polars_features._deps._MODULE_TO_EXTRA`
+# so the `require(...)` install hints ("pip install 'polars-features[<extra>]'")
+# always resolve to a real extra.
+
+# --- classical ML: sklearn-backed estimators, selection, reduction, clustering.
+# Everything in models/select/reduce/cluster imports sklearn lazily. ---
+ml = ["scikit-learn>=1.2.2"]
+# --- scientific kernels used by feature_extractors/catch22/evaluation/metrics. ---
+scipy = ["scipy"]
+# --- progress bars (forecasting loops); code degrades to a no-op without it. ---
+progress = ["tqdm"]
+# --- seasonality calendar/holiday effects (fourier terms stay dependency-free). ---
+seasonality = ["holidays"]
+# --- legacy autoregressive forecasting (functime-derived): FLAML `tune` for HPO. ---
+forecasting = ["flaml>=2.0.2", "tqdm"]
+# --- FLAML AutoML path (flaml_lightgbm): needs flaml[automl] + a booster. ---
+automl = ["flaml[automl]>=2.0.2", "lightgbm"]
+# --- gradient-boosting back-ends (each optional, additive) for forecasting/models. ---
+lightgbm = ["lightgbm"]
+catboost = ["catboost"]
+xgboost = ["xgboost"]
+# --- approximate-nearest-neighbor reduction (forecasting.lance -> `import lance`). ---
+ann = ["pylance"]
+# --- optional JIT acceleration for the pure-Python CUSUM change-point kernel. ---
+fast = ["numba"]
 # LLM-assisted features. The current code targets the OpenAI SDK; anthropic is
 # included as the recommended provider going forward.
 llm = ["openai", "anthropic", "tiktoken", "tenacity"]
 # GPU acceleration. Polars exposes its GPU engine via the collect engine
 # (`.collect(engine="gpu")`), which pulls in the cudf-polars backend.
 gpu = ["cudf-polars-cu12"]
-# Path-signature transforms. NOTE: signatory / iisignature licenses must be
-# verified before enabling these as a hard dependency in any distribution.
-signatures = ["iisignature"]
 # Plotting utilities (see polars_features/plotting.py -> plotly).
 viz = ["plotly"]
-# Cross-dataframe interop.
-interop = ["narwhals"]
-# Convenience extra unioning all optional feature sets above.
+# CAFE imputation backend (cafe_impute / CafeImputer). MIT, Sov.ai.
+cafe = ["cafe-impute>=0.1"]
+# Non-linear dimensionality reduction (reduce.PanelUMAP). PCA/SVD/FA/NMF use the
+# `ml` extra's scikit-learn; only UMAP needs this extra.
+dimreduce = ["umap-learn>=0.5"]
+# Path-signature transforms. RESERVED / UNUSED: no code imports `iisignature`
+# yet, and signatory / iisignature licenses must be verified before enabling
+# this as a hard dependency. Kept only because `_deps` maps it to this name.
+signatures = ["iisignature"]
+# --- feature attribution (polars_features.explain). The v1 TreeAttributor path
+# uses the boosters' own native exact TreeSHAP and needs nothing here; `shap`
+# provides the sklearn/interventional fallback and `shapiq` the any-order
+# Shapley interaction indices. ---
+explain = ["shap>=0.44", "shapiq>=1.0"]
+# Batteries-included bundle: the common heavy deps that reproduce the old
+# effective feature set (minus GPU / niche back-ends). Restores the pre-slim
+# experience for users who want `pip install` to "just work".
+recommended = ["polars_features[ml,scipy,seasonality,cafe]"]
+# The kitchen sink: every real optional feature set (self-referential extras
+# require pip>=21.2). Excludes the reserved/unused `signatures` extra.
 all = [
-  "openai",
-  "anthropic",
-  "tiktoken",
-  "tenacity",
-  "cudf-polars-cu12",
-  "iisignature",
-  "plotly",
-  "narwhals",
+  "polars_features[ml,scipy,progress,seasonality,forecasting,automl,lightgbm,catboost,xgboost,ann,fast,llm,gpu,viz,cafe,dimreduce,explain]",
 ]
 # Development / CI tooling.
 dev = [
@@ -84,12 +112,12 @@ dev = [
   "maturin>=1.3.2,<2",
 ]
 
-[tool.maturin]
-module-name = "polars_features._polars_features_rust"
-features = ["pyo3/extension-module"]
-exclude = ["docs/**", "data/**", "tests/**"]
-# Ship the typing marker so downstream type checkers treat the package as typed.
-include = ["polars_features/py.typed"]
+[tool.hatch.build.targets.wheel]
+# Pure-Python distribution: one universal py3-none-any wheel, no compiler needed.
+packages = ["polars_features"]
+
+[tool.hatch.build.targets.sdist]
+include = ["polars_features", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md"]
 
 [tool.ruff]
 line-length = 88
@@ -136,9 +164,7 @@ warn_unused_ignores = true
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# The compiled Rust extension module has no stubs.
 module = [
-  "polars_features._polars_features_rust",
   "polars_features._plotting",
 ]
 ignore_missing_imports = true

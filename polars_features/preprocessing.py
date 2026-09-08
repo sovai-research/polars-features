@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+import pickle
+import warnings
 from collections.abc import Mapping
 from typing import Any, Literal
 
-import cloudpickle
 import numpy as np
 import polars as pl
 import polars.selectors as cs
-from scipy import optimize
-from scipy.stats import boxcox_normmax, yeojohnson_normmax
-from sklearn.linear_model import LinearRegression, TheilSenRegressor
 
+from polars_features._deps import require
 from polars_features.base import transformer
 from polars_features.base.model import ModelState
 from polars_features.offsets import _strip_freq_alias
@@ -21,6 +20,23 @@ from polars_features.seasonality import add_fourier_terms
 
 def PL_NUMERIC_COLS(*exclude):
     return cs.numeric() - cs.by_name(exclude)
+
+
+class LeakageWarning(UserWarning):
+    """Warning that an operation reads the future (look-ahead / target leakage).
+
+    Emitted by leak-prone code paths that are easy to use unsafely inside a
+    backtest or cross-validation split -- for example :func:`impute` with the
+    ``"bfill"`` or ``"interpolate"`` methods, which fill a missing value using
+    later (future) observations. Such fills pass silently through CV yet inflate
+    out-of-sample performance. Prefer a strictly point-in-time, leak-safe imputer
+    (e.g. ``impute("cafe")`` / :func:`cafe_impute`, or forward-fill) unless you
+    have deliberately opted in via ``allow_leaky=True``.
+    """
+
+
+#: Imputation methods that read the future and therefore leak inside a CV split.
+_LEAKY_IMPUTE_METHODS: frozenset[str] = frozenset({"bfill", "interpolate"})
 
 
 @transformer
@@ -428,9 +444,11 @@ def scale(use_mean: bool = True, use_std: bool = True, rescale_bool: bool = Fals
 
 @transformer
 def impute(
-    method: Literal["mean", "median", "fill", "ffill", "bfill", "interpolate"]
+    method: Literal["mean", "median", "fill", "ffill", "bfill", "interpolate", "cafe"]
     | int
     | float,
+    *,
+    allow_leaky: bool = False,
 ):
     """
     Performs missing value imputation on numeric columns of a DataFrame grouped by entity.
@@ -445,10 +463,44 @@ def impute(
         - 'median': Replace missing values with the median of the corresponding column.
         - 'fill': Replace missing values with the mean for float columns and the median for integer columns.
         - 'ffill': Forward fill missing values.
-        - 'bfill': Backward fill missing values.
+        - 'bfill': Backward fill missing values. **Leaky** -- reads future rows.
         - 'interpolate': Interpolate missing values using linear interpolation.
+          **Leaky** -- reads future rows.
+        - 'cafe': Leak-safe, strictly point-in-time model-based imputation via
+          :func:`cafe_impute` (requires the optional ``cafe`` dependency, i.e.
+          ``pip install polars_features[cafe]``).
         - int or float: Replace missing values with the specified constant.
+    allow_leaky : bool, keyword-only, default False
+        The ``'bfill'`` and ``'interpolate'`` methods fill a missing value using
+        *later* (future) observations, so they leak look-ahead information and
+        pass silently through cross-validation. By default using either emits a
+        :class:`LeakageWarning` steering you toward a point-in-time imputer
+        (``impute('cafe')`` / :func:`cafe_impute`, or ``'ffill'``). Set
+        ``allow_leaky=True`` to acknowledge the leak and suppress the warning
+        (e.g. for whole-sample EDA outside a backtest). Has no effect on the
+        other, leak-safe methods.
+
+    Warns
+    -----
+    LeakageWarning
+        When ``method`` is ``'bfill'`` or ``'interpolate'`` and
+        ``allow_leaky`` is ``False``.
     """
+
+    def _warn_if_leaky() -> None:
+        if method in _LEAKY_IMPUTE_METHODS and not allow_leaky:
+            warnings.warn(
+                f"impute(method={method!r}) reads future rows to fill missing "
+                "values (backward fill / interpolation look at later "
+                "observations), which leaks look-ahead information and passes "
+                "silently through cross-validation. Prefer a strictly "
+                "point-in-time imputer such as impute('cafe') / cafe_impute "
+                "(leak-safe, model-based) or impute('ffill') (forward fill). "
+                "Pass allow_leaky=True to acknowledge the leak and silence this "
+                "warning.",
+                LeakageWarning,
+                stacklevel=2,
+            )
 
     def method_to_expr(entity_col, time_col):
         """Fill-in methods."""
@@ -475,13 +527,149 @@ def impute(
         }
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
-        entity_col, time_col = X.columns[:2]
+        _warn_if_leaky()
+        entity_col, time_col = X.collect_schema().names()[:2]
+        # The 'cafe' alias routes to the model-based, point-in-time imputer while
+        # leaving every existing method's behaviour untouched.
+        if method == "cafe":
+            return cafe_impute().func(X)
         if isinstance(method, (int, float)):
             expr = PL_NUMERIC_COLS(entity_col, time_col).fill_null(pl.lit(method))
         else:
             expr = method_to_expr(entity_col, time_col)[method]
         X_new = X.with_columns(expr)
         return {"X_new": X_new}
+
+    return transform
+
+
+def _require_cafe():
+    """Lazily import the optional ``cafe`` dependency with an actionable error."""
+    try:
+        import cafe
+    except ImportError as exc:  # pragma: no cover - trivial guard
+        raise ImportError(
+            "cafe_impute requires the optional `cafe` dependency, which is not "
+            "installed. Install it with `pip install polars_features[cafe]`."
+        ) from exc
+    return cafe
+
+
+@transformer
+def cafe_impute(
+    engine: Literal["joint", "per_entity"] = "joint",
+    add_uncertainty: bool = False,
+    add_recoverability: bool = False,
+    add_anomaly: bool = False,
+    add_missingness: bool = False,
+    columns: list[str] | None = None,
+):
+    """Leak-safe, model-based imputation of a panel via CAFE.
+
+    CAFE (Causal Adaptive Factor Estimation) is a strictly point-in-time
+    (no look-ahead) imputer: each filled cell uses only past + contemporaneous
+    information within its entity, so the transform is safe to use inside
+    walk-forward cross-validation. Numeric feature columns are filled; the
+    entity/time keys and any non-numeric columns pass through untouched and the
+    original column order is preserved.
+
+    Requires the optional ``cafe`` dependency (``pip install polars_features[cafe]``).
+
+    Parameters
+    ----------
+    engine : {"joint", "per_entity"}, default "joint"
+        Panel imputation strategy. ``"joint"`` pools the contemporaneous
+        cross-section (the validated default); ``"per_entity"`` imputes each
+        entity's series independently.
+    add_uncertainty : bool, default False
+        Append a per-cell posterior standard deviation column ``<col>__cafe_sigma``
+        for every imputed numeric column (NaN where the value was observed).
+    add_recoverability : bool, default False
+        Append a per-cell recoverability certificate in ``[0, 1]`` as
+        ``<col>__cafe_recoverability`` (NaN where observed).
+    add_anomaly : bool, default False
+        Append a single per-row outlier score column ``cafe_anomaly`` in
+        ``[0, 1]`` (0 = perfect fit, 1 = strong outlier), causal per entity.
+    add_missingness : bool, default False
+        Append a boolean ``<col>__cafe_was_imputed`` indicator per imputed column
+        that preserves the original missing pattern (which imputation erases).
+    columns : list of str, optional
+        Restrict imputation (and any by-products) to these numeric feature
+        columns. Other numeric columns pass through with their original values.
+        Defaults to every numeric feature column.
+
+    Notes
+    -----
+    The by-products (uncertainty / recoverability / anomaly) are produced by the
+    strictly-causal per-entity traced pass, so appending future rows never
+    changes an earlier ``(entity, time)`` cell's value or by-product.
+    """
+    want_byproducts = add_uncertainty or add_recoverability or add_anomaly
+
+    def transform(X: pl.LazyFrame) -> pl.LazyFrame:
+        cafe = _require_cafe()
+        entity_col, time_col = X.columns[:2]
+        df = X.collect()
+
+        keys = {entity_col, time_col}
+        num_cols = [
+            c for c, dt in df.schema.items() if dt.is_numeric() and c not in keys
+        ]
+        target_cols = list(columns) if columns is not None else num_cols
+
+        # The fill itself (lean, cross-entity-aware path).
+        filled = cafe.impute(df, panel=(time_col, entity_col), engine=engine)
+
+        # Honour `columns`: restore the original values for numeric columns the
+        # caller did not ask to impute.
+        untouched = [c for c in num_cols if c not in set(target_cols)]
+        if untouched:
+            filled = filled.with_columns([df.get_column(c) for c in untouched])
+
+        extra: list[pl.Series] = []
+
+        if add_missingness:
+            for col in target_cols:
+                extra.append(
+                    df.get_column(col).is_null().alias(f"{col}__cafe_was_imputed")
+                )
+
+        if want_byproducts and target_cols:
+            n_rows = df.height
+            col_idx = {c: j for j, c in enumerate(target_cols)}
+            sigma = np.full((n_rows, len(target_cols)), np.nan)
+            recov = np.full((n_rows, len(target_cols)), np.nan)
+            anomaly = np.full(n_rows, np.nan)
+
+            # Per-entity, strictly point-in-time traced pass. Rows are gathered in
+            # time order within each entity and scattered back to their original
+            # positions, so every by-product is causal per entity.
+            df_idx = df.with_row_index("__cafe_row__")
+            for _, sub in df_idx.group_by(entity_col, maintain_order=True):
+                sub = sub.sort(time_col)
+                rows = sub.get_column("__cafe_row__").to_numpy()
+                mat = sub.select(target_cols).to_numpy().astype(float)
+                res = cafe.CAFE().run(mat)
+                if add_uncertainty:
+                    sigma[rows] = np.asarray(res.uncertainty)
+                if add_recoverability:
+                    recov[rows] = np.asarray(res.recoverability_score())
+                if add_anomaly:
+                    anomaly[rows] = np.asarray(res.anomaly_scores())
+
+            for col in target_cols:
+                j = col_idx[col]
+                if add_uncertainty:
+                    extra.append(pl.Series(f"{col}__cafe_sigma", sigma[:, j]))
+                if add_recoverability:
+                    extra.append(pl.Series(f"{col}__cafe_recoverability", recov[:, j]))
+            if add_anomaly:
+                extra.append(pl.Series("cafe_anomaly", anomaly))
+
+        if extra:
+            filled = filled.with_columns(extra)
+
+        return {"X_new": filled.lazy()}
 
     return transform
 
@@ -586,6 +774,9 @@ def boxcox(method: str = "mle"):
     """
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
+        optimize = require("scipy.optimize", feature="boxcox")
+        boxcox_normmax = require("scipy.stats", feature="boxcox").boxcox_normmax
+
         def optimizer(fun):
             return optimize.minimize_scalar(
                 fun,
@@ -652,6 +843,9 @@ def boxcox(method: str = "mle"):
 @transformer
 def yeojohnson(brack: tuple = (-2, 2)):
     def transform(X: pl.LazyFrame) -> dict:
+        yeojohnson_normmax = require(
+            "scipy.stats", feature="yeojohnson"
+        ).yeojohnson_normmax
         idx_cols = X.columns[:2]
         entity_col, time_col = idx_cols
         cols = X.select(PL_NUMERIC_COLS(entity_col, time_col)).columns
@@ -906,12 +1100,16 @@ def deseasonalize_fourier(sp: int, K: int, robust: bool = False):
         Maximum order(s) of Fourier terms.
         Must be less than `sp`.
 
-    Note: part of this transformer uses sklearn under-the-hood: it is not pure Polars and lazy.
+    Notes
+    -----
+    Part of this transformer uses sklearn under-the-hood: it is not pure Polars and lazy.
     """
 
-    regressor_cls = LinearRegression if robust else TheilSenRegressor
-
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
+        linear_model = require("sklearn.linear_model", feature="deseasonalize_fourier")
+        regressor_cls = (
+            linear_model.LinearRegression if robust else linear_model.TheilSenRegressor
+        )
         X = X.collect()  # Not lazy
         if X.shape[1] > 3:
             raise ValueError(
@@ -933,7 +1131,7 @@ def deseasonalize_fourier(sp: int, K: int, robust: bool = False):
             return {
                 target_col: y_new.tolist(),
                 "seasonal": y_pred.tolist(),
-                "regressor": cloudpickle.dumps(regressor),
+                "regressor": pickle.dumps(regressor),
             }
 
         entity_col, time_col, target_col = X.columns[:3]
@@ -993,7 +1191,7 @@ def deseasonalize_fourier(sp: int, K: int, robust: bool = False):
 
         def _reseasonalize(inputs: Mapping[str, Any]):
             # Coerce inputs
-            regressor = cloudpickle.loads(inputs["regressor"])
+            regressor = pickle.loads(inputs["regressor"])
             y = inputs[target_col]
             X = np.array(inputs["fourier"]).reshape((len(y), len(fourier_cols)))
             # Predict
@@ -1051,12 +1249,24 @@ def fractional_diff(
     d : float
         The fractional order of the differencing operator.
     min_weight : float, optional
-        The minimum weight to use for calculations. If specified, the window size is
-        computed from this value and not needed.
+        The minimum weight to use for calculations (the weight-magnitude
+        ``threshold``). If specified, the window size is computed from this value
+        and ``window_size`` is not needed.
     window_size : int, optional
-        The window size of the fractional differencing operator.
-        If specified, the minimum weight is not needed.
+        The window size of the fractional differencing operator (a hard
+        ``max_width`` cap on the kernel). If specified, ``min_weight`` is not
+        needed and the canonical default threshold governs early truncation.
+
+    Notes
+    -----
+    Routes through the shared, causal :func:`polars_features._ffd.frac_diff_expr`
+    builder -- the single source of truth shared with ``.panel.frac_diff``,
+    ``.ts.frac_diff`` and :class:`~polars_features.transform.frac_diff.FracDiff`
+    -- applied per entity via ``.over(entity)``. The incomplete leading window is
+    emitted as ``null`` (never zero-filled).
     """
+    from polars_features._ffd import frac_diff_expr
+
     if min_weight is None and window_size is None:
         raise ValueError("Either `min_weight` or `window_size` must be specified.")
 
@@ -1064,19 +1274,27 @@ def fractional_diff(
         raise ValueError("Only one of `min_weight` or `window_size` must be specified.")
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
-        # Ensure the rust-backed ``ts`` expression namespace is registered.
-        import polars_features.feature_extractors  # noqa: F401
+        schema = X.collect_schema()
+        names = schema.names()
+        entity_col, time_col = names[:2]
+        numeric = [
+            c
+            for c in names
+            if c not in (entity_col, time_col) and schema[c].is_numeric()
+        ]
 
-        idx_cols = X.columns[:2]
-        entity_col = idx_cols[0]
-        time_col = idx_cols[1]
+        def _build(col: str) -> pl.Expr:
+            # ``frac_diff_expr`` uses ``pl.sum_horizontal`` internally, so it must
+            # be built per single column (a multi-column selector would be summed
+            # across columns). Apply per numeric column, grouped ``.over(entity)``,
+            # replacing the column in place -- matching the historical behaviour.
+            if min_weight is not None:
+                expr = frac_diff_expr(pl.col(col), d=d, threshold=min_weight)
+            else:
+                expr = frac_diff_expr(pl.col(col), d=d, max_width=window_size)
+            return expr.over(entity_col).alias(col)
 
-        X_new = X.with_columns(
-            PL_NUMERIC_COLS(entity_col, time_col)
-            .as_expr()
-            .ts.frac_diff(d, min_weight, window_size)
-            .over(entity_col)
-        )
+        X_new = X.with_columns([_build(c) for c in numeric])
         return {"X_new": X_new}
 
     return transform

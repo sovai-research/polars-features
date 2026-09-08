@@ -1,8 +1,8 @@
 site_name: PanelKit
-site_description: "Leak-safe, Rust-fast feature engineering and ML for panel data, built on Polars. Built on the foundations of functime (no longer maintained)."
-site_url: https://docs.functime.ai/
-repo_url: https://github.com/functime-org/functime
-repo_name: functime-org/functime
+site_description: "Leak-safe, fast feature engineering and ML for panel data, built on Polars. Built on the foundations of functime (Apache-2.0, actively maintained)."
+site_url: https://sovai-research.github.io/polars-features/
+repo_url: https://github.com/sovai-research/polars-features
+repo_name: sovai-research/polars-features
 
 theme:
   name: "material"
@@ -50,14 +50,34 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Quickstart: quickstart.md
-  - Leakage & Correctness: leakage.md
   - Installation: installation.md
+  - Quickstart: quickstart.md
+  - Concepts:
+    - Panel data: concepts/panel-data.md
+    - The two-tier API: concepts/two-tier-api.md
+    - Leak-safety: concepts/leak-safety.md
+    - Interactions (higher-order structure): concepts/interactions.md
+    - The background-set leak: concepts/attribution-leakage.md
+  - Leakage & Correctness: leakage.md
   - User Guide:
-    - Forecasting: user-guide/forecasting.md
+    - Feature Engineering: user-guide/features.md
+    - Imputation (CAFE): user-guide/imputation.md
+    - Labeling: user-guide/labeling.md
+    - Feature Selection: user-guide/selection.md
+    - Panel ML Models: user-guide/models.md
+    - Feature Attribution: user-guide/attribution.md
+    - Latent Factors: user-guide/factors.md
+    - Validation: user-guide/validation.md
+    - Honest Validation: user-guide/honest-validation.md
+    - Econometrics: user-guide/econometrics.md
+    - Econometric Features: user-guide/econ-features.md
     - Preprocessing: user-guide/preprocessing.md
-    - Feature Extraction: user-guide/feature-extraction.md
+    - Forecasting: user-guide/forecasting.md
     - Seasonality: user-guide/seasonality.md
+    - Feature Extraction (legacy): user-guide/feature-extraction.md
+  - Benchmarks:
+    - PanelKit vs pandas: benchmarks/vs_pandas.md
+  - Roadmap: roadmap.md
   - Developer Guides:
     - Custom Forecasters and Transformers: developer-guide/develop.md
     - Contributing: developer-guide/contributing.md
@@ -67,15 +87,28 @@ nav:
     - Forecast Evaluation: notebooks/evaluation.ipynb
     - LLM Analysis: notebooks/llm.ipynb
   - API Reference:
-    - forecasting: api-reference/forecasting.md
-    - preprocessing: api-reference/preprocessing.md
-    - seasonality: api-reference/seasonality.md
     - feature_extraction: api-reference/feature-extractors.md
+    - catch22: api-reference/catch22.md
+    - preprocessing: api-reference/preprocessing.md
+    - imputation: api-reference/imputation.md
+    - labeling: api-reference/labeling.md
+    - factor: api-reference/factor.md
+    - selection: api-reference/selection.md
+    - reduce: api-reference/reduce.md
+    - cluster: api-reference/cluster.md
+    - models: api-reference/models.md
+    - explain: api-reference/explain.md
     - cross_validation: api-reference/cross-validation.md
-    - offsets: api-reference/offsets.md
+    - validation: api-reference/validation.md
+    - econ: api-reference/econ.md
+    - econ.features: api-reference/econ-features.md
+    - leak verifiers: api-reference/testing.md
+    - evaluation: api-reference/evaluation.md
     - metrics: api-reference/metrics.md
     - multi_objective: api-reference/multi-objective.md
-    - evaluation: api-reference/evaluation.md
+    - forecasting: api-reference/forecasting.md
+    - seasonality: api-reference/seasonality.md
+    - offsets: api-reference/offsets.md
     - plotting: api-reference/plotting.md
 
 extra:

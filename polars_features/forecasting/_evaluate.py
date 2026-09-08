@@ -3,18 +3,15 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Mapping
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
+from polars_features._deps import require
 from polars_features.metrics import mae
 
-try:
-    import flaml
-    from flaml import CFO
+if TYPE_CHECKING:
     from flaml.tune.sample import Domain
-except ImportError:
-    pass
 
 
 def evaluate_window(
@@ -141,6 +138,7 @@ def evaluate(
         )
         score = result["mae"]
     else:
+        flaml = require("flaml", feature="AutoML forecasters")
         tuner = flaml.tune.run(
             partial(
                 evaluate_windows,
@@ -160,7 +158,7 @@ def evaluate(
             time_budget_s=time_budget,
             points_to_evaluate=points_to_evaluate,
             num_samples=num_samples,
-            search_alg=CFO(low_cost_partial_config=low_cost_partial_config),
+            search_alg=flaml.CFO(low_cost_partial_config=low_cost_partial_config),
         )
         score = tuner.best_result["mae"]
         params = tuner.best_config

@@ -1,25 +1,25 @@
 .DEFAULT_GOAL := help
 
-BASE ?= master
+BASE ?= main
 PY ?= python3
 
-edit:
-	maturin develop --release
+edit:  ## Editable install (pure-Python; no compiler needed)
 	$(PY) -m pip install -e .
 
-build:
-	maturin develop --release
+build:  ## Install the package
 	$(PY) -m pip install .
 
-build-test:
-	maturin develop --release
-	$(PY) -m pip install ".[test]"
+build-test:  ## Install with dev extras
+	$(PY) -m pip install ".[dev]"
+
+wheel:  ## Build the universal py3-none-any wheel + sdist
+	$(PY) -m build
 
 clean:
 	rm -rf build/
 	rm -rf dist/
 	rm -rf *.egg-info
-	$(PY) -m pip uninstall functime -y
+	$(PY) -m pip uninstall polars_features -y
 
 rebuild: clean build
 

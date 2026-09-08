@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Mapping, Sequence
-from pathlib import Path
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 import numpy as np
 import polars as pl
@@ -12,15 +12,11 @@ try:  # polars>=1.0 moved type aliases to the private `_typing` module
     from polars._typing import ClosedInterval
 except ImportError:  # pragma: no cover - older polars
     from polars.type_aliases import ClosedInterval
-# from numpy.linalg import lstsq
-from scipy.linalg import lstsq
-from scipy.signal import find_peaks_cwt, welch
-from scipy.spatial import KDTree
-from scipy.stats import kurtosis, skew
-
-from polars_features._compat import register_plugin_function, rle_fields
-from polars_features._polars_features_rust import rs_faer_lstsq1
+from polars_features import _numpy_stats
+from polars_features._compat import rle_fields
+from polars_features._deps import have
 from polars_features._utils import warn_is_unstable
+from polars_features.registry import FeatureSpec, registry
 from polars_features.type_aliases import DetrendMethod
 
 # from functime.feature_extractor import FeatureExtractor  # noqa: F401
@@ -43,6 +39,219 @@ def ricker(points: int, a: float) -> np.ndarray:
     return A * mod * gauss
 
 
+def _lempel_ziv_complexity_count(bits: bytes) -> int:
+    """Lempel-Ziv complexity of a binary sequence (count of distinct phrases).
+
+    Pure-Python transcription of the former ``pl_lempel_ziv_complexity`` Rust
+    kernel (a ``bytes`` + ``set`` implementation is competitive with / faster
+    than the Rust ``HashSet<&[bool]>`` version per the D5 audit). ``bits`` holds
+    one byte (0 or 1) per element.
+    """
+    n = len(bits)
+    ind = 0
+    inc = 1
+    sub_strings: set[bytes] = set()
+    while ind + inc <= n:
+        subseq = bits[ind : ind + inc]
+        if subseq in sub_strings:
+            inc += 1
+        else:
+            sub_strings.add(subseq)
+            ind += inc
+            inc = 1
+    return len(sub_strings)
+
+
+def _lempel_ziv_complexity_batch(s: pl.Series) -> pl.Series:
+    """map_batches kernel: boolean Series -> length-1 UInt32 complexity.
+
+    Nulls are interpreted as ``False`` (0 in the bit sequence), matching the
+    former Rust plugin.
+    """
+    arr = s.fill_null(False).to_numpy()
+    bits = arr.astype(np.uint8).tobytes()
+    return pl.Series([_lempel_ziv_complexity_count(bits)], dtype=pl.UInt32)
+
+
+def _cusum_events_py(
+    values: np.ndarray, threshold: float, warmup_period: int, drift: float
+) -> np.ndarray:
+    """Pure-Python/numpy CUSUM change-point filter.
+
+    Exact transcription of the former Rust kernel
+    (``src/changepoint_detection/cusum.rs``). ``values`` is a float64 array in
+    which nulls are represented as ``NaN`` (treated as the Rust ``None``).
+
+    Returns an ``int32`` array of the same length with ``1`` at each detected
+    change point and ``0`` elsewhere.
+    """
+    n = values.shape[0]
+    events = np.zeros(n, dtype=np.int32)
+
+    s_pos = 0.0
+    s_neg = 0.0
+    t = 0
+    mu = 0.0
+    sigma = 0.0
+    obs: list[float] = []
+
+    # numpy IEEE division (inf/nan on divide-by-zero) matches the Rust f64
+    # behaviour; Python's ``float`` division would instead raise. Values are kept
+    # as ``np.float64`` scalars so the no-sigma-guard division mirrors Rust.
+    for i in range(n):
+        value = values[i]
+        is_null = bool(np.isnan(value))
+        warming_up = t < warmup_period
+        warmup_end = t == warmup_period
+
+        if warming_up:
+            if not is_null:
+                obs.append(value)
+            events[i] = 0
+            t += 1
+            continue
+
+        if warmup_end:
+            # Two-pass population mean/std over collected observations, once —
+            # summed left-to-right to match the Rust ``obs.iter().sum()`` order.
+            count = len(obs)
+            total = 0.0
+            for x in obs:
+                total += x
+            mu = total / count
+            sq = 0.0
+            for x in obs:
+                sq += (x - mu) ** 2
+            sigma = math.sqrt(sq / count)
+            t += 1
+            # fall through to process THIS value (no continue)
+
+        if not is_null:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                v = (value - mu) / sigma  # no zero-sigma guard (match Rust exactly)
+            s_pos = max(s_pos + v - drift, 0.0)
+            s_neg = min(s_neg + v + drift, 0.0)
+            if s_pos > threshold:
+                events[i] = 1
+                s_pos = 0.0
+                s_neg = 0.0
+                t = 0
+                obs = []
+            elif s_neg < -threshold:
+                events[i] = 1
+                s_neg = 0.0
+                s_pos = 0.0
+                t = 0
+                obs = []
+            else:
+                events[i] = 0
+        else:
+            events[i] = 0
+
+    return events
+
+
+_cusum_events_numba = None
+
+
+def _get_cusum_numba() -> Callable[[np.ndarray, float, int, float], np.ndarray] | None:
+    """Return a numba-compiled CUSUM kernel if ``numba`` is installed, else None.
+
+    numba is the optional ``fast`` extra; it must never be imported eagerly or
+    become a hard dependency. Compilation is deferred to first use and cached.
+    """
+    global _cusum_events_numba
+    if _cusum_events_numba is not None:
+        return _cusum_events_numba
+    if not have("numba"):
+        return None
+    import numba  # noqa: PLC0415  (lazy, optional-extra import)
+
+    @numba.njit(cache=True)
+    def _kernel(
+        values: np.ndarray, threshold: float, warmup_period: int, drift: float
+    ) -> np.ndarray:  # pragma: no cover - exercised only when numba installed
+        n = values.shape[0]
+        events = np.zeros(n, dtype=np.int32)
+
+        s_pos = 0.0
+        s_neg = 0.0
+        t = 0
+        mu = 0.0
+        sigma = 0.0
+        obs = np.empty(n, dtype=np.float64)
+        obs_count = 0
+
+        for i in range(n):
+            value = values[i]
+            is_null = np.isnan(value)
+            warming_up = t < warmup_period
+            warmup_end = t == warmup_period
+
+            if warming_up:
+                if not is_null:
+                    obs[obs_count] = value
+                    obs_count += 1
+                events[i] = 0
+                t += 1
+                continue
+
+            if warmup_end:
+                # Two-pass population mean/std, summed left-to-right to match Rust.
+                total = 0.0
+                for j in range(obs_count):
+                    total += obs[j]
+                mu = total / obs_count
+                sq = 0.0
+                for j in range(obs_count):
+                    sq += (obs[j] - mu) ** 2
+                sigma = math.sqrt(sq / obs_count)
+                t += 1
+
+            if not is_null:
+                v = (value - mu) / sigma  # IEEE division (inf/nan on /0), matches Rust
+                s_pos = max(s_pos + v - drift, 0.0)
+                s_neg = min(s_neg + v + drift, 0.0)
+                if s_pos > threshold:
+                    events[i] = 1
+                    s_pos = 0.0
+                    s_neg = 0.0
+                    t = 0
+                    obs_count = 0
+                elif s_neg < -threshold:
+                    events[i] = 1
+                    s_neg = 0.0
+                    s_pos = 0.0
+                    t = 0
+                    obs_count = 0
+                else:
+                    events[i] = 0
+            else:
+                events[i] = 0
+
+        return events
+
+    _cusum_events_numba = _kernel
+    return _kernel
+
+
+def _cusum_events(
+    values: np.ndarray, threshold: float, warmup_period: int, drift: float
+) -> np.ndarray:
+    """CUSUM change-point filter, dispatching to the numba fast-path if available.
+
+    Falls back to the pure-Python/numpy loop when numba (the ``fast`` extra) is
+    not installed. Both paths produce identical ``int32`` event arrays.
+    """
+    values = np.ascontiguousarray(values, dtype=np.float64)
+    kernel = _get_cusum_numba()
+    if kernel is not None:
+        return np.asarray(
+            kernel(values, float(threshold), int(warmup_period), float(drift))
+        )
+    return _cusum_events_py(values, float(threshold), int(warmup_period), float(drift))
+
+
 TIME_SERIES_T = pl.Series | pl.Expr
 FLOAT_EXPR = float | pl.Expr
 FLOAT_INT_EXPR = int | float | pl.Expr
@@ -54,13 +263,6 @@ MAP_LIST_EXPR = Mapping[str, list[float]] | pl.Expr
 
 
 # from polars.type_aliases import IntoExpr
-
-try:
-    from polars.utils.udfs import _get_shared_lib_location
-
-    lib = _get_shared_lib_location(__file__)
-except ImportError:
-    lib = Path(__file__).parent
 
 
 def absolute_energy(x: TIME_SERIES_T) -> FLOAT_INT_EXPR:
@@ -117,6 +319,42 @@ def absolute_sum_of_changes(x: TIME_SERIES_T) -> FLOAT_INT_EXPR:
     return x.diff(n=1, null_behavior="drop").abs().sum()
 
 
+def _chebyshev_counter():
+    """Return a ``(points, radius) -> counts`` Chebyshev-radius neighbour counter.
+
+    Both entropy features need, for every embedded point, the number of points
+    within an L-inf radius (the point itself included).  Two exact backends:
+
+    * SciPy's ``KDTree.query_ball_point(..., p=inf, return_length=True)`` when
+      SciPy is installed.  It prunes whole tree nodes and releases the GIL
+      across ``workers=-1`` threads, and measurement shows it is the faster of
+      the two from roughly 1k points upward (4x at n=2k, 5x at n=20k), so it
+      stays the preferred path.
+    * :func:`polars_features._numpy_stats.chebyshev_neighbour_counts` otherwise
+      -- a sorted-sweep counter that returns **the same integer counts** (see
+      ``tests/test_numpy_stats_parity.py``), so the feature now works in the
+      bare ``numpy + polars`` core instead of raising ImportError.  It is
+      ``O(n log n + n w)`` in the mean window width ``w``; for the usual
+      ``r = 0.2 sigma`` that is still quadratic in ``n``, which is why SciPy is
+      preferred when present.
+    """
+    from polars_features._deps import have
+
+    if have("scipy.spatial"):
+        from scipy.spatial import KDTree
+
+        def count(points: np.ndarray, radius: float) -> np.ndarray:
+            return KDTree(points, leafsize=50).query_ball_point(
+                points, radius, p=np.inf, workers=-1, return_length=True
+            )
+
+        return count
+
+    from polars_features._numpy_stats import chebyshev_neighbour_counts
+
+    return chebyshev_neighbour_counts
+
+
 def approximate_entropy(
     x: TIME_SERIES_T, run_length: int, filtering_level: float, scale_by_std: bool = True
 ) -> float:
@@ -156,23 +394,15 @@ def approximate_entropy(
             pl.col(x.name).shift(-i).alias(str(i)) for i in range(1, run_length + 1)
         ).to_numpy()
 
+        count = _chebyshev_counter()
+
         n1 = len(x) - run_length + 1
         data_m = data[:n1, :run_length]
-        # Computes phi. Let's not make it into a separate function until we know this will be reused.
-        tree = KDTree(data_m, leafsize=50)  # Can play with leafsize to fine tune perf
-        nb_in_radius: np.ndarray = tree.query_ball_point(
-            data_m, r, p=np.inf, workers=-1, return_length=True
-        )
-        phi_m = np.log(nb_in_radius / n1).sum() / n1
+        phi_m = np.log(count(data_m, r) / n1).sum() / n1
 
         n2 = n1 - 1
         data_mp1 = data[:n2, :]
-        # Compute phi
-        tree = KDTree(data_mp1, leafsize=50)
-        nb_in_radius: np.ndarray = tree.query_ball_point(
-            data_mp1, r, p=np.inf, workers=-1, return_length=True
-        )
-        phi_mp1 = np.log(nb_in_radius / n2).sum() / n2
+        phi_mp1 = np.log(count(data_mp1, r) / n2).sum() / n2
 
         return np.abs(phi_m - phi_mp1)
     else:
@@ -220,7 +450,7 @@ def augmented_dickey_fuller(x: TIME_SERIES_T, n_lags: int) -> float:
         y = data_x.drop_in_place("0").to_numpy(zero_copy_only=True)
         data_x = data_x.to_numpy()  # to NumPy matrix
 
-        coeffs, resids, _, _ = lstsq(data_x, y, cond=None)
+        coeffs, resids, _, _ = _numpy_stats.lstsq(data_x, y, cond=None)
         mse = np.sum(resids**2) / (length - data_x.shape[1])
         ys = data_x[:, 0] - np.mean(data_x[:, 0])
         ss = np.dot(ys, ys)
@@ -296,7 +526,10 @@ def autoregressive_coefficients(x: TIME_SERIES_T, n_lags: int) -> list[float]:
             .to_numpy()
         )
         y_ = y.tail(length).to_numpy(zero_copy_only=True).reshape((-1, 1))
-        out: np.ndarray = rs_faer_lstsq1(data_x, y_)
+        # Replaces the net-negative `rs_faer_lstsq1` Rust kernel: for tall-thin
+        # AR design matrices `np.linalg.lstsq` is far faster (same algorithm,
+        # no pyo3 marshalling) and bit-parity on the coefficients.
+        out: np.ndarray = np.linalg.lstsq(data_x, y_, rcond=None)[0]
         return out.ravel()
     else:
         logger.info(
@@ -325,28 +558,24 @@ def benford_correlation(x: TIME_SERIES_T) -> FLOAT_EXPR:
     """
 
     if isinstance(x, pl.Series):
-        counts = (
-            pl.int_range(1, 10, eager=True, dtype=pl.UInt8)
-            .cast(pl.Utf8)
-            .append(
-                x.cast(pl.Utf8)
-                .str.strip_chars_start("-0.")
-                .filter(x != 0)
-                .str.slice(0, 1)
-            )
-            .unique_counts()
-        )
-        return np.corrcoef(counts - 1, _BENFORD_DIST_SERIES)[0, 1]
+        # Derive the leading digit numerically: d = floor(|x| / 10**floor(log10|x|)).
+        # This is robust to scientific-notation string reprs (e.g. "1e-05"), which
+        # the previous string-stripping approach silently mis-parsed. The +1e-10
+        # nudges log10 past floating-point undershoot at exact powers of ten
+        # (e.g. log10(1000) == 2.9999999... -> a leading digit of 10).
+        arr = x.drop_nulls().to_numpy().astype(np.float64)
+        arr = arr[np.isfinite(arr) & (arr != 0.0)]
+        lead = np.floor(
+            np.abs(arr) / 10.0 ** np.floor(np.log10(np.abs(arr)) + 1e-10)
+        ).astype(np.int64)
+        counts = np.bincount(lead, minlength=10)[1:10]
+        return np.corrcoef(counts, _BENFORD_DIST_SERIES.to_numpy())[0, 1]
     else:
+        absx = x.abs()
+        lead = (absx / pl.lit(10.0).pow((absx.log10() + 1e-10).floor())).floor()
         counts = (
             pl.int_range(1, 10, eager=False)
-            .cast(pl.Utf8)
-            .append(
-                x.cast(pl.Utf8)
-                .str.strip_chars_start("-0.")
-                .filter(x != 0)
-                .str.slice(0, 1)
-            )
+            .append(lead.filter(x.is_finite() & (x != 0)).cast(pl.Int64, strict=False))
             .unique_counts()
         )
         return pl.corr(counts - 1, pl.lit(_BENFORD_DIST_SERIES))
@@ -710,7 +939,7 @@ def fourier_entropy(x: TIME_SERIES_T, n_bins: int = 10) -> float:
         if len(x) == 1:
             return np.nan
         else:
-            _, pxx = welch(x.to_numpy(), nperseg=min(x.len(), 256))
+            _, pxx = _numpy_stats.welch(x.to_numpy(), nperseg=min(x.len(), 256))
             pxx_as_series = pl.Series(pxx)
             return binned_entropy(pxx_as_series / pxx_as_series.max(), n_bins)
     else:
@@ -1205,8 +1434,11 @@ def number_cwt_peaks(x: TIME_SERIES_T, max_width: int = 5) -> float:
     float
     """
     if isinstance(x, pl.Series):
+        from polars_features._deps import require
+
+        scipy_signal = require("scipy.signal", feature="number_cwt_peaks")
         return len(
-            find_peaks_cwt(
+            scipy_signal.find_peaks_cwt(
                 vector=x.to_numpy(zero_copy_only=True),
                 widths=np.array(list(range(1, max_width + 1))),
                 wavelet=ricker,
@@ -1279,12 +1511,12 @@ def number_peaks(x: TIME_SERIES_T, support: int) -> INT_EXPR:
 
     Hence in the sequence
 
-    x = [3, 0, 0, 4, 0, 0, 13]
+    ``x = [3, 0, 0, 4, 0, 0, 13]``
 
     4 is a peak of support 1 and 2 because in the subsequences
 
-    [0, 4, 0]
-    [0, 0, 4, 0, 0]
+    ``[0, 4, 0]``
+    ``[0, 0, 4, 0, 0]``
 
     4 is still the highest value. Here, 4 is not a peak of support 3 because 13 is the 3th neighbour to the right of 4
     and its bigger than 4.
@@ -1497,27 +1729,13 @@ def sample_entropy(x: TIME_SERIES_T, ratio: float = 0.2, m: int = 2) -> FLOAT_EX
         if len(x) < m:
             return np.nan
 
+        count = _chebyshev_counter()
+
         threshold = ratio * x.std(ddof=0)
         mat = _into_sequential_chunks(x, m)
-        tree = KDTree(mat)
-        b = (
-            np.sum(
-                tree.query_ball_point(
-                    mat, r=threshold, p=np.inf, workers=-1, return_length=True
-                )
-            )
-            - mat.shape[0]
-        )
+        b = np.sum(count(mat, threshold)) - mat.shape[0]
         mat = _into_sequential_chunks(x, m + 1)
-        tree = KDTree(mat)
-        a = (
-            np.sum(
-                tree.query_ball_point(
-                    mat, r=threshold, p=np.inf, workers=-1, return_length=True
-                )
-            )
-            - mat.shape[0]
-        )
+        a = np.sum(count(mat, threshold)) - mat.shape[0]
         return np.log(b / a)  # -ln(a/b) = ln(b/a)
     else:
         logger.info(
@@ -1547,7 +1765,7 @@ def spkt_welch_density(x: TIME_SERIES_T, n_coeffs: int | None = None) -> LIST_EX
     """
     if isinstance(x, pl.Series):
         last_idx = len(x) if n_coeffs is None else n_coeffs
-        _, pxx = welch(x.to_numpy(), nperseg=min(len(x), 256))
+        _, pxx = _numpy_stats.welch(x.to_numpy(), nperseg=min(len(x), 256))
         return pxx[:last_idx]
     else:
         logger.info(
@@ -1910,9 +2128,6 @@ def fft_coefficients(x: TIME_SERIES_T) -> MAP_LIST_EXPR:
     ----------
     x : pl.Expr | pl.Series
         Input time series.
-    n_threads : int
-        Number of threads to use.
-        If None, uses all threads available. Defaults to None.
 
     Returns
     -------
@@ -1922,7 +2137,9 @@ def fft_coefficients(x: TIME_SERIES_T) -> MAP_LIST_EXPR:
     fft = np.fft.rfft(x.to_numpy(zero_copy_only=True))
     real = fft.real
     imag = fft.imag
-    angle = np.arctan2(real, imag)
+    # Phase angle of the complex coefficient == np.angle(fft) == atan2(imag, real).
+    # (Previously the arguments were swapped, which silently returned pi/2 - phase.)
+    angle = np.arctan2(imag, real)
     deg_angle = angle * 180 / np.pi
     return {
         "real": fft.real.tolist(),
@@ -1953,7 +2170,7 @@ def realized_volatility(x: pl.Series) -> float:
 
 def return_skew(x: pl.Series) -> float:
     """
-    Skewness of Log Returns
+    Skewness of simple (pct_change) Returns
 
     Parameters
     ----------
@@ -1963,15 +2180,18 @@ def return_skew(x: pl.Series) -> float:
     Returns
     -------
     float
-        Skewness of the log returns.
+        Skewness of the simple (pct_change) returns.
     """
-    returns = np.diff(np.log(x.to_numpy()))
-    return skew(returns)
+    # Use simple percentage returns to stay consistent with the
+    # ``.ts.return_skew`` namespace method (``pct_change().skew()``).
+    prices = x.to_numpy()
+    returns = np.diff(prices) / prices[:-1]
+    return _numpy_stats.skew(returns)
 
 
 def return_kurtosis(x: pl.Series) -> float:
     """
-    Kurtosis of Log Returns
+    Kurtosis of simple (pct_change) Returns
 
     Parameters
     ----------
@@ -1981,10 +2201,13 @@ def return_kurtosis(x: pl.Series) -> float:
     Returns
     -------
     float
-        Kurtosis of the log returns.
+        Kurtosis of the simple (pct_change) returns.
     """
-    returns = np.diff(np.log(x.to_numpy()))
-    return kurtosis(returns)
+    # Use simple percentage returns to stay consistent with the
+    # ``.ts.return_kurtosis`` namespace method (``pct_change().kurtosis()``).
+    prices = x.to_numpy()
+    returns = np.diff(prices) / prices[:-1]
+    return _numpy_stats.kurtosis(returns)
 
 
 def num_direction_changes(x: pl.Series) -> int:
@@ -2011,7 +2234,13 @@ def max_drawdown(x: pl.Series) -> float:
     """
     Maximum Drawdown
 
-    Computes the largest peak-to-trough drop in the time series.
+    Computes the largest peak-to-trough drop in the time series as a *ratio*
+    (a non-positive number), matching the ``.ts.max_drawdown`` namespace method:
+
+        ``(x / cummax(x)).min() - 1``
+
+    For example a series that peaks at 100 and troughs at 75 has a max drawdown
+    of ``75 / 100 - 1 == -0.25``.
 
     Parameters
     ----------
@@ -2021,12 +2250,11 @@ def max_drawdown(x: pl.Series) -> float:
     Returns
     -------
     float
-        Maximum drawdown value (in absolute units, not percentage).
+        Maximum drawdown as a ratio in ``[-1, 0]`` (0.0 if never in drawdown).
     """
     prices = x.to_numpy()
     cumulative_max = np.maximum.accumulate(prices)
-    drawdowns = cumulative_max - prices
-    return np.max(drawdowns)
+    return float(np.min(prices / cumulative_max) - 1.0)
 
 
 def signed_mci(
@@ -2225,11 +2453,6 @@ class FeatureExtractor:
         """
         Count the number of values that are above the mean.
 
-        Parameters
-        ----------
-        x : pl.Expr | pl.Series
-            Input time-series.
-
         Returns
         -------
         An expression of the output
@@ -2389,14 +2612,12 @@ class FeatureExtractor:
     ) -> pl.Expr:
         """
         Calculate a complexity estimate based on the Lempel-Ziv compression algorithm. The
-        implementation here is currently a Rust rewrite of Lilian Besson'code. Instead of returning
+        implementation here is a pure-Python transcription of Lilian Besson's code. Instead of returning
         the complexity value, we return a ratio w.r.t the length of the input series. If null is
         encountered, it will be interpreted as 0 in the bit sequence.
 
         Parameters
         ----------
-        x : pl.Expr | pl.Series
-            Input time-series.
         threshold: float | pl.Expr
             Either a number, or an expression representing a comparable quantity. If x > threshold,
             then it will be binarized as 1 and 0 otherwise.
@@ -2412,11 +2633,9 @@ class FeatureExtractor:
         https://github.com/Naereen/Lempel-Ziv_Complexity/tree/master
         https://en.wikipedia.org/wiki/Lempel%E2%80%93Ziv_complexity
         """
-        out = register_plugin_function(
-            args=[self._expr > threshold],
-            plugin_path=lib,
-            function_name="pl_lempel_ziv_complexity",
-            is_elementwise=False,
+        out = (self._expr > threshold).map_batches(
+            _lempel_ziv_complexity_batch,
+            return_dtype=pl.UInt32,
             returns_scalar=True,
         )
         if as_ratio:
@@ -2628,12 +2847,12 @@ class FeatureExtractor:
 
         Hence in the sequence
 
-        x = [3, 0, 0, 4, 0, 0, 13]
+        ``x = [3, 0, 0, 4, 0, 0, 13]``
 
         4 is a peak of support 1 and 2 because in the subsequences
 
-        [0, 4, 0]
-        [0, 0, 4, 0, 0]
+        ``[0, 4, 0]``
+        ``[0, 0, 4, 0, 0]``
 
         4 is still the highest value. Here, 4 is not a peak of support 3 because 13 is the 3th neighbour to the right of 4
         and its bigger than 4.
@@ -2924,18 +3143,17 @@ class FeatureExtractor:
         -------
         An expression of the output
         """
-        return register_plugin_function(
-            args=[self._expr],
-            plugin_path=lib,
-            function_name="cusum",
-            kwargs={
-                "threshold": threshold,
-                "drift": drift,
-                "warmup_period": warmup_period,
-            },
-            is_elementwise=False,
-            cast_to_supertype=True,
-        )
+
+        def _batch(s: pl.Series) -> pl.Series:
+            events = _cusum_events(
+                s.cast(pl.Float64).to_numpy(),
+                threshold,
+                warmup_period,
+                drift,
+            )
+            return pl.Series(events, dtype=pl.Int32)
+
+        return self._expr.map_batches(_batch, return_dtype=pl.Int32)
 
     def frac_diff(
         self,
@@ -2959,12 +3177,26 @@ class FeatureExtractor:
         d : float
             The fractional order of the differencing operator.
         min_weight : float, optional
-            The minimum weight to use for calculations. If specified, the window size is
-            computed from this value and not needed.
+            The minimum weight to use for calculations (the weight-magnitude
+            ``threshold``). If specified, the window size is computed from this
+            value and ``window_size`` is not needed.
         window_size : int, optional
-            The window size of the fractional differencing operator.
-            If specified, the minimum weight is not needed.
+            The window size of the fractional differencing operator (a hard
+            ``max_width`` cap on the kernel). If specified, ``min_weight`` is not
+            needed and the canonical default threshold governs early truncation.
+
+        Notes
+        -----
+        This is a thin, causal, entity-agnostic shim over the shared
+        :func:`polars_features._ffd.frac_diff_expr` builder -- the single source
+        of truth for fractional differencing across every PanelKit surface
+        (``.panel.frac_diff``, :class:`~polars_features.transform.frac_diff.FracDiff`,
+        and :func:`polars_features.preprocessing.fractional_diff`). It returns a
+        bare :class:`polars.Expr`; compose it with ``.over(entity)`` to apply per
+        entity. The first ``width - 1`` rows are emitted as ``null`` (incomplete
+        leading window) -- never zero-filled.
         """
+        from polars_features._ffd import frac_diff_expr
 
         # Assert only one of min_weight or window_size is specified
         if min_weight is not None and window_size is not None:
@@ -2974,18 +3206,9 @@ class FeatureExtractor:
         if min_weight is None and window_size is None:
             raise ValueError("Either min_weight or window_size must be specified.")
 
-        return register_plugin_function(
-            args=[self._expr],
-            plugin_path=lib,
-            function_name="frac_diff",
-            kwargs={
-                "d": d,
-                "min_weight": min_weight,
-                "window_size": window_size,
-            },
-            is_elementwise=False,
-            cast_to_supertype=True,
-        )
+        if min_weight is not None:
+            return frac_diff_expr(self._expr, d=d, threshold=min_weight)
+        return frac_diff_expr(self._expr, d=d, max_width=window_size)
 
     def max_drawdown(self) -> pl.Expr:
         """
@@ -2995,7 +3218,7 @@ class FeatureExtractor:
         -------
         An expression of the output
         """
-        return (self._expr / self._expr.cummax()).min() - 1
+        return (self._expr / self._expr.cum_max()).min() - 1
 
     def num_direction_changes(self) -> pl.Expr:
         """
@@ -3044,3 +3267,210 @@ class FeatureExtractor:
         return (
             self._expr.struct.field("ask_price") - self._expr.struct.field("bid_price")
         ) / 2
+
+
+# ---------------------------------------------------------------------------
+# Catalogue of ``.ts`` scalar-aggregation extractors + bulk ``extract_features``
+# ---------------------------------------------------------------------------
+#
+# Every entry below is a *pure Polars expression* that reduces a per-entity time
+# series to a single scalar, so it composes cleanly under ``group_by(entity)``
+# (and, equivalently, ``.over(entity)``) without leaking information across
+# entities or across time. That makes each one both ``panel_safe`` and
+# ``leakage_safe``. Extractors that emit a list/struct (e.g. ``fft_coefficients``,
+# ``linear_trend``, ``energy_ratios``, ``streak_length_stats``) or that require a
+# Rust plugin (e.g. ``frac_diff``, ``cusum``, ``lempel_ziv_complexity``) are
+# intentionally excluded from the bulk path — they do not reduce to one column.
+#
+# ``params`` records the tunable arguments (all with sensible defaults, so the
+# bulk :func:`extract_features` path can invoke them argument-free).
+
+#: Ordered mapping of registered ``ts`` feature name -> its ``params`` schema.
+#: The order is stable so :func:`extract_features` and the catalogue render
+#: deterministically.
+_TS_SCALAR_AGG_SPECS: dict[str, dict[str, Any]] = {
+    "absolute_energy": {},
+    "absolute_maximum": {},
+    "absolute_sum_of_changes": {},
+    "root_mean_square": {},
+    "benford_correlation": {},
+    "count_above_mean": {},
+    "count_below_mean": {},
+    "first_location_of_maximum": {},
+    "first_location_of_minimum": {},
+    "has_duplicate": {},
+    "has_duplicate_max": {},
+    "has_duplicate_min": {},
+    "last_location_of_maximum": {},
+    "last_location_of_minimum": {},
+    "mean_abs_change": {},
+    "max_abs_change": {},
+    "mean_change": {},
+    "mean_second_derivative_central": {},
+    "percent_reoccurring_points": {},
+    "percent_reoccurring_values": {},
+    "sum_reoccurring_points": {},
+    "sum_reoccurring_values": {},
+    "variation_coefficient": {},
+    "harmonic_mean": {},
+    "range_over_mean": {},
+    "longest_streak_above_mean": {},
+    "longest_streak_below_mean": {},
+    "longest_winning_streak": {},
+    "longest_losing_streak": {},
+    "ratio_n_unique_to_length": {},
+    "max_drawdown": {},
+    "num_direction_changes": {},
+    "return_kurtosis": {},
+    "return_skew": {},
+    "count_above": {"threshold": float},
+    "count_below": {"threshold": float},
+    "ratio_beyond_r_sigma": {"ratio": float},
+    "large_standard_deviation": {"ratio": float},
+    "var_gt_std": {"ddof": int},
+    "symmetry_looking": {"ratio": float},
+    "range_change": {"percentage": bool},
+    "cid_ce": {"normalize": bool},
+}
+
+
+def _ts_scalar_agg_builder(name: str) -> Callable[[pl.Expr], pl.Expr]:
+    """Return a builder that maps ``pl.col(c)`` -> ``pl.col(c).ts.<name>()``.
+
+    Parametrised extractors are invoked with their defaults, so every builder is
+    a plain ``Expr -> Expr`` reduction suitable for ``group_by(...).agg(...)``.
+    """
+
+    def _build(expr: pl.Expr) -> pl.Expr:
+        return getattr(expr.ts, name)()
+
+    _build.__name__ = f"ts_{name}"
+    _build.__qualname__ = f"ts.{name}"
+    return _build
+
+
+#: Ordered mapping of feature name -> ``Expr -> Expr`` scalar-aggregation builder.
+_TS_SCALAR_AGGS: dict[str, Callable[[pl.Expr], pl.Expr]] = {
+    name: _ts_scalar_agg_builder(name) for name in _TS_SCALAR_AGG_SPECS
+}
+
+
+# Register every scalar-aggregation extractor with the process-wide registry so
+# the ``.ts`` catalogue becomes machine-introspectable (previously it was
+# invisible to :class:`~polars_features.registry.FeatureRegistry`). These are all
+# pure per-entity aggregations: panel-safe and leakage-safe by construction.
+for _name, _params in _TS_SCALAR_AGG_SPECS.items():
+    registry.register(
+        FeatureSpec(
+            name=_name,
+            namespace="ts",
+            input_shape="series",
+            output_shape="scalar",
+            params=dict(_params),
+            tier="B",
+            panel_safe=True,
+            leakage_safe=True,
+            source="PanelKit",
+            license="Apache-2.0",
+            backend_fn=_TS_SCALAR_AGGS[_name],
+        ),
+        overwrite=True,
+    )
+del _name, _params
+
+
+def extract_features(
+    df: pl.DataFrame | pl.LazyFrame,
+    *,
+    entity: str | None = None,
+    time: str | None = None,
+    features: str | Sequence[str] = "all",
+    column: str | Sequence[str] | None = None,
+) -> pl.DataFrame | pl.LazyFrame:
+    """Compute registered ``ts`` scalar features per entity in a single lazy pass.
+
+    This is a tsfresh-style bulk extractor, but lazy and panel-safe: it runs one
+    ``group_by(entity).agg(...)`` over the requested value column(s), producing
+    exactly one row per entity with one column per (value column x feature).
+    Because every feature is a pure per-entity aggregation, no information leaks
+    across entities or from the future.
+
+    Parameters
+    ----------
+    df : pl.DataFrame | pl.LazyFrame
+        Long-format panel. A ``DataFrame`` is processed lazily and collected on
+        return; a ``LazyFrame`` stays lazy end-to-end.
+    entity : str, optional
+        Entity (group) column. Defaults to the first column, matching the repo
+        convention.
+    time : str, optional
+        Time column. Defaults to the second column. It is not aggregated; it is
+        only used to exclude it from the auto-selected value columns.
+    features : str | Sequence[str], default "all"
+        Either ``"all"`` (every registered ``ts`` scalar aggregation) or an
+        explicit list of registered feature names to subset.
+    column : str | Sequence[str], optional
+        Value column(s) to featurise. Defaults to every numeric column that is
+        neither ``entity`` nor ``time``. With a single value column the output
+        columns are named ``<feature>``; with several they are namespaced as
+        ``<column>__<feature>``.
+
+    Returns
+    -------
+    pl.DataFrame | pl.LazyFrame
+        One row per entity. Lazy in, lazy out.
+
+    Raises
+    ------
+    ValueError
+        If a requested feature is not a registered ``ts`` scalar aggregation, or
+        if no value columns can be resolved.
+    """
+    lazy_in = isinstance(df, pl.LazyFrame)
+    lf = df if lazy_in else df.lazy()
+
+    schema = lf.collect_schema()
+    names = schema.names()
+    if not names:
+        raise ValueError("extract_features received a frame with no columns.")
+
+    if entity is None:
+        entity = names[0]
+    if time is None:
+        time = names[1] if len(names) > 1 else None
+
+    if column is None:
+        reserved = {entity} | ({time} if time is not None else set())
+        value_cols = [c for c in names if c not in reserved and schema[c].is_numeric()]
+        if not value_cols:
+            raise ValueError(
+                "extract_features could not find any numeric value column to "
+                f"featurise (entity={entity!r}, time={time!r}). Pass `column=`."
+            )
+    elif isinstance(column, str):
+        value_cols = [column]
+    else:
+        value_cols = list(column)
+
+    if isinstance(features, str):
+        feat_names = list(_TS_SCALAR_AGGS) if features == "all" else [features]
+    else:
+        feat_names = list(features)
+
+    unknown = [f for f in feat_names if f not in _TS_SCALAR_AGGS]
+    if unknown:
+        available = ", ".join(_TS_SCALAR_AGGS)
+        raise ValueError(
+            f"Unknown ts feature(s) {unknown!r}. "
+            f"Registered scalar aggregations: {available}."
+        )
+
+    multi = len(value_cols) > 1
+    exprs: list[pl.Expr] = []
+    for col in value_cols:
+        for fname in feat_names:
+            alias = f"{col}__{fname}" if multi else fname
+            exprs.append(_TS_SCALAR_AGGS[fname](pl.col(col)).alias(alias))
+
+    out = lf.group_by(entity, maintain_order=True).agg(*exprs)
+    return out if lazy_in else out.collect()

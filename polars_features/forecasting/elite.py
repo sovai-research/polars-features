@@ -7,8 +7,8 @@ from typing import Any, Literal
 import polars as pl
 import polars.selectors as cs
 from sklearn.linear_model import LassoLarsIC
-from tqdm import tqdm
 
+from polars_features._progress import progress
 from polars_features.backtesting import backtest
 from polars_features.base.forecaster import Forecaster
 from polars_features.base.metric import METRIC_TYPE
@@ -235,8 +235,9 @@ class elite(Forecaster):
         schema = y.schema
         forecasters = {**self.forecasters, "naive": naive}
         # NOTE: Parallelized version available in Cloud
-        for model_name, forecaster_cls in (pbar := tqdm(forecasters.items())):
-            pbar.set_description(f"Cross-validating [forecaster={model_name}]")
+        for model_name, forecaster_cls in progress(
+            forecasters.items(), desc="Cross-validating"
+        ):
             # TODO: Investigate using residuals to quantify model uncertainty
             if model_name != "naive":
                 forecaster = forecaster_cls(
@@ -249,8 +250,7 @@ class elite(Forecaster):
 
         # 2. Score individual forecasters
         cv_scores = []
-        for model_name, y_preds in (pbar := tqdm(cv_y_preds.items())):
-            pbar.set_description(f"Scoring [forecaster={model_name}]")
+        for model_name, y_preds in progress(cv_y_preds.items(), desc="Scoring"):
             for split in range(n_splits):
                 y_pred = y_preds.filter(pl.col("split") == split).drop("split").lazy()
                 y_true = (
@@ -309,8 +309,9 @@ class elite(Forecaster):
 
         # 6. Fit forecasters
         fitted_forecasters = {}
-        for model_name, forecaster_cls in (pbar := tqdm(forecasters.items())):
-            pbar.set_description(f"Refitting [forecaster={model_name}]")
+        for model_name, forecaster_cls in progress(
+            forecasters.items(), desc="Refitting"
+        ):
             if model_name != "naive":
                 forecaster = forecaster_cls(
                     freq=freq, lags=lags, **model_kwargs.get(model_name, {})
@@ -337,8 +338,7 @@ class elite(Forecaster):
         # 1. Get individual forecasts
         forecasters = state.artifacts["forecasters"]
         forecasts = {}
-        for model_name, forecaster in (pbar := tqdm(forecasters.items())):
-            pbar.set_description(f"Forecast [forecaster={model_name}]")
+        for model_name, forecaster in progress(forecasters.items(), desc="Forecast"):
             y_pred = forecaster.predict(fh=fh).pipe(coerce_dtypes(schema)).collect()
             forecasts[model_name] = y_pred
 

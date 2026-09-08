@@ -17,8 +17,8 @@ Implementation note
 A Rust ``frac_diff`` plugin exists in this project, but it is **not compiled**
 in every environment. This module is the portable, pure-Python/Polars
 reference: the binomial weights are computed in NumPy and applied as a causal
-weighted rolling dot-product per entity via ``expr.over(entity_col)``. Results
-should match the compiled plugin up to floating point.
+FIR convolution (``numpy.convolve``) per entity via ``expr.over(entity_col)``.
+Results should match the compiled plugin up to floating point.
 """
 
 from __future__ import annotations
@@ -29,64 +29,18 @@ from typing import TYPE_CHECKING
 import numpy as np
 import polars as pl
 
+from polars_features._ffd import DEFAULT_THRESHOLD, ffd_weights, frac_diff_expr
 from polars_features.core.panel_frame import PanelFrame
 from polars_features.core.protocol import PanelTransformer
 
 if TYPE_CHECKING:
     pass
 
+# ``ffd_weights`` is re-exported for backward compatibility; the canonical
+# implementation (and the shared causal expression builder) now live in the
+# dependency-free leaf module :mod:`polars_features._ffd`, so every frac-diff
+# surface consumes exactly one weight recursion and one expression builder.
 __all__ = ["FracDiff", "ffd_weights"]
-
-
-def ffd_weights(
-    d: float, threshold: float = 1e-5, max_width: int | None = None
-) -> np.ndarray:
-    """Compute fixed-width-window fractional-differencing weights.
-
-    The weights follow the recurrence (de Prado 2018, eq. 5.x)::
-
-        w_0 = 1
-        w_k = -w_{k-1} * (d - k + 1) / k
-
-    Generation stops once ``|w_k| < threshold`` (or ``max_width`` is reached).
-    The returned array is ordered from the *oldest* lag to the *current*
-    observation, i.e. ``weights[-1]`` multiplies ``x_t`` and ``weights[0]``
-    multiplies ``x_{t-(width-1)}``. This ordering makes it a drop-in kernel for
-    a trailing weighted window.
-
-    Parameters
-    ----------
-    d : float
-        Differencing order. ``0`` is the identity, ``1`` is the first
-        difference; non-integer values give fractional differencing.
-    threshold : float, default=1e-5
-        Magnitude below which trailing weights are dropped (controls window
-        width). Must be positive.
-    max_width : int, optional
-        Hard cap on the window width, regardless of ``threshold``.
-
-    Returns
-    -------
-    numpy.ndarray
-        1-D array of weights, oldest-to-newest.
-    """
-    if threshold <= 0:
-        raise ValueError(f"`threshold` must be positive, got {threshold!r}.")
-    if max_width is not None and max_width < 1:
-        raise ValueError(f"`max_width` must be >= 1, got {max_width!r}.")
-
-    weights = [1.0]
-    k = 1
-    while True:
-        w = -weights[-1] * (d - k + 1) / k
-        if abs(w) < threshold:
-            break
-        weights.append(w)
-        k += 1
-        if max_width is not None and len(weights) >= max_width:
-            break
-    # newest-first by construction (w_0 multiplies x_t); reverse to oldest-first
-    return np.asarray(weights[::-1], dtype=np.float64)
 
 
 class FracDiff(PanelTransformer):
@@ -103,8 +57,9 @@ class FracDiff(PanelTransformer):
         feature column.
     d : float, default=0.5
         Differencing order (see :func:`ffd_weights`). Must be in ``[0, 2]``.
-    threshold : float, default=1e-5
-        Weight-magnitude cutoff controlling the fixed window width.
+    threshold : float, default=:data:`~polars_features._ffd.DEFAULT_THRESHOLD` (``5e-4``)
+        Weight-magnitude cutoff controlling the fixed window width. Smaller
+        values yield a longer kernel (more memory, more leading nulls).
     max_width : int, optional
         Hard cap on the window width.
     suffix : str, default="_fracdiff"
@@ -151,7 +106,7 @@ class FracDiff(PanelTransformer):
         columns: str | Sequence[str] | None = None,
         *,
         d: float = 0.5,
-        threshold: float = 1e-5,
+        threshold: float = DEFAULT_THRESHOLD,
         max_width: int | None = None,
         suffix: str = "_fracdiff",
         entity: str | None = None,
@@ -217,17 +172,13 @@ class FracDiff(PanelTransformer):
     def _fracdiff_expr(self, col: str, entity_col: str) -> pl.Expr:
         """Build a causal weighted-window dot product for ``col`` per entity.
 
-        Sum over j of weights[j] * shift(width-1-j), i.e. weights[-1]*x_t plus
-        older lags, computed within each entity. Windows that include a null
-        (the leading edge of each entity) collapse to null.
+        Delegates to the shared :func:`polars_features._ffd.frac_diff_expr`
+        builder (the single source of truth) and applies ``.over(entity_col)``
+        so the causal convolution and the leading-null warm-up are computed
+        within each entity and never bleed across entity boundaries.
         """
         assert self.weights_ is not None
-        width = self.width_
-        terms: list[pl.Expr] = []
-        for j, w in enumerate(self.weights_):
-            lag = (width - 1) - j  # j is oldest-first; lag is shift amount
-            terms.append(pl.lit(float(w)) * pl.col(col).shift(lag).over(entity_col))
-        return sum(terms[1:], terms[0])
+        return frac_diff_expr(pl.col(col), weights=self.weights_).over(entity_col)
 
     def _transform(self, panel: PanelFrame) -> PanelFrame:
         if self.weights_ is None:  # pragma: no cover - guarded by _check_fitted

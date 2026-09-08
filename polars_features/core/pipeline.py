@@ -99,6 +99,10 @@ class Pipeline(PanelTransformer):
         # Instance-level safety flags derived from the steps.
         self.panel_safe = all(t.panel_safe for _, t in self.steps)
         self.leakage_safe = all(t.leakage_safe for _, t in self.steps)
+        # Set at fit-time so transform/predict can tell whether they are being
+        # applied across a train/test boundary (see `_is_cross_boundary`).
+        self._train_panel: PanelFrame | None = None
+        self._train_times: set[object] | None = None
 
     # ------------------------------------------------------------------ #
     # Validation
@@ -149,6 +153,10 @@ class Pipeline(PanelTransformer):
     # ------------------------------------------------------------------ #
     def _fit(self, panel: PanelFrame) -> None:
         """Fit each step on the train-fold output of its predecessors."""
+        # Remember the training fold so transform/predict can detect a later
+        # train/test boundary and enforce each step's leakage contract.
+        self._train_panel = panel
+        self._train_times = set(panel.collect()[panel.time_col].to_list())
         out = panel
         # Fit-transform every step except the last; fit the last appropriately.
         for name, transformer in self.steps[:-1]:
@@ -164,8 +172,34 @@ class Pipeline(PanelTransformer):
         last_name, last = self.steps[-1]
         last.fit(out)
 
+    def _is_cross_boundary(self, panel: PanelFrame) -> bool:
+        """Whether ``panel`` contains times not seen at fit time (a test fold).
+
+        Returns False when the pipeline was not fitted with recorded times, or
+        when every time in ``panel`` was already present in the training fold
+        (so applying the fitted steps cannot cross a train/test boundary).
+        """
+        if self._train_times is None:
+            return False
+        times = set(panel.collect()[panel.time_col].to_list())
+        return not times.issubset(self._train_times)
+
+    def _enforce_leakage(self, panel: PanelFrame) -> None:
+        """Refuse a not-leakage-safe pipeline applied across a boundary.
+
+        Delegates to each step's :meth:`~polars_features.core.protocol.
+        PanelTransformer._check_leakage`, which raises for any step declaring
+        ``leakage_safe = False``. A no-op when ``panel`` is the training fold.
+        """
+        if not self._is_cross_boundary(panel):
+            return
+        train = self._train_panel
+        for _name, transformer in self.steps:
+            transformer._check_leakage(train, panel)
+
     def _transform(self, panel: PanelFrame) -> PanelFrame:
         """Apply every fitted step's ``transform`` in order."""
+        self._enforce_leakage(panel)
         out = panel
         for name, transformer in self.steps:
             out = transformer.transform(out)
@@ -216,6 +250,7 @@ class Pipeline(PanelTransformer):
                 "not a PanelEstimator; `predict` requires the last step to be an "
                 "estimator. Use `transform` for a feature-only pipeline."
             )
+        self._enforce_leakage(panel)
         out = panel
         for _name, transformer in self.steps[:-1]:
             out = transformer.transform(out)
