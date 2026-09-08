@@ -1321,6 +1321,7 @@ def _reconstruct_paths(
     time_col: str,
     *,
     n_trials: int | None = None,
+    trial_sharpes: Sequence[float] | None = None,
     periods_per_year: float | None = None,
 ) -> None:
     """Reconstruct CPCV backtest paths and fill overfitting diagnostics.
@@ -1372,13 +1373,32 @@ def _reconstruct_paths(
 
     finite = [s for s in path_sharpes if math.isfinite(s)]
     if finite:
-        # V = empirical variance of the trial Sharpes (Bailey & de Prado's V),
-        # NOT the single-strategy estimator variance.
-        v_trials = float(np.var(finite, ddof=1)) if len(finite) > 1 else 0.0
+        # (N, V) must be a matched pair: N is the number of configurations
+        # searched and V the variance of *those* configurations' Sharpes.
+        # When the caller supplies `trial_sharpes` (the Sharpe of every
+        # configuration they tried) both come from it, which is the estimator
+        # Bailey & de Prado actually define. Otherwise V falls back to the
+        # variance across CPCV paths of the single fitted strategy -- a proxy
+        # for trial dispersion, not the same quantity -- and N to the user's
+        # honest search count.
+        trial_sample = (
+            [float(s) for s in trial_sharpes if math.isfinite(float(s))]
+            if trial_sharpes is not None
+            else None
+        )
+        if trial_sample and len(trial_sample) > 1:
+            v_trials = float(np.var(trial_sample, ddof=1))
+        else:
+            v_trials = float(np.var(finite, ddof=1)) if len(finite) > 1 else 0.0
         # n_paths is a geometry constant, never the search count. Use the honest
         # user N; fall back to n_paths only as a floor, and say so loudly.
-        eff_trials = n_trials if n_trials is not None else cv.n_paths
-        if n_trials is None:
+        if n_trials is not None:
+            eff_trials = n_trials
+        elif trial_sample:
+            eff_trials = len(trial_sample)
+        else:
+            eff_trials = cv.n_paths
+        if n_trials is None and not trial_sample:
             msg = (
                 "n_trials not supplied; DSR deflated against n_paths="
                 f"{cv.n_paths} (a CV-geometry floor, likely too small). Pass "
@@ -1426,6 +1446,7 @@ def cross_validate(
     time: str | None = None,
     metric: Callable[[np.ndarray, np.ndarray], float] | None = None,
     n_trials: int | None = None,
+    trial_sharpes: Sequence[float] | None = None,
     periods_per_year: float | None = None,
 ) -> CVReport:
     """Run leak-safe cross-validation of ``estimator`` over ``cv``.
@@ -1462,6 +1483,14 @@ def cross_validate(
         count ``N`` used to deflate the Sharpe. If omitted, the CPCV ``n_paths``
         (a CV-geometry constant, **not** a search count) is used only as a floor
         and a warning is emitted — pass ``n_trials`` for an honest DSR.
+    trial_sharpes : sequence of float, optional
+        For CPCV only: the per-observation Sharpe of **every configuration you
+        searched**. This is the sample Bailey & de Prado's ``V`` is defined on,
+        so supplying it makes the ``(N, V)`` pair used by the Deflated Sharpe
+        mutually consistent (``N`` defaults to ``len(trial_sharpes)`` when
+        ``n_trials`` is omitted). Without it, ``V`` falls back to the variance
+        of this strategy's CPCV path Sharpes, which is a proxy for trial
+        dispersion rather than the quantity itself.
     periods_per_year : float, optional
         For CPCV only: annualisation factor for the reported path Sharpes. The
         DSR itself always strips annualisation (it needs the per-observation
@@ -1535,6 +1564,7 @@ def cross_validate(
             entity_col,
             time_col,
             n_trials=n_trials,
+            trial_sharpes=trial_sharpes,
             periods_per_year=periods_per_year,
         )
     return report
@@ -1558,6 +1588,7 @@ class _Validate:
         time: str | None = None,
         metric: Callable[[np.ndarray, np.ndarray], float] | None = None,
         n_trials: int | None = None,
+        trial_sharpes: Sequence[float] | None = None,
         periods_per_year: float | None = None,
     ) -> CVReport:
         """Combinatorial Purged CV of ``estimator`` -> :class:`CVReport`."""
@@ -1577,6 +1608,7 @@ class _Validate:
             time=time,
             metric=metric,
             n_trials=n_trials,
+            trial_sharpes=trial_sharpes,
             periods_per_year=periods_per_year,
         )
 
