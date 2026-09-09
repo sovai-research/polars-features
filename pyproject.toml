@@ -151,6 +151,11 @@ dev = [
   "hypothesis>=6.0",
   "mypy>=1.8",
   "pre-commit>=3.5",
+  # `tests/test_dependency_drift.py` parses pyproject.toml. 3.11+ has `tomllib`
+  # in the stdlib; 3.10 needs this backport. It was never declared, so on the
+  # three Python 3.10 CI legs that guardrail silently collected ZERO tests --
+  # `pytest.importorskip("tomli")` at module scope skipped the whole module.
+  "tomli>=2.0; python_version < '3.11'",
   # Parallel test execution: the suite is 1600+ tests and runs ~14x
   # faster with `-n auto` (measured: 15+ min serial -> 67 s on 8 cores).
   "pytest-xdist>=3.5",

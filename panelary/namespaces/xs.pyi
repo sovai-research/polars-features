@@ -1,19 +1,21 @@
-"""Type stubs for the ``.xs`` Polars expression namespace.
+"""Type stubs for the ``.xs`` cross-sectional Polars namespaces.
 
 These stubs give IDEs and static type checkers (mypy, Pyright) full knowledge of
-the methods registered onto :class:`polars.Expr` via
-``pl.api.register_expr_namespace("xs")``. Because Polars adds the namespace
-dynamically at runtime, without these stubs ``pl.col(...).xs.rank(...)`` would
-not autocomplete or type-check.
+the methods registered onto :class:`polars.Expr`, :class:`polars.LazyFrame` and
+:class:`polars.DataFrame` via ``pl.api.register_*_namespace("xs")``. Because
+Polars adds the namespaces dynamically at runtime, without these stubs
+``pl.col(...).xs.zscore()`` would neither autocomplete nor type-check.
 
 The package ships ``py.typed`` (PEP 561), so a checker that resolves
-``panelary.namespaces.xs`` will read this ``.pyi`` in preference to the
-runtime module. Importing :class:`XSExprNamespace` from the package is enough for
-the stubs to be discovered.
+``panelary.namespaces.xs`` reads this ``.pyi`` in preference to the runtime
+module. That makes the stub user-visible API: **every method registered at
+runtime must appear here, with the runtime signature.** ``tests/test_namespaces.py``
+asserts the two stay in step.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Literal
 
 import polars as pl
@@ -27,52 +29,154 @@ __all__ = [
 
 _RankMethod = Literal["average", "min", "max", "dense", "ordinal", "random"]
 
+#: ``True`` is an alias for ``"uniform_plus"``; ``False`` returns the raw rank.
+_RankNormalize = bool | Literal["uniform_plus", "unit", "centered", "uniform"]
+
+_Columns = str | Sequence[str]
+_Limits = float | Sequence[float]
+
 class XSExprNamespace:
     def __init__(self, expr: pl.Expr) -> None: ...
-    def rank(
-        self,
-        *,
-        method: _RankMethod = ...,
-        normalize: bool = ...,
-    ) -> pl.Expr: ...
     def demean(self) -> pl.Expr: ...
+    def neutralize(self, by: _Columns, *, add_intercept: bool = ...) -> pl.Expr: ...
+    def quantile_bin(self, q: int) -> pl.Expr: ...
+    def rank(
+        self, *, method: _RankMethod = ..., normalize: _RankNormalize = ...
+    ) -> pl.Expr: ...
+    def standardize(self, *, winsor: _Limits | None = ...) -> pl.Expr: ...
+    def winsorize(self, limits: _Limits) -> pl.Expr: ...
+    def zscore(self) -> pl.Expr: ...
 
 class XSLazyFrameNamespace:
     def __init__(self, lf: pl.LazyFrame) -> None: ...
+    def demean(
+        self,
+        columns: _Columns,
+        *,
+        over: str | None = ...,
+        alias: str | None = ...,
+        suffix: str | None = ...,
+    ) -> pl.LazyFrame: ...
+    def neutralize(
+        self,
+        columns: _Columns,
+        *,
+        by: _Columns,
+        over: str | None = ...,
+        add_intercept: bool = ...,
+        alias: str | None = ...,
+        suffix: str | None = ...,
+    ) -> pl.LazyFrame: ...
+    def quantile_bin(
+        self,
+        columns: _Columns,
+        *,
+        q: int,
+        over: str | None = ...,
+        alias: str | None = ...,
+        suffix: str | None = ...,
+    ) -> pl.LazyFrame: ...
     def rank(
         self,
-        column: str,
+        columns: _Columns,
         *,
         over: str | None = ...,
         method: _RankMethod = ...,
-        normalize: bool = ...,
+        normalize: _RankNormalize = ...,
         alias: str | None = ...,
+        suffix: str | None = ...,
     ) -> pl.LazyFrame: ...
-    def demean(
+    def standardize(
         self,
-        column: str,
+        columns: _Columns,
+        *,
+        over: str | None = ...,
+        winsor: _Limits | None = ...,
+        alias: str | None = ...,
+        suffix: str | None = ...,
+    ) -> pl.LazyFrame: ...
+    def winsorize(
+        self,
+        columns: _Columns,
+        *,
+        limits: _Limits,
+        over: str | None = ...,
+        alias: str | None = ...,
+        suffix: str | None = ...,
+    ) -> pl.LazyFrame: ...
+    def zscore(
+        self,
+        columns: _Columns,
         *,
         over: str | None = ...,
         alias: str | None = ...,
+        suffix: str | None = ...,
     ) -> pl.LazyFrame: ...
 
 class XSDataFrameNamespace:
     def __init__(self, df: pl.DataFrame) -> None: ...
+    def demean(
+        self,
+        columns: _Columns,
+        *,
+        over: str | None = ...,
+        alias: str | None = ...,
+        suffix: str | None = ...,
+    ) -> pl.DataFrame: ...
+    def neutralize(
+        self,
+        columns: _Columns,
+        *,
+        by: _Columns,
+        over: str | None = ...,
+        add_intercept: bool = ...,
+        alias: str | None = ...,
+        suffix: str | None = ...,
+    ) -> pl.DataFrame: ...
+    def quantile_bin(
+        self,
+        columns: _Columns,
+        *,
+        q: int,
+        over: str | None = ...,
+        alias: str | None = ...,
+        suffix: str | None = ...,
+    ) -> pl.DataFrame: ...
     def rank(
         self,
-        column: str,
+        columns: _Columns,
         *,
         over: str | None = ...,
         method: _RankMethod = ...,
-        normalize: bool = ...,
+        normalize: _RankNormalize = ...,
         alias: str | None = ...,
+        suffix: str | None = ...,
     ) -> pl.DataFrame: ...
-    def demean(
+    def standardize(
         self,
-        column: str,
+        columns: _Columns,
+        *,
+        over: str | None = ...,
+        winsor: _Limits | None = ...,
+        alias: str | None = ...,
+        suffix: str | None = ...,
+    ) -> pl.DataFrame: ...
+    def winsorize(
+        self,
+        columns: _Columns,
+        *,
+        limits: _Limits,
+        over: str | None = ...,
+        alias: str | None = ...,
+        suffix: str | None = ...,
+    ) -> pl.DataFrame: ...
+    def zscore(
+        self,
+        columns: _Columns,
         *,
         over: str | None = ...,
         alias: str | None = ...,
+        suffix: str | None = ...,
     ) -> pl.DataFrame: ...
 
 def register() -> None: ...

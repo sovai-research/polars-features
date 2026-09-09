@@ -18,7 +18,7 @@ independently splittable (see the module docstring of
 :mod:`panelary.namespaces.xs`). Putting the kernel in ``transform/`` would force
 a ``namespaces -> transform`` edge and break that boundary; putting it here lets
 the estimator layer depend *downwards* on the leaf, which is the direction the
-layering already allows (cf. :mod:`panelary._ffd`, the analogous frac-diff
+layering already allows (cf. :mod:`panelary._internal._ffd`, the analogous frac-diff
 leaf). Nothing in this module imports anything else from ``panelary``, so it
 cannot participate in an import cycle.
 

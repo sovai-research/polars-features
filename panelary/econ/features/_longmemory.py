@@ -1,6 +1,6 @@
 """Long-memory estimation: GPH and Robinson local-Whittle, wired into frac-diff.
 
-The fixed-width fractional-differencing kernel in :mod:`panelary._ffd`
+The fixed-width fractional-differencing kernel in :mod:`panelary._internal._ffd`
 needs an order ``d``. Hard-coding one ``d`` for a whole panel is both arbitrary
 and, if it were tuned by looking at the whole sample, a leak. This module
 estimates ``d`` *from the data*:
@@ -11,7 +11,7 @@ estimates ``d`` *from the data*:
 * :func:`estimate_fractional_order` -- picks the estimator, and handles the
   non-stationary ``d >= 0.5`` region by differencing once and adding one back.
 * :func:`estimate_ffd_order` -- clips that estimate into a legal
-  :func:`panelary._ffd.ffd_weights` order.
+  :func:`panelary._internal._ffd.ffd_weights` order.
 * :class:`AutoFracDiff` -- a :class:`~panelary.core.protocol.PanelTransformer`
   that estimates ``d`` **per entity on the training rows only**, freezes the
   resulting weight kernel, and applies the causal frac-diff filter at transform
@@ -32,7 +32,7 @@ from typing import NamedTuple
 import numpy as np
 import polars as pl
 
-from panelary._ffd import DEFAULT_THRESHOLD, ffd_weights, frac_diff_expr
+from panelary._internal._ffd import DEFAULT_THRESHOLD, ffd_weights, frac_diff_expr
 from panelary.core.panel_frame import PanelFrame
 from panelary.core.protocol import PanelTransformer
 from panelary.econ.features._common import (
@@ -327,10 +327,10 @@ def estimate_ffd_order(
     estimates the fractional-integration order of ``x`` with a semiparametric
     long-memory estimator (:func:`estimate_fractional_order`) and clips it into
     ``[lower, upper]`` so the result is always a legal
-    :func:`panelary._ffd.ffd_weights` order.
+    :func:`panelary._internal._ffd.ffd_weights` order.
 
     This lives here, next to the estimator it calls, rather than in
-    :mod:`panelary._ffd`: that module is a dependency-free **leaf** so the
+    :mod:`panelary._internal._ffd`: that module is a dependency-free **leaf** so the
     ``namespaces`` layer can import the frac-diff kernel without pulling in the
     estimator layer, and a function here that reached back up into
     :mod:`panelary.econ` was the sole reason a latent import cycle existed.
@@ -456,7 +456,7 @@ class AutoFracDiff(PanelTransformer):
     (local-Whittle by default), clips it into ``[d_min, d_max]``, and builds the
     corresponding fixed-width weight kernel. ``transform`` applies the frozen
     kernels with the shared causal filter
-    (:func:`panelary._ffd.frac_diff_expr`) under ``.over(entity)``.
+    (:func:`panelary._internal._ffd.frac_diff_expr`) under ``.over(entity)``.
 
     This is the leak-safe version of "difference each series by however much it
     needs": the order is a fitted parameter, so it is chosen once on train and
@@ -472,7 +472,7 @@ class AutoFracDiff(PanelTransformer):
         Clipping bounds for the estimated order (default ``0.0`` / ``1.0``).
     threshold : float
         Weight-magnitude cutoff passed to
-        :func:`panelary._ffd.ffd_weights`.
+        :func:`panelary._internal._ffd.ffd_weights`.
     max_width : int, optional
         Hard cap on the kernel width.
     round_to : float, optional

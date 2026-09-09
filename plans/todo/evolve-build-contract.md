@@ -5,7 +5,7 @@ implementation agents 2026-09-09.
 
 Pure **numpy + polars**. No scipy, sklearn, statsmodels, numba, Rust in the
 import path. Optional accelerators (lightgbm) go behind
-`panelary._deps.require` and must have a pure-numpy fallback that is the
+`panelary._internal._deps.require` and must have a pure-numpy fallback that is the
 **default**.
 
 Reuse, do not reinvent:

@@ -53,7 +53,7 @@ Notes
 -----
 Nothing here is imported at ``import panelary`` cost beyond numpy and
 polars: every booster, ``shap`` and ``shapiq`` import is lazy and routed through
-:func:`panelary._deps.require`.
+:func:`panelary._internal._deps.require`.
 
 Deferred (tracked, not shipped): a native Arrow/Polars TreeSHAP kernel and the
 sparse Mobius/Fourier (SPEX) engine. Both were Rust-plugin work, and Panelary

@@ -21,7 +21,7 @@ Long memory (:mod:`._longmemory`)
     order ``d``; :func:`estimate_fractional_order` handles the non-stationary
     region; :func:`estimate_ffd_order` clips that estimate into a legal
     fixed-width kernel order; :class:`AutoFracDiff` makes
-    :mod:`panelary._ffd` **data driven per entity**, fitted train-only.
+    :mod:`panelary._internal._ffd` **data driven per entity**, fitted train-only.
 
 Realized volatility (:mod:`._harrv`)
     :func:`realized_measures` (RV / bipower variation / jumps),

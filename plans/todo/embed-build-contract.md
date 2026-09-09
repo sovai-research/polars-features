@@ -6,7 +6,7 @@ agents 2026-09-09.
 
 Pure **numpy + polars**. No scipy, sklearn, statsmodels, numba, torch or Rust in
 the import path. Optional accelerators (numba) go behind
-`panelary._deps.require` under the existing `fast` extra and must have a
+`panelary._internal._deps.require` under the existing `fast` extra and must have a
 pure-numpy fallback that is the **default**.
 
 Reuse, do not reinvent:

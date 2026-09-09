@@ -23,7 +23,7 @@ Architecture / import boundary
 This module is part of the ``namespaces`` package — **Tier 1, the Polars-native
 extension layer**. It imports ONLY from :mod:`polars`, the Rust plugin,
 :mod:`panelary.registry`, and the dependency-free leaf module
-:mod:`panelary._ffd` (numpy/polars only). It must NOT import from
+:mod:`panelary._internal._ffd` (numpy/polars only). It must NOT import from
 ``panelary.core`` or ``panelary.transform`` (the estimator layer),
 so the expression layer stays independently splittable into a standalone
 ``polars-panel`` plugin later. The frac-diff kernel lives in ``_ffd`` precisely
@@ -59,7 +59,7 @@ from typing import TypeVar
 
 import polars as pl
 
-from panelary._ffd import DEFAULT_THRESHOLD, frac_diff_expr
+from panelary._internal._ffd import DEFAULT_THRESHOLD, frac_diff_expr
 from panelary.registry import FeatureSpec, registry
 
 __all__ = [
@@ -86,8 +86,8 @@ _SOURCE = "Panelary"
 # one implementation per operator and no duplication.
 #
 # ``frac_diff`` is the exception: its kernel + causal builder live in the
-# dependency-free leaf module :mod:`panelary._ffd`
-# (:func:`~panelary._ffd.frac_diff_expr`) so the estimator layer
+# dependency-free leaf module :mod:`panelary._internal._ffd`
+# (:func:`~panelary._internal._ffd.frac_diff_expr`) so the estimator layer
 # (:class:`panelary.transform.frac_diff.FracDiff`) and this namespace
 # layer share ONE weight recursion without either importing the other. The
 # thin ``_expr_frac_diff`` wrapper below adapts that shared builder to this
@@ -100,7 +100,7 @@ def _expr_frac_diff(
 ) -> pl.Expr:
     """Build the fixed-width fractional-differencing expression (causal).
 
-    Thin adapter over the shared :func:`panelary._ffd.frac_diff_expr`
+    Thin adapter over the shared :func:`panelary._internal._ffd.frac_diff_expr`
     builder (the single source of truth). See :meth:`PanelExprNamespace.frac_diff`
     for the full description.
     """
@@ -214,7 +214,7 @@ class PanelExprNamespace:
 
         The implementation is a causal convolution: the value at row ``t`` is a
         weighted sum of ``x[t], x[t-1], ...`` with the weights from
-        :func:`panelary._ffd.ffd_weights`. No future rows are used. The first
+        :func:`panelary._internal._ffd.ffd_weights`. No future rows are used. The first
         ``len(weights) - 1`` rows are ``null`` (insufficient history), matching
         the semantics of a rolling window.
 
@@ -223,7 +223,7 @@ class PanelExprNamespace:
         d : float
             Order of fractional differencing (typically ``0 < d < 1``).
         threshold : float, keyword-only, default \
-            :data:`~panelary._ffd.DEFAULT_THRESHOLD` (``5e-4``)
+            :data:`~panelary._internal._ffd.DEFAULT_THRESHOLD` (``5e-4``)
             Weight-magnitude cutoff controlling the kernel width. Smaller values
             yield a longer kernel (more memory, more leading nulls).
 
@@ -336,7 +336,7 @@ class _PanelFrameNamespace:
             If given, write each output to ``f"{col}{suffix}"`` (the way to
             feature-engineer multiple columns in one call).
         threshold : float, keyword-only, default \
-            :data:`~panelary._ffd.DEFAULT_THRESHOLD` (``5e-4``)
+            :data:`~panelary._internal._ffd.DEFAULT_THRESHOLD` (``5e-4``)
             Weight-magnitude cutoff controlling the kernel width.
 
         Returns

@@ -3,13 +3,13 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
-# `panelary._plotting` imports plotly at module scope, and plotly lives in
+# `panelary.plotting` imports plotly at module scope, and plotly lives in
 # the optional `viz` extra. CI's default install is `[dev,recommended]`, which does
 # not include it, so this guard is what keeps the module from failing collection
 # on a light install. Do not move it below the import it guards.
 pytest.importorskip("plotly")
 
-from panelary._plotting import (  # noqa: E402
+from panelary.plotting._display import (  # noqa: E402
     get_chosen_entities,
     get_num_rows,
     get_subplot_grid_position,

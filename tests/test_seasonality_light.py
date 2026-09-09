@@ -14,7 +14,7 @@ import sys
 import polars as pl
 import pytest
 
-from panelary._deps import have
+from panelary._internal._deps import have
 
 
 def test_importing_seasonality_does_not_import_holidays():
@@ -118,7 +118,9 @@ def test_add_holiday_effects_raises_helpful_error_without_holidays(monkeypatch):
             raise ImportError("No module named 'holidays'")
         return real_import_module(name, *args, **kwargs)
 
-    monkeypatch.setattr("panelary._deps.importlib.import_module", fake_import_module)
+    monkeypatch.setattr(
+        "panelary._internal._deps.importlib.import_module", fake_import_module
+    )
 
     df = pl.DataFrame(
         {

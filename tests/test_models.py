@@ -8,7 +8,7 @@ import numpy as np
 import polars as pl
 from sklearn.linear_model import LinearRegression
 
-from panelary.core import PanelFrame, Pipeline
+from panelary.core import Pipeline
 from panelary.models import (
     PanelLGBMRegressor,
     PanelSklearnClassifier,

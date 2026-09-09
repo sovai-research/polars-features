@@ -18,7 +18,7 @@ scikit-learn ensembles  ``shap.TreeExplainer`` (both value functions)
 custom                  any object exposing ``panelary_shap_values(X, background)``
 ======================  ==========================================================
 
-Every one of those imports is lazy (:func:`panelary._deps.require`), so
+Every one of those imports is lazy (:func:`panelary._internal._deps.require`), so
 ``import panelary.explain`` costs nothing but numpy + polars.
 
 What Panelary *adds* is the argument the libraries leave to the user: the
@@ -33,7 +33,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-from panelary._deps import require
+from panelary._internal._deps import require
 from panelary.core.panel_frame import PanelFrame, as_panel
 from panelary.explain._background import TimeAwareBackground
 from panelary.explain._common import (

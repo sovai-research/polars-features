@@ -65,7 +65,7 @@ standardised columns ``Za`` and ``Zb``, ``Za.T @ Zb`` over *all* rows equals the
 sum over dates of the per-date cross-sectional correlations.
 
 Everything is numpy + polars. LightGBM is optional, routed through
-:func:`panelary._deps.require`, and the pure-numpy ridge baseline is the
+:func:`panelary._internal._deps.require`, and the pure-numpy ridge baseline is the
 **default**.
 """
 
@@ -1311,7 +1311,7 @@ class PanelEvaluator:
     base_model : {"ridge", "lightgbm"}, keyword-only, default "ridge"
         Baseline for ``mode="residual"``. The pure-numpy ridge is the default so
         the core stays numpy+polars; LightGBM is routed through
-        :func:`panelary._deps.require`.
+        :func:`panelary._internal._deps.require`.
     pool : AlphaPool | None, keyword-only
         When given, the aggregate score is the candidate's **marginal
         contribution** to this pool rather than its standalone IC. Pool weights
@@ -1619,10 +1619,10 @@ class PanelEvaluator:
         FeatureBoost/OpenFE geometry: 100 trees, 16 leaves, early stopping with
         patience 3, warm-started from the ridge prediction via ``init_score`` so
         the booster only has to learn what ridge could not. Behind
-        :func:`panelary._deps.require`; the ridge path above is the
+        :func:`panelary._internal._deps.require`; the ridge path above is the
         default and this is never on the import path.
         """
-        from panelary._deps import require
+        from panelary._internal._deps import require
 
         lgb = require("lightgbm", extra="lightgbm", feature="evolve residual scoring")
         if self._library.shape[1] == 0:

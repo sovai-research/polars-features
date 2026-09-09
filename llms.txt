@@ -1,6 +1,6 @@
 # Panelary
 
-> The best methods for panel data. Leak-safe, Polars-native feature engineering and ML for panel data (many entities observed over time). Panelary is a panel-first (entity x time) data-science toolkit with an sklearn-familiar API, lazy Polars execution, and correctness-by-construction: no lookahead, ever. Version 0.4.0 is pure Python (the Rust extension was dropped) and ships a single universal `py3-none-any` wheel with `py.typed`. Built on the foundations of functime (Apache-2.0) and licensed Apache-2.0.
+> The best methods for panel data. Leak-safe, Polars-native feature engineering and ML for panel data (many entities observed over time). Panelary is a panel-first (entity x time) data-science toolkit with an sklearn-familiar API, lazy Polars execution, and correctness-by-construction: no lookahead, ever. Version 0.5.0 is pure Python (the Rust extension was dropped in 0.4.0) and ships a single universal `py3-none-any` wheel with `py.typed`. Built on the foundations of functime (Apache-2.0) and licensed Apache-2.0.
 
 Workflow: impute -> engineer -> label -> select -> reduce -> model -> validate, with no lookahead at any stage.
 
@@ -14,7 +14,7 @@ Project URLs:
 - Project/brand name: Panelary. PyPI distribution and Python import name: `panelary` (one name, no alias). The conventional import is `import panelary as pn`. The pre-0.4.0 names `polars_features` and `PanelKit` are retired and no longer resolve.
 - Requires Python >= 3.10. Mandatory dependencies are only `numpy` and `polars>=1.0.0`; everything heavier is an optional extra.
 - Install: `pip install panelary`, or `pip install "panelary[recommended]"` for the batteries-included set (`ml`, `scipy`, `seasonality`, `cafe`), or `[all]` for every real feature extra. There are 21 extras: `ml`, `scipy`, `progress`, `seasonality`, `forecasting`, `automl`, `lightgbm`, `catboost`, `xgboost`, `ann`, `fast`, `llm`, `gpu`, `viz`, `cafe`, `dimreduce`, `explain`, the bundles `recommended` and `all`, and the toolchains `docs` and `dev`.
-- A missing optional dependency raises an actionable error naming the extra to install (via `panelary._deps.require`), never a bare ImportError.
+- A missing optional dependency raises an actionable error naming the extra to install (via `panelary._internal._deps.require`), never a bare ImportError.
 
 ## The golden path
 
@@ -40,7 +40,7 @@ Each workflow stage has one top-level verb on the `pn` namespace, fronting the s
 - Expression namespaces: operators are called as `pl.col(...).<namespace>.<name>(...)` across the `panel`, `xs`, `ts` and `factor` namespaces. `.panel` implies `.over(entity)`; `.xs` implies `.over(time)`. Typed `.pyi` stubs ship in the wheel.
 - Operator registry: `pn.registry` holds a `FeatureSpec` per operator recording signature, input/output shape, tier, `panel_safe`/`leakage_safe` flags, and provenance/license. `registry.to_records()` serialises it, `registry.to_llms_txt()` renders a machine-readable operator catalogue, and `registry.audit()` checks that every operator is permissively licensed. 56 operators are registered today (`ts`=42, `xs`=7, `factor`=4, `panel`=3).
 
-## Shipped modules (0.4.0)
+## Shipped modules (0.5.0)
 
 - `pn.core` — the correctness kernel: `PanelFrame`, leak-safe `Pipeline`, `PanelTransformer`/`PanelEstimator` protocols, purged model selection.
 - `pn.transform` — panel-native, leak-safe preprocessing transformers: `TimeSeriesScaler`, `CrossSectionalScaler`, `CrossSectionalRank`, `Neutralize`, `FracDiff`.

@@ -1,7 +1,7 @@
 """The top-level public surface must stay complete.
 
 `panelary.detect` shipped in 0.4.0 with 37 public symbols and a large
-test suite, and was unreachable as ``pk.detect`` because nothing added it to
+test suite, and was unreachable as ``pn.detect`` because nothing added it to
 ``panelary/__init__.py``. Three separate audits found it independently,
 which is the signature of a gap that review does not catch. These tests make it
 a build failure instead.
@@ -19,22 +19,26 @@ import pathlib
 
 import pytest
 
-import panelary as pk
+import panelary as pn
 
-_ROOT = pathlib.Path(pk.__file__).parent
+_ROOT = pathlib.Path(pn.__file__).parent
 
 #: Packages that are deliberately not part of the public surface.
 _PRIVATE = {
-    # In-progress subpackage owned by a separate workstream; it has no
-    # __init__.py and nothing imports it yet.
+    # Structurally complete (9 modules, ~9.8k lines, an `__init__.py`
+    # exporting 38 names, and its own tests) and it ships in the wheel, but it
+    # is deliberately NOT wired into `panelary/__init__.py`: it has no entry in
+    # `__all__` or `_LAZY_SUBMODULES`, and no docs. It is reachable only by a
+    # deep import. Wiring it up is a public-API addition and needs an owner's
+    # decision -- until then this opt-out is what keeps the surface honest.
     "evolve",
 }
 
 #: Internal plumbing: importable, but not public API and not advertised.
+#: `conversion`, `ranges` and `type_aliases` used to live here; they now sit
+#: under `panelary/_internal/` (and `forecasting/_conversion.py`), where the
+#: underscore already excludes them from the checks below.
 _INTERNAL_MODULES = {
-    "conversion",
-    "ranges",
-    "type_aliases",
     "registry",
 }
 
@@ -52,18 +56,18 @@ def _public_subpackages() -> list[str]:
 
 @pytest.mark.parametrize("name", _public_subpackages())
 def test_subpackage_is_reachable(name: str) -> None:
-    """``pk.<subpackage>`` is wired up: eager, or declared lazy.
+    """``pn.<subpackage>`` is wired up: eager, or declared lazy.
 
     A lazy submodule may still raise on access when its extra is not
-    installed (``pk.llm`` without ``[llm]`` is the normal case), so being
+    installed (``pn.llm`` without ``[llm]`` is the normal case), so being
     declared in ``_LAZY_SUBMODULES`` is what counts as wired up here. The
     failure this guards against is a subpackage nobody connected at all.
     """
     # Order matters: `hasattr` propagates ImportError (it only swallows
     # AttributeError), so a lazy module whose extra is missing would raise
     # here rather than return False. Check the declaration first.
-    assert name in pk._LAZY_SUBMODULES or hasattr(pk, name), (
-        f"panelary.{name} is not reachable as pk.{name}. Add it to the "
+    assert name in pn._LAZY_SUBMODULES or hasattr(pn, name), (
+        f"panelary.{name} is not reachable as pn.{name}. Add it to the "
         f"eager import block in panelary/__init__.py, or to "
         f"_LAZY_SUBMODULES if importing it pulls an optional dependency."
     )
@@ -72,8 +76,8 @@ def test_subpackage_is_reachable(name: str) -> None:
 @pytest.mark.parametrize("name", _public_subpackages())
 def test_subpackage_is_advertised(name: str) -> None:
     """Every public subpackage is in ``__all__`` or declared lazy."""
-    lazy = set(pk._LAZY_SUBMODULES)
-    assert name in pk.__all__ or name in lazy, (
+    lazy = set(pn._LAZY_SUBMODULES)
+    assert name in pn.__all__ or name in lazy, (
         f"panelary.{name} resolves but is invisible: it is neither in "
         f"__all__ nor in _LAZY_SUBMODULES."
     )
@@ -81,22 +85,22 @@ def test_subpackage_is_advertised(name: str) -> None:
 
 def test_lazy_submodules_are_real_and_importable() -> None:
     """Nothing rots in _LAZY_SUBMODULES: each name is a real module."""
-    for name in pk._LAZY_SUBMODULES:
+    for name in pn._LAZY_SUBMODULES:
         assert (_ROOT / name).is_dir() or (_ROOT / f"{name}.py").exists(), (
             f"_LAZY_SUBMODULES lists {name!r}, which is not a module."
         )
 
 
 def test_dir_includes_lazy_submodules() -> None:
-    """``dir(pk)`` advertises the lazy names, so tab-completion finds them."""
-    listed = set(dir(pk))
-    assert set(pk._LAZY_SUBMODULES) <= listed
+    """``dir(pn)`` advertises the lazy names, so tab-completion finds them."""
+    listed = set(dir(pn))
+    assert set(pn._LAZY_SUBMODULES) <= listed
 
 
 def test_detect_is_exported() -> None:
     """Regression: `detect` is 0.4.0's headline feature and was unreachable."""
-    assert "detect" in pk.__all__
-    assert pk.detect is importlib.import_module("panelary.detect")
+    assert "detect" in pn.__all__
+    assert pn.detect is importlib.import_module("panelary.detect")
 
 
 def test_backtesting_imports_at_all() -> None:
@@ -121,7 +125,7 @@ def test_public_modules_are_reachable() -> None:
         for p in _ROOT.glob("*.py")
         if not p.stem.startswith("_")
         and p.stem not in _INTERNAL_MODULES
-        and p.stem not in pk._LAZY_SUBMODULES
-        and not hasattr(pk, p.stem)
+        and p.stem not in pn._LAZY_SUBMODULES
+        and not hasattr(pn, p.stem)
     ]
     assert not unreachable, f"unreachable public modules: {unreachable}"

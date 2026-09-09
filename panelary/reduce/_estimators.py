@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import polars as pl
 
-from panelary._deps import require
+from panelary._internal._deps import require
 from panelary.core.panel_frame import PanelFrame
 from panelary.core.protocol import PanelTransformer
 from panelary.reduce._common import (

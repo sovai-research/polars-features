@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import polars as pl
 
-from panelary._ffd import DEFAULT_THRESHOLD, ffd_weights, frac_diff_expr
+from panelary._internal._ffd import DEFAULT_THRESHOLD, ffd_weights, frac_diff_expr
 from panelary.core.panel_frame import PanelFrame
 from panelary.core.protocol import PanelTransformer
 
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 # ``ffd_weights`` is re-exported for backward compatibility; the canonical
 # implementation (and the shared causal expression builder) now live in the
-# dependency-free leaf module :mod:`panelary._ffd`, so every frac-diff
+# dependency-free leaf module :mod:`panelary._internal._ffd`, so every frac-diff
 # surface consumes exactly one weight recursion and one expression builder.
 __all__ = ["FracDiff", "ffd_weights"]
 
@@ -57,7 +57,7 @@ class FracDiff(PanelTransformer):
         feature column.
     d : float, default=0.5
         Differencing order (see :func:`ffd_weights`). Must be in ``[0, 2]``.
-    threshold : float, default=:data:`~panelary._ffd.DEFAULT_THRESHOLD` (``5e-4``)
+    threshold : float, default=:data:`~panelary._internal._ffd.DEFAULT_THRESHOLD` (``5e-4``)
         Weight-magnitude cutoff controlling the fixed window width. Smaller
         values yield a longer kernel (more memory, more leading nulls).
     max_width : int, optional
@@ -172,7 +172,7 @@ class FracDiff(PanelTransformer):
     def _fracdiff_expr(self, col: str, entity_col: str) -> pl.Expr:
         """Build a causal weighted-window dot product for ``col`` per entity.
 
-        Delegates to the shared :func:`panelary._ffd.frac_diff_expr`
+        Delegates to the shared :func:`panelary._internal._ffd.frac_diff_expr`
         builder (the single source of truth) and applies ``.over(entity_col)``
         so the causal convolution and the leading-null warm-up are computed
         within each entity and never bleed across entity boundaries.

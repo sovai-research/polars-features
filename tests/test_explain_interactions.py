@@ -12,7 +12,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from panelary._deps import have
+from panelary._internal._deps import have
 from panelary.explain import (
     TimeAwareBackground,
     interaction_matrix,

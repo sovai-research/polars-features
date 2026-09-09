@@ -9,7 +9,7 @@ if TYPE_CHECKING:
         Literal,
     )
 
-    from panelary.type_aliases import PolarsFrame
+    from panelary._internal._type_aliases import PolarsFrame
 
 import numpy as np
 import polars as pl

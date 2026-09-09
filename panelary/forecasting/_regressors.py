@@ -9,7 +9,7 @@ import numpy as np
 import polars as pl
 import sklearn
 
-from panelary.conversion import X_to_numpy, y_to_numpy
+from panelary.forecasting._conversion import X_to_numpy, y_to_numpy
 from panelary.preprocessing import PL_NUMERIC_COLS
 
 
@@ -165,7 +165,7 @@ class FLAMLRegressor:
         self.tuner = None
 
     def fit(self, X: pl.DataFrame, y: pl.DataFrame):
-        from panelary._deps import require
+        from panelary._internal._deps import require
 
         AutoML = require("flaml", feature="FLAML AutoML regressor").AutoML
 

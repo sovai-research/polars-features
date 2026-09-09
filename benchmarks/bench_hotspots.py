@@ -27,7 +27,7 @@ import numpy as np
 import polars as pl
 
 import panelary  # noqa: F401  (registers the .panel/.xs/.ts namespaces)
-from panelary._deps import have
+from panelary._internal._deps import have
 
 RNG = np.random.default_rng(7)
 

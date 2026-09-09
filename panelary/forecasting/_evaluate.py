@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import polars as pl
 
-from panelary._deps import require
+from panelary._internal._deps import require
 from panelary.metrics import mae
 
 if TYPE_CHECKING:

@@ -3,9 +3,9 @@
 These tests protect the work that removed scikit-learn, scipy and cloudpickle
 from this module's *import-time* cost. They assert that:
 
-* the module carries no module-top ``import sklearn/scipy/cloudpickle`` (those
-  are now lazy, imported inside the transforms that need them);
-* importing the module does not eagerly pull ``cloudpickle`` into ``sys.modules``;
+* no module in the package carries a module-top ``import sklearn/scipy/cloudpickle``
+  (those are now lazy, imported inside the transforms that need them);
+* importing the package does not eagerly pull ``cloudpickle`` into ``sys.modules``;
 * stdlib ``pickle`` is a behavioural drop-in for the previously-used
   ``cloudpickle`` when (de)serialising the fitted regressors used by
   ``deseasonalize_fourier``;
@@ -28,7 +28,10 @@ import pytest
 import panelary.preprocessing as pp
 from panelary.preprocessing import boxcox, detrend, yeojohnson
 
-_MODULE_PATH = Path(pp.__file__)
+#: ``panelary.preprocessing`` is a package; every submodule must stay light, so
+#: the AST guard walks all of them rather than only ``__init__.py``.
+_PACKAGE_DIR = Path(pp.__file__).parent
+_MODULE_PATHS = sorted(_PACKAGE_DIR.glob("*.py"))
 _HEAVY = {"sklearn", "scipy", "cloudpickle"}
 
 
@@ -44,9 +47,10 @@ def _panel(seed: int = 0) -> pl.DataFrame:
     return pl.DataFrame(rows)
 
 
-def test_no_module_top_heavy_imports() -> None:
-    """No top-level ``import sklearn/scipy/cloudpickle`` in preprocessing.py."""
-    tree = ast.parse(_MODULE_PATH.read_text())
+@pytest.mark.parametrize("path", _MODULE_PATHS, ids=lambda p: p.name)
+def test_no_module_top_heavy_imports(path: Path) -> None:
+    """No top-level ``import sklearn/scipy/cloudpickle`` anywhere in the package."""
+    tree = ast.parse(path.read_text())
     offenders = []
     for node in tree.body:  # module-level statements only
         if isinstance(node, ast.Import):
@@ -54,6 +58,22 @@ def test_no_module_top_heavy_imports() -> None:
         elif isinstance(node, ast.ImportFrom) and node.module:
             offenders.append(node.module.split(".")[0])
     assert not (set(offenders) & _HEAVY), sorted(set(offenders) & _HEAVY)
+
+
+def test_package_split_is_discovered() -> None:
+    """The AST guard above actually walks the split package, not just one file.
+
+    ``preprocessing`` became a package; if it ever collapsed back to a single
+    module -- or a submodule were added under a name the glob misses -- the
+    parametrised guard would silently shrink to one file.
+    """
+    assert _PACKAGE_DIR.is_dir(), "panelary.preprocessing should be a package"
+    names = {p.name for p in _MODULE_PATHS}
+    assert "__init__.py" in names
+    assert len(names) > 1, f"expected private submodules alongside __init__.py: {names}"
+    assert all(n.startswith("_") for n in names), (
+        f"every submodule of a public package must be private: {sorted(names)}"
+    )
 
 
 def test_import_does_not_pull_cloudpickle() -> None:

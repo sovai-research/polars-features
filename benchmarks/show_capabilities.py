@@ -1,6 +1,6 @@
 """Print which optional Panelary features are available in this environment.
 
-Reads :data:`panelary._deps._MODULE_TO_EXTRA` -- the single source of
+Reads :data:`panelary._internal._deps._MODULE_TO_EXTRA` -- the single source of
 truth for "which extra provides which import" -- and probes each module.  Used
 by the CI extras matrix so the job log itself is evidence that ``[]`` really is
 bare and ``[recommended]`` / ``[all]`` really do light their features up.
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import sys
 
-from panelary._deps import _MODULE_TO_EXTRA, have
+from panelary._internal._deps import _MODULE_TO_EXTRA, have
 
 
 def main() -> int:

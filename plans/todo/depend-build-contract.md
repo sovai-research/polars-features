@@ -10,7 +10,7 @@ import path. Oracles (`dcor`, `hyppo`, `scipy.stats.chatterjeexi`) are
 Reuse, do not reinvent:
 `panelary.econ._common` (`ols`, `pinv_sym`, `norm_cdf`, `norm_ppf`, `t_sf`,
 `chi2_sf`, `factorize`, `group_mean`, `group_sum`, `newey_west_lrv`,
-`auto_bandwidth`, `winsorize`), `panelary._numpy_stats`
+`auto_bandwidth`, `winsorize`), `panelary._internal._numpy_stats`
 (`chebyshev_neighbour_counts`, `lstsq`), `panelary.validation._bootstrap`
 (`moving_block_bootstrap`, `circular_block_bootstrap`, `stationary_bootstrap`,
 `wild_bootstrap`, `sieve_bootstrap`, `block_bootstrap_indices`,
@@ -340,7 +340,7 @@ def mi_ksg(x, y, *, k=5, max_n=20_000, seed=0) -> float   # M3
     # Kraskov-Stogbauer-Grassberger algorithm 1. Needs (a) the k-th nearest
     # neighbour Chebyshev distance per point and (b) marginal counts strictly
     # inside that radius. (b) is EXACTLY what
-    # panelary._numpy_stats.chebyshev_neighbour_counts already provides
+    # panelary._internal._numpy_stats.chebyshev_neighbour_counts already provides
     # (sort-windowed, blocked, exact parity with KDTree p=inf) -- reuse it,
     # do not write a second neighbour search. For (a) use the same sorted
     # window with a per-block partition. Digamma: implement psi() in

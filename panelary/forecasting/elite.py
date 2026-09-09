@@ -7,12 +7,12 @@ from typing import Any, Literal
 import polars as pl
 import polars.selectors as cs
 
-import panelary._deps as _deps
+import panelary._internal._deps as _deps
 from panelary._internal._progress import progress
 from panelary.base.forecaster import Forecaster
 from panelary.base.metric import METRIC_TYPE
-from panelary.conversion import X_to_numpy, y_to_numpy
 from panelary.cross_validation import expanding_window_split
+from panelary.forecasting._conversion import X_to_numpy, y_to_numpy
 from panelary.forecasting.knn import knn
 from panelary.forecasting.linear import lasso_cv, linear_model, ridge_cv
 from panelary.forecasting.naive import naive

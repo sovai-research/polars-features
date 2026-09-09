@@ -1,8 +1,8 @@
 """Parity + causality tests for the consolidated fractional-differencing surfaces.
 
 After consolidation there is exactly ONE weight recursion
-(:func:`panelary._ffd.ffd_weights`) and ONE causal expression builder
-(:func:`panelary._ffd.frac_diff_expr`). Every public frac-diff surface
+(:func:`panelary._internal._ffd.ffd_weights`) and ONE causal expression builder
+(:func:`panelary._internal._ffd.frac_diff_expr`). Every public frac-diff surface
 
 * the ``.panel.frac_diff`` expression namespace,
 * the frame-level ``.panel.frac_diff`` namespace,
@@ -22,7 +22,7 @@ import pytest
 
 import panelary.feature_extractors  # noqa: F401  (registers .ts namespace)
 import panelary.namespaces  # noqa: F401  (registers .panel namespace)
-from panelary._ffd import ffd_weights, frac_diff_expr
+from panelary._internal._ffd import ffd_weights, frac_diff_expr
 from panelary.core import PanelFrame
 from panelary.preprocessing import fractional_diff
 from panelary.transform.frac_diff import FracDiff

@@ -7,7 +7,7 @@ intact.
 
 Pure **numpy + polars** in the default path. No Rust, no compiled extension, no
 Polars expression plugin, no scipy/sklearn/tensorly in any import that the
-default path reaches. Optional backends go behind `panelary._deps.require`.
+default path reaches. Optional backends go behind `panelary._internal._deps.require`.
 
 Reuse, do not reinvent:
 `panelary.core.protocol.PanelTransformer` (the `panel_safe` / `leakage_safe`

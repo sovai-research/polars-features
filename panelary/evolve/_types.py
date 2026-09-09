@@ -3,7 +3,7 @@
 This module is the *spine* of :mod:`panelary.evolve`. It defines the
 vocabulary that every other module in the package codes against, and it has
 **no third-party imports beyond numpy and polars** — matching Panelary's
-light-core policy (see :mod:`panelary._deps`).
+light-core policy (see :mod:`panelary._internal._deps`).
 
 Design decisions encoded here, and the evidence behind them
 -----------------------------------------------------------

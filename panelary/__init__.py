@@ -279,7 +279,7 @@ del _name
 
 # --- The golden path: eight top-level verbs ---------------------------------
 # One verb per task, uniform signature, thin facade over the subpackages above
-# (see `panelary/_verbs.py`). This block must stay **last**, because `select`,
+# (see `panelary/_internal/_verbs.py`). This block must stay **last**, because `select`,
 # `cluster` and `reduce` are also subpackage names and the verb is what
 # `pn.select` / `pn.cluster` / `pn.reduce` must resolve to.
 #
@@ -292,7 +292,7 @@ del _name
 # `_verbs` imports polars, numpy and every subpackage *inside* the function
 # bodies, so wiring it here costs ~0 ms of import time.
 try:
-    from panelary._verbs import (
+    from panelary._internal._verbs import (
         bubbles,
         causal,
         cluster,
@@ -303,7 +303,7 @@ try:
         select,
     )
 except ImportError as exc:  # pragma: no cover - defensive
-    _warn_unavailable("panelary._verbs", exc)
+    _warn_unavailable("panelary._internal._verbs", exc)
 else:
     # `cluster` / `reduce` / `select` are already in `__all__` as subpackages;
     # the name now resolves to the verb, so don't list it twice.

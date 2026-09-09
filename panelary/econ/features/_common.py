@@ -9,7 +9,7 @@ leak-safe panel feature.
 Only :mod:`numpy` and :mod:`polars` are imported at module level -- there is no
 ``scipy`` dependency anywhere in this subpackage. Where a heavier optional
 dependency would help it must be routed through
-:func:`panelary._deps.require` inside the calling function.
+:func:`panelary._internal._deps.require` inside the calling function.
 
 Causality convention
 --------------------

@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import polars as pl
 
-from panelary._deps import require
+from panelary._internal._deps import require
 from panelary.base.forecaster import (
     FORECAST_STRATEGIES,
     SUPPORTED_FREQ,

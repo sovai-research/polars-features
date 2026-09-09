@@ -15,7 +15,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from panelary._deps import have
+from panelary._internal._deps import have
 from panelary.feature_extractors import _cusum_events, _cusum_events_py
 
 # Directory holding the Rust-captured parity baselines.

@@ -10,7 +10,7 @@ scores ``F = X_standardised @ loadings`` -- so it drops into the same
 pipelines.
 
 ``scikit-learn``'s ``FastICA`` does the heavy lifting and is **imported lazily**
-through :func:`panelary._deps.require`, so ``import panelary``
+through :func:`panelary._internal._deps.require`, so ``import panelary``
 stays numpy+polars only. Install it with ``pip install 'panelary[ml]'``.
 """
 
@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from panelary._deps import require
+from panelary._internal._deps import require
 from panelary.reduce._common import fix_signs, prepare_matrix
 from panelary.reduce._n_factors import n_factors as _resolve_n_factors
 

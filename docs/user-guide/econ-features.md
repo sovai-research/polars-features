@@ -83,7 +83,7 @@ res.stat, res.pvalue, res.break_index, res.break_fraction
 
 ## Long memory: making frac-diff data driven
 
-The fixed-width fractional-differencing filter (`panelary._ffd`) needs an
+The fixed-width fractional-differencing filter (`panelary._internal._ffd`) needs an
 order `d`. Picking one number for a whole panel is arbitrary; tuning it by eye on
 the full sample is a leak. Estimate it instead:
 

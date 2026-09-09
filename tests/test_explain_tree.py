@@ -338,6 +338,6 @@ def test_interventional_without_shap_is_an_actionable_error(train, future):
 
 
 def _have(module):
-    from panelary._deps import have
+    from panelary._internal._deps import have
 
     return have(module)

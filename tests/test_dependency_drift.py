@@ -1,7 +1,7 @@
 """Dependency-drift guards for the light 0.4.0 core.
 
 Three invariants, all read *dynamically* from the two sources of truth
-(``pyproject.toml`` and :mod:`panelary._deps`) so the tests keep working
+(``pyproject.toml`` and :mod:`panelary._internal._deps`) so the tests keep working
 while either side legitimately grows:
 
 1. ``[project.dependencies]`` is exactly ``{numpy, polars}``.  Any new hard
@@ -23,7 +23,7 @@ import sys
 
 import pytest
 
-from panelary import _deps
+from panelary._internal import _deps
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -47,7 +47,7 @@ EXPECTED_HARD_DEPS = {"numpy", "polars"}
 #:
 #: Currently empty, and it should stay that way: ``narwhals`` -> ``interop``
 #: was quarantined here until the dangling row was deleted from
-#: ``panelary/_deps.py`` (the ``interop`` extra went away in 0.4.0 and
+#: ``panelary/_internal/_deps.py`` (the ``interop`` extra went away in 0.4.0 and
 #: nothing imports narwhals).  Prefer deleting a stale row over adding it here.
 KNOWN_STALE_MODULES: set[str] = set()
 
@@ -86,7 +86,7 @@ def test_hard_dependencies_are_numpy_and_polars_only(pyproject):
         "[project.dependencies] must stay exactly {numpy, polars} -- the light "
         f"core is the product promise. Found {sorted(declared)}. Anything else "
         "belongs in an optional extra, imported lazily via "
-        "`panelary._deps.require(...)`."
+        "`panelary._internal._deps.require(...)`."
     )
 
 
@@ -110,7 +110,7 @@ def test_module_to_extra_targets_declared_extras(declared_extras):
         if extra not in declared_extras and module not in KNOWN_STALE_MODULES
     }
     assert not broken, (
-        "panelary._deps._MODULE_TO_EXTRA maps modules to extras that are "
+        "panelary._internal._deps._MODULE_TO_EXTRA maps modules to extras that are "
         f"not declared in [project.optional-dependencies]: {broken}. Declared "
         f"extras: {sorted(declared_extras)}. Either add the extra to "
         "pyproject.toml or fix the mapping -- otherwise `require()` tells users "

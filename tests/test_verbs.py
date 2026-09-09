@@ -5,7 +5,7 @@ is the contract for that surface, and it is deliberately paranoid about three
 things:
 
 1. **Every verb is exercised against a real frame.** The README once documented
-   ``pk.col``, ``pk.transform.winsorize`` and ``pk.models.lgbm_classifier``,
+   ``pn.col``, ``pn.transform.winsorize`` and ``pn.models.lgbm_classifier``,
    none of which existed. A verb that imports but has never been called is the
    same failure with better packaging, so each one here is invoked on a
    synthetic panel and its return type checked.
@@ -104,11 +104,11 @@ def gappy(panel: pl.DataFrame) -> pl.DataFrame:
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("verb", VERBS)
 def test_verb_is_importable_and_callable(verb: str) -> None:
-    """``pn.<verb>`` resolves to a callable defined in `panelary._verbs`."""
+    """``pn.<verb>`` resolves to a callable defined in `panelary._internal._verbs`."""
     assert hasattr(pn, verb), f"pn.{verb} does not resolve"
     fn = getattr(pn, verb)
     assert callable(fn), f"pn.{verb} is not callable"
-    assert fn.__module__ == "panelary._verbs"
+    assert fn.__module__ == "panelary._internal._verbs"
 
 
 @pytest.mark.parametrize("verb", VERBS)

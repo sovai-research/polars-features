@@ -3,7 +3,7 @@
 Nothing in this module imports a booster, ``shap``, ``shapiq`` or ``sklearn`` at
 module scope: the whole ``explain`` subpackage must stay importable with only
 ``numpy`` + ``polars`` installed. Every heavy import is routed through
-:func:`panelary._deps.require` inside the function that needs it.
+:func:`panelary._internal._deps.require` inside the function that needs it.
 """
 
 from __future__ import annotations
@@ -376,6 +376,6 @@ def raw_predict(estimator: Any, X: np.ndarray) -> np.ndarray:
 
 def _require(module: str, feature: str) -> Any:
     """Local alias so the heavy import stays inside the calling function."""
-    from panelary._deps import require
+    from panelary._internal._deps import require
 
     return require(module, feature=feature)

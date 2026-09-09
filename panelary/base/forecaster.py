@@ -7,9 +7,9 @@ from typing import Literal, ParamSpec, TypeVar
 
 import polars as pl
 
+from panelary._internal._ranges import make_future_ranges
 from panelary.base.model import Model, ModelState
 from panelary.base.transformer import Transformer
-from panelary.ranges import make_future_ranges
 
 # The parameters of the Model
 P = ParamSpec("P")

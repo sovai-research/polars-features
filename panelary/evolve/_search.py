@@ -267,8 +267,8 @@ def evolve_features(
 
     Examples
     --------
-    >>> import panelary as pk  # doctest: +SKIP
-    >>> res = pk.evolve.evolve_features(  # doctest: +SKIP
+    >>> import panelary as pn  # doctest: +SKIP
+    >>> res = pn.evolve.evolve_features(  # doctest: +SKIP
     ...     panel, target="fwd_ret_5d", entity="ticker", time="date"
     ... )
     >>> print(res.summary())  # doctest: +SKIP

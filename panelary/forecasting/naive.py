@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import polars as pl
 
+from panelary._internal._ranges import make_future_ranges
 from panelary.base import Forecaster
-from panelary.ranges import make_future_ranges
 
 
 class naive(Forecaster):

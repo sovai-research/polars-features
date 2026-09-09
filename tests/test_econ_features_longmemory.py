@@ -16,7 +16,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from panelary._ffd import SAFETY_MAX_WIDTH, ffd_weights
+from panelary._internal._ffd import SAFETY_MAX_WIDTH, ffd_weights
 from panelary.core import PanelFrame
 from panelary.econ.features import (
     AutoFracDiff,

@@ -19,7 +19,112 @@ above the 0.4.0 entry, and [MIGRATING.md](MIGRATING.md) for how to move.
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **`sliding_window_split` trained on future data.** `cross_validation`'s
+  sliding splitter computed its training offset as
+  `pl.len() - cutoff - window_size`. When the window exceeded the history
+  available before the first test block that offset went negative, and a
+  negative Polars slice offset counts back from the *end* of the group — so the
+  earliest folds trained on rows that came *after* their own test block. On a
+  20-step panel with `test_size=2, n_splits=5, step_size=3, window_size=10`,
+  fold 0 tested `t=6..7` and trained on `t=16..19`. This violated the
+  `panel_safe` contract in a public splitter and was untested: the existing
+  leakage suite only exercised the panel-aware variants. The window is now
+  clamped at the start of history. Expanding-window slicing is unchanged.
+- **`panelary.metrics.multi_objective` was unreachable.** It had its own
+  documented API page while `hasattr(pn.metrics, "multi_objective")` was
+  `False`. Now re-exported, with `Metrics`, `score_forecast`, `score_backtest`
+  and `summarize_scores` available from `panelary.metrics` directly.
+- **The shipped `xs.pyi` stub hid five of seven `.xs` methods.** The package
+  ships `py.typed`, so `pl.col("ret").xs.zscore()` — documented and carrying a
+  FeatureSpec — was a type error for every user. `rank` also declared
+  `column: str` where the runtime takes `columns: str | Sequence[str]`. The
+  stub is regenerated from the runtime signatures and `tests/test_namespace_stubs.py`
+  now fails the build on drift.
+- **`make typecheck` could not run on Python 3.12+.** `python_version = "3.10"`
+  also selects mypy's parser, which then rejects numpy's own PEP 695 stubs and
+  aborts before checking anything. CI hid this by pinning 3.10 for that job
+  while the package supports 3.10–3.13.
+- `tests/test_dependency_drift.py` silently collected **zero** tests on the
+  three Python 3.10 CI legs: its `pytest.importorskip("tomli")` sat at module
+  scope and `tomli` was declared in no extra. Now in `dev`.
+- Two stale entries in CI's bare-core `--ignore` list. `tests/test_plotting.py`
+  guards itself with `importorskip`, and `tests/test_cross_validation.py`
+  imports no optional dependency — dropping it restores 264 tests of bare-core
+  coverage. `pytest --ignore` accepts a non-existent path silently, so
+  `tests/test_ci_guardrails.py` now asserts every listed path exists.
+- A `See Also` in `core/model_selection` claimed its splitters "thinly wrap"
+  the `cross_validation` originals. They do not — they are a separate
+  implementation on a different axis. Only the fold schedule, which is provably
+  identical, is now shared via `_walk_forward_cutoffs`.
+
+### Changed
+
+- **Internal layout only — no public import path changes.** The loose private
+  top-level modules were folded into a single `panelary/_internal/` package and
+  two private helpers moved next to the code that owns them. Nothing here was
+  ever part of the documented public API, and every `pn.*` / `panelary.<public>`
+  import is unchanged; the note exists so that older docs, plans and branches
+  can be re-pointed:
+
+  | Was | Is now |
+  | --- | --- |
+  | `panelary/_compat.py` | `panelary/_internal/_compat.py` |
+  | `panelary/_numpy_stats.py` | `panelary/_internal/_numpy_stats.py` |
+  | `panelary/_progress.py` | `panelary/_internal/_progress.py` |
+  | `panelary/_utils.py` | `panelary/_internal/_utils.py` |
+  | `panelary/_deps.py` | `panelary/_internal/_deps.py` |
+  | `panelary/_ffd.py` | `panelary/_internal/_ffd.py` |
+  | `panelary/_verbs.py` | `panelary/_internal/_verbs.py` |
+  | `panelary/ranges.py` | `panelary/_internal/_ranges.py` |
+  | `panelary/type_aliases.py` | `panelary/_internal/_type_aliases.py` |
+  | `panelary/conversion.py` | `panelary/forecasting/_conversion.py` |
+
+  The documented `require()` convention is therefore now
+  `from panelary._internal._deps import require` (was `panelary._deps`), and
+  `panelary._ffd.estimate_ffd_order` — announced under 0.5.0 — is reached as
+  `panelary.econ.features.estimate_ffd_order`.
+
+  **Five public modules became packages.** `feature_extractors` (3487 lines),
+  `preprocessing` (1321), `catch22` (1066), `conformal` (663) and `plotting`
+  (which absorbed the private `_plotting`) are now packages split into private
+  submodules. `X.py` → `X/__init__.py` preserves the import path exactly, so
+  every `from panelary.X import ...`, `pn.X.Y` and mkdocstrings `::: panelary.X`
+  is unchanged — this is not a rename and needs no shim. The package root went
+  from 24 loose modules to 9, all of them documented public API.
+
+- Duplicated implementations collapsed onto single kernels, each proved
+  equivalent before the merge: CAFE imputation (two implementations, two
+  `_require_cafe`, one of which bypassed the `require()` convention with a bare
+  `import cafe`) and cross-sectional neutralization (the `PanelTransformer` and
+  the `.xs` expression namespace ran the same per-date `lstsq` with no shared
+  code; verified bit-identical across 50 input/flag combinations first).
+
+- `_ffd.py` reached up into `panelary.econ` through a deferred import — the sole
+  cause of a latent import cycle. `estimate_ffd_order` moved to the module whose
+  maths it already called; the leaf now has zero intra-package imports.
+
+### Removed
+
+- `panelary/metrics/probabilistic.py`, a zero-byte module imported by nothing.
+- `tests/test_changepoint_detection.py`, which imported nothing from `panelary`
+  and asserted on the output of a CUSUM it defined inline.
+- `conftest`'s `dunnhumby_retail` fixture: no test referenced it and it raised
+  on load (`f64` → `i16` cast of NaN). Its only data file, `data/dunnhumby.parquet`
+  (20 MB), is untracked as a result.
+- A dead `FUNCTIME__TEST_MODE` branch in `conftest` calling `DataFrame.groupby`,
+  removed in Polars 1.0 — it would have raised had the variable ever been set.
+- **104 MB of unreferenced parquet** untracked from `data/` (the full-size `m5`
+  train/test frames — only the `_sample` variants are ever loaded — plus
+  `m4_1h_*` and `tourism`), and **22 MB of unreferenced images** from `docs/img`.
+  Note this does not shrink the 235 MiB pack: untracking is not a history
+  rewrite, and that decision has not been made.
+- The docs site advertised a **third party's Discord** on every page, inherited
+  verbatim from functime, with a second such link in the contributing guide.
+  Both removed; the notebook-download block in the theme override is kept.
+- The retired `PanelKit` alias `pk` survived in shipped docstrings and two test
+  modules. Now `pn` throughout, per the stated convention.
 
 ## [0.5.0] — 2026-09-09
 

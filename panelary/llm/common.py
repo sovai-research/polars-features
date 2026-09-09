@@ -5,7 +5,7 @@ import os
 from collections.abc import Mapping
 from typing import Literal
 
-import panelary._deps as _deps
+import panelary._internal._deps as _deps
 
 # Routed through `_deps.require` rather than a bare `raise ImportError`, so the
 # message matches every other optional dependency in the package and the pip

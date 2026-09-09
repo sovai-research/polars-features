@@ -19,7 +19,7 @@ import numpy as np
 import polars as pl
 
 if TYPE_CHECKING:
-    from panelary.type_aliases import PolarsFrame
+    from panelary._internal._type_aliases import PolarsFrame
 
 __all__ = [
     "triple_barrier",

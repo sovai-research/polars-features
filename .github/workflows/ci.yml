@@ -253,6 +253,10 @@ jobs:
       - name: Run suite (bare core subset)
         if: matrix.variant.label == 'bare core []'
         # Each ignore is an optional-dependency import at module scope.
+        # Keep this list minimal: an entry for a file that DOES run bare-core
+        # silently costs coverage. `tests/test_plotting.py` (guards itself with
+        # importorskip) and `tests/test_cross_validation.py` (264 tests, no
+        # optional imports) were both stale and have been dropped.
         run: |
           uv run pytest -q -n auto --dist loadfile \
             --ignore=tests/test_forecasting.py \
@@ -260,13 +264,11 @@ jobs:
             --ignore=tests/test_evaluation.py \
             --ignore=tests/test_mda_permute.py \
             --ignore=tests/test_models.py \
-            --ignore=tests/test_plotting.py \
             --ignore=tests/test_preprocessing.py \
             --ignore=tests/test_reduce.py \
             --ignore=tests/test_select.py \
             --ignore=tests/test_select_unsup.py \
             --ignore=tests/test_reduce_factor_leakage.py \
-            --ignore=tests/test_cross_validation.py \
             --ignore=tests/test_calendar.py \
             --ignore=tests/test_cluster.py \
             --ignore=tests/test_forecasting_light.py

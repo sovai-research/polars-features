@@ -24,9 +24,10 @@ validation splitters, and metrics) are derived from functime and remain
 licensed under the Apache License, Version 2.0. The original copyright
 notices and license terms are retained accordingly.
 
-The Python import package is currently named `panelary`. The
-public rename to `panelary` is planned but not yet effective; "Panelary"
-is the project/brand name.
+The project/brand name is "Panelary"; the PyPI distribution and the
+Python import package are both named `panelary`. The rename from
+`polars-features` / `polars_features` took effect in 0.5.0 -- see
+MIGRATING.md.
 
 ------------------------------------------------------------------------
 Third-party notices

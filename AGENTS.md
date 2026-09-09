@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Instructions for AI coding agents working on **Panelary** (import name and PyPI
-distribution `panelary`, version 0.4.0). Human-facing docs live in `README.md`,
+distribution `panelary`, version 0.5.0). Human-facing docs live in `README.md`,
 `CONTRIBUTING.md` and `docs/`; this file is the agent-facing contract.
 
 ## Project overview
@@ -37,7 +37,7 @@ real feature extra. There are 21 extras in total: `ml`, `scipy`, `progress`,
 `seasonality`, `forecasting`, `automl`, `lightgbm`, `catboost`, `xgboost`,
 `ann`, `fast`, `llm`, `gpu`, `viz`, `cafe`, `dimreduce`, `explain`, plus the
 bundles `recommended` and `all` and the toolchains `docs` and `dev`. Extra
-names mirror `panelary._deps._MODULE_TO_EXTRA`, so every `require(...)` install
+names mirror `panelary._internal._deps._MODULE_TO_EXTRA`, so every `require(...)` install
 hint resolves to a real extra — keep the two in step when you add one.
 
 `uv.lock` is **git-ignored on purpose**: this is a library, so resolution stays
@@ -60,13 +60,22 @@ Equivalently, without make:
 ```bash
 ruff check . && ruff format --check .
 mypy panelary                      # `mypy` alone works too: files = ["panelary"]
-pytest -q -m "not slow"            # 1687 of 1718 tests
+pytest -q -m "not slow"            # ~2100 of ~2130 tests
 ```
+
+**`make typecheck` is expected to exit 1 today.** mypy reports ~1030 errors over
+the package; CI does not require zero. The gate
+(`.github/workflows/ci.yml`, job "Type-check (mypy)") is a **ratchet**: it fails
+only if the error count exceeds `MYPY_BASELINE` (currently `1040`), and prints a
+notice asking you to lower the baseline when the count drops. So the rule for a
+change is *do not increase the count*, not *make mypy clean* — and `make check`
+will stop at `typecheck` until the baseline is reached, which is why the three
+gates are usually run individually.
 
 Timing notes for iterating efficiently:
 
 - `ruff check` is effectively instant. Always run it.
-- Collection alone is ~3s (1718 tests). Serial, **the full suite takes well over
+- Collection alone is ~2s (~2130 tests). Serial, **the full suite takes well over
   15 minutes locally**; `pytest-xdist` ships in the `dev` extra, and
   `-n auto --dist loadfile` brings that down to roughly a minute on 8 cores.
   Use `--dist loadfile`, not `loadscope`: several modules build a shared panel
@@ -107,7 +116,7 @@ Public transformers subclass `panelary.core.protocol.PanelTransformer`
 and **must set `panel_safe` / `leakage_safe` class attributes**.
 
 Additional hard invariants observed by the newer subpackages (see
-`plans/detect-build-contract.md`, which documents them explicitly):
+`plans/done/detect-build-contract.md`, which documents them explicitly):
 
 1. **Prefix invariance** — `f(x[:T])[t] == f(x[:T+k])[t]` for all `t <= T`. No
    quantity may depend on `len(x)`: not window sizes, thresholds, lag orders,
@@ -147,10 +156,10 @@ leakage regression suites to model on: `tests/test_leakage.py`,
   licensing. This is the machine-readable catalogue of the library — keep it
   populated.
 - **Optional dependencies.** Import them **lazily, inside the function that
-  needs them**, and route the import through `panelary._deps.require`:
+  needs them**, and route the import through `panelary._internal._deps.require`:
 
   ```python
-  from panelary._deps import require
+  from panelary._internal._deps import require
   sklearn = require("sklearn", feature="mrmr selection")
   ```
 
@@ -160,7 +169,7 @@ leakage regression suites to model on: `tests/test_leakage.py`,
   `import sklearn` / `import scipy` to any module.
 - **Typing.** The package ships `py.typed`. Annotate all public signatures;
   current coverage is 97.4% of public parameters and 84.4% of return types, and
-  mypy is a blocking CI gate.
+  mypy runs in CI as a ratcheted gate (see above): it must not get worse.
 - **Docstrings.** NumPy style with `Parameters` / `Returns` / `Raises`. 79.9% of
   public callables have one; new public code should.
 
@@ -180,7 +189,7 @@ leakage regression suites to model on: `tests/test_leakage.py`,
 ## Planning convention
 
 Larger work is specified as a markdown plan in `plans/`, moved from
-`plans/todo/` to `plans/done/` when implemented. `plans/detect-build-contract.md`
+`plans/todo/` to `plans/done/` when implemented. `plans/done/detect-build-contract.md`
 is a good template: hard invariants, a per-file ownership table, and explicit
 dependency limits. If you are handed a plan file, treat it as the spec and only
 touch the files it assigns to you.

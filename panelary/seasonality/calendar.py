@@ -4,8 +4,8 @@ from typing import Literal
 
 import polars as pl
 
+from panelary._internal._ranges import make_future_ranges
 from panelary.base import transformer
-from panelary.ranges import make_future_ranges
 
 
 @transformer
@@ -65,7 +65,7 @@ def add_holiday_effects(country_codes: list[str], as_dummies: bool = False):
     """
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
-        from panelary._deps import require
+        from panelary._internal._deps import require
 
         holidays_mod = require("holidays", feature="holiday calendar features")
         country_holidays = holidays_mod.country_holidays

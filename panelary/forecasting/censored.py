@@ -7,8 +7,8 @@ import polars as pl
 
 from panelary.base import Forecaster
 from panelary.base.forecaster import FORECAST_STRATEGIES
-from panelary.conversion import X_to_numpy, y_to_numpy
 from panelary.forecasting._ar import fit_autoreg
+from panelary.forecasting._conversion import X_to_numpy, y_to_numpy
 from panelary.forecasting._reduction import make_reduction
 from panelary.forecasting._regressors import CensoredRegressor
 

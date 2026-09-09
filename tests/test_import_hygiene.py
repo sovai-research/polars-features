@@ -2,7 +2,7 @@
 
 Panelary's mandatory footprint is ``numpy + polars``.  Everything heavier is an
 optional extra that must be imported *lazily inside the function that uses it*
-(via :func:`panelary._deps.require`).  These tests are the CI ratchet
+(via :func:`panelary._internal._deps.require`).  These tests are the CI ratchet
 that makes a regression loud:
 
 * ``import panelary`` must not pull any heavy optional dependency into
@@ -98,7 +98,7 @@ def test_import_panelary_is_clean():
     assert not leaked, (
         f"`import panelary` eagerly imported {leaked}. Optional deps must "
         "be imported lazily inside the function that uses them, via "
-        "`panelary._deps.require(...)`."
+        "`panelary._internal._deps.require(...)`."
     )
 
 
@@ -111,7 +111,7 @@ def test_import_panelary_is_clean():
         "panelary.cluster",
         "panelary.select",
         "panelary._internal._numpy_stats",
-        "panelary._deps",
+        "panelary._internal._deps",
     ],
 )
 def test_feature_modules_are_clean(module):
@@ -120,7 +120,7 @@ def test_feature_modules_are_clean(module):
     leaked = sorted(set(result["tops"]) & set(FORBIDDEN_MODULES))
     assert not leaked, (
         f"`import {module}` eagerly imported {leaked}; route it through "
-        "`panelary._deps.require(...)` inside the using function."
+        "`panelary._internal._deps.require(...)` inside the using function."
     )
 
 
@@ -140,11 +140,11 @@ print(json.dumps(sorted(tops)))
 def test_deps_module_is_stdlib_only():
     """``_deps`` must not pull anything third-party -- it is the bootstrap gate.
 
-    Loaded straight off disk (not as ``panelary._deps``) so the parent
+    Loaded straight off disk (not as ``panelary._internal._deps``) so the parent
     package's own numpy/polars imports do not mask a regression here.
     """
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    deps_path = os.path.join(repo, "panelary", "_deps.py")
+    deps_path = os.path.join(repo, "panelary", "_internal", "_deps.py")
     proc = subprocess.run(
         [sys.executable, "-c", _DEPS_STANDALONE_PROBE, deps_path],
         capture_output=True,
@@ -156,7 +156,7 @@ def test_deps_module_is_stdlib_only():
     tops = set(json.loads(proc.stdout.strip().splitlines()[-1]))
     third_party = tops & ({"numpy", "polars"} | set(FORBIDDEN_MODULES))
     assert not third_party, (
-        "panelary/_deps.py must have no third-party imports (it is the "
+        "panelary/_internal/_deps.py must have no third-party imports (it is the "
         f"lazy-import gate itself); found {sorted(third_party)}."
     )
 

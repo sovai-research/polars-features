@@ -49,7 +49,7 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-from panelary._deps import require
+from panelary._internal._deps import require
 from panelary.core.panel_frame import PanelFrame, as_panel
 from panelary.explain._background import TimeAwareBackground
 from panelary.explain._common import (
