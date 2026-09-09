@@ -1,57 +1,72 @@
 # PanelKit
 
-> Leak-safe, Rust-fast feature engineering and ML for panel data, built on Polars. PanelKit is a panel-native (entity x time) data-science toolkit with an sklearn-familiar API, Polars-native lazy execution, and correctness-by-construction (no lookahead/leakage). It is built on the foundations of functime (Apache-2.0, no longer maintained) and is being extended into a maintained, panel-first platform.
+> Leak-safe, Polars-native feature engineering and ML for panel data (many entities observed over time). PanelKit is a panel-first (entity x time) data-science toolkit with an sklearn-familiar API, lazy Polars execution, and correctness-by-construction: no lookahead, ever. Version 0.4.0 is pure Python (the Rust extension was dropped) and ships a single universal `py3-none-any` wheel with `py.typed`. Built on the foundations of functime (Apache-2.0) and licensed Apache-2.0.
 
-Pipeline philosophy: transform -> interact -> map -> extract -> select -> synthesize -> compare -> label -> signal_eval -> models -> model_selection, with no lookahead, ever.
+Pipeline philosophy: transform -> interact -> map -> extract -> select -> synthesize -> compare -> label -> signal_eval -> models -> model_selection, with no lookahead at any stage.
 
-## Naming and status
+## Naming and install
 
-- Project/brand name: PanelKit.
-- Python import/PyPI package: `polars_features` (e.g. `import polars_features as pk`). The public rename to `panelkit` is planned but NOT yet effective. Do not assume `import panelkit` works today.
-- License: Apache-2.0, retained from functime. functime is credited prominently in NOTICE.
-- Shipped today: the functime-derived engine (Polars-native feature extractors via the `ts` namespace, forecasting, preprocessing, seasonality, cross-validation, metrics, LLM analysis).
-- Roadmap (coming soon, NOT yet shipped): PanelFrame, leak-safe Pipeline, the panel module taxonomy below, labeling (triple_barrier), CPCV validation, clean-room catch22.
+- Project/brand name: PanelKit. Python import and PyPI package: `polars_features`. The public rename to `panelkit` is planned but NOT effective — `import panelkit` does not work. Use `import polars_features as pk`.
+- Requires Python >= 3.10. Mandatory dependencies are only `numpy` and `polars>=1.0.0`; everything heavier is an optional extra.
+- Install: `pip install polars_features`, or `pip install "polars_features[recommended]"` for the batteries-included set, or `[all]` for everything. 22 extras exist, including `ml`, `scipy`, `lightgbm`, `catboost`, `xgboost`, `forecasting`, `automl`, `seasonality`, `dimreduce`, `explain`, `llm`, `cafe`, `viz`, `signatures`, `fast`, `progress`, `ann`, `gpu`, `docs`, `dev`.
+- A missing optional dependency raises an actionable error naming the extra to install (via `polars_features._deps.require`), never a bare ImportError.
 
 ## Core concepts
 
-- PanelFrame: first-class panel/cross-section object wrapping a Polars frame with an `entity` and `time` key. The unit of work is the panel, not a bag of rows. (Roadmap)
-- panel_safe contract: within-entity operations stay inside their entity and run in time order (use `.over(entity)`).
-- leakage_safe contract: cross-sectional and fit-based operations never see the future or the test fold. Cross-sectional ops use `.over(time)`; fit happens per-fold.
-- Leak-safe Pipeline: sklearn-style fit/transform pipeline where fitting only ever sees the past of each fold; scalers/selectors are fit per-fold, never globally. (Roadmap)
-- CPCV: Combinatorial Purged Cross-Validation with purging + embargo to eliminate train/test leakage around fold boundaries. (Roadmap)
+- PanelFrame: a typed, lazy view over a long-format panel keyed by `(entity, time)`. Construct with `pk.PanelFrame(df, entity="ticker", time="date")`; read back via `.entity_col` / `.time_col`. The unit of work is the panel, not a bag of rows.
+- panel_safe contract: within-entity operations stay inside their entity and run in time order (`.over(entity_col)` on a time-sorted panel).
+- leakage_safe contract: cross-sectional operations are per-date (`.over(time_col)`), and anything with a `fit` step is fit per fold on training data only — never globally, never on the test fold.
+- Prefix invariance: `f(x[:T])[t] == f(x[:T+k])[t]` for `t <= T`. No window size, threshold, lag order or normalisation constant may depend on total series length.
+- Leak-safe Pipeline: sklearn-style `fit`/`transform` pipeline where scalers and selectors are fit per fold.
+- Purged cross-validation: `PurgedKFold` and `CombinatorialPurgedCV` (CPCV) apply purging and embargo to remove train/test leakage around fold boundaries.
+- Expression namespaces: operators are called as `pl.col(...).<namespace>.<name>(...)` across the `panel`, `xs`, `ts` and `factor` namespaces. `.panel` implies `.over(entity)`; `.xs` implies `.over(time)`. Typed `.pyi` stubs ship in the wheel.
+- Operator registry: `pk.registry` holds a `FeatureSpec` per operator recording signature, input/output shape, tier, `panel_safe`/`leakage_safe` flags, and provenance/license. `registry.to_records()` serialises it, `registry.to_llms_txt()` renders a machine-readable operator catalogue, and `registry.audit()` checks that every operator is permissively licensed. 56 operators are registered today (`ts`=42, `xs`=7, `factor`=4, `panel`=3).
 
-## Module taxonomy (roadmap)
+## Shipped modules (0.4.0)
 
-- transform: leak-safe per-entity / per-date transforms (winsorize, frac_diff, scaling).
-- interact: pairwise and cross-feature interactions.
-- map: row/entity-wise mappings and encodings.
-- extract: time-series feature extraction (functime `ts` namespace today; clean-room catch22 planned).
-- select: feature selection (e.g. mRMR), fit per-fold.
-- synthesize: synthetic / augmented feature generation.
-- compare: cross-sectional and cross-entity comparisons (ranks, z-scores over date).
-- label: target construction (triple_barrier, fixed-horizon, meta-labeling), leak-safe horizons.
-- signal_eval: signal/factor evaluation diagnostics.
-- models: panel/cross-sectional model wrappers (e.g. lgbm_classifier) plus functime forecasters.
-- model_selection: validation and tuning, including `validate.cpcv`.
-- neutralize: factor/exposure neutralization of signals.
+- `pk.core` — the correctness kernel: `PanelFrame`, leak-safe `Pipeline`, `PanelTransformer`/`PanelEstimator` protocols, purged model selection.
+- `pk.transform` — panel-native, leak-safe preprocessing: winsorize/scaling, `frac_diff`, ranking, neutralization.
+- `pk.label` — leak-safe labeling (Lopez de Prado, AFML Ch. 3): `triple_barrier` and friends.
+- `pk.select` — leak-safe feature selection (supervised and unsupervised), fit per fold.
+- `pk.factor` — cross-sectional factor evaluation: information coefficients, neutralization, portfolio construction.
+- `pk.reduce` — leak-safe dimensionality reduction: PCA, ICA, hierarchical factor analysis, robust factors, factor-count selection.
+- `pk.cluster` — leak-safe panel clustering, including cross-sectional and k-Shape.
+- `pk.econ` — panel and time-series econometrics: HDFE, Fama-MacBeth, IVX, DML, connectedness, plus an econometric feature suite (EVT, HAR-RV, liquidity, long memory, Nelson-Siegel, unit roots).
+- `pk.explain` — leak-safe, panel-aware feature attribution (SHAP): tree and estimator backends, interactions, stability, aggregation.
+- `pk.validation` — honest validation and selection: bootstraps, CV, forecast tests, selection statistics.
+- `polars_features.detect` — causal detection of explosive regimes, bubbles and change points (GSADF/BSADF, CUSUM/FOCuS monitors, panel breadth). NOTE: shipped as a subpackage but not yet re-exported on the top-level `pk` namespace; import it as `import polars_features.detect as detect`.
+- `pk.forecasting` / `pk.models` — forecaster and panel/cross-sectional model wrappers (linear, kNN, LightGBM, XGBoost, CatBoost, AutoML, conformal, censored).
+- `pk.metrics`, `pk.evaluation`, `pk.backtesting` — point, probabilistic and multi-objective metrics; deflated Sharpe ratio; probability of backtest overfitting.
+- `pk.seasonality` — calendar and Fourier seasonal features.
+- `pk.catch22`, `pk.feature_extractors`, `pk.extract_features` — time-series feature extraction, including a clean-room catch22 reimplementation.
+- `pk.imputation` / `pk.CafeImputer` — leak-safe imputation.
+- `pk.llm` — optional LLM-assisted analysis of panels.
+- `pk.assert_no_lookahead`, `pk.testing` — the leakage verifier and test helpers.
 
 ## Docs
 
-- [README](./README.md): positioning, install, 60-second quickstart, shipped-vs-roadmap table.
-- [Quickstart](./docs/quickstart.md): 60-second getting-started.
+- [README](./README.md): positioning, install, 60-second quickstart.
+- [AGENTS.md](./AGENTS.md): the agent-facing contract — setup, build/lint/type-check/test commands, invariants, conventions, and what not to do.
+- [Quickstart](./docs/quickstart.md): getting started.
+- [Installation](./docs/installation.md): extras and optional dependencies.
 - [Leakage & correctness](./docs/leakage.md): what leakage is and how PanelKit prevents it by construction.
-- [Changelog](./CHANGELOG.md): Phase 0 modernization and planned 0.1.0 wedge release.
-- [Contributing](./CONTRIBUTING.md): Tier B/C contributions land in Python; panel_safe/leakage_safe contracts; good-first-issue posture.
+- [Leak safety concept](./docs/concepts/leak-safety.md): the panel_safe / leakage_safe contracts in depth.
+- [Panel data concept](./docs/concepts/panel-data.md): the entity x time model.
+- [Two-tier API](./docs/concepts/two-tier-api.md): expression namespaces vs. estimator objects.
+- [API reference](./docs/api-reference/): per-module reference, including detect, explain, factor, reduce, econ, labeling, selection and validation.
+- [Roadmap](./docs/roadmap.md): what is planned next.
+- [Changelog](./CHANGELOG.md): release history.
+- [Contributing](./CONTRIBUTING.md): contribution tiers, the correctness contract, clean-room policy.
 - [NOTICE](./NOTICE): functime attribution and Apache-2.0 notices.
 
 ## Ecosystem positioning
 
-- Depends on / recommends polars-ds and polars_ta for general Polars-native primitives; does not compete with them.
-- Nixtla (statsforecast/mlforecast) owns forecasting; PanelKit centers on leak-safe feature engineering, labeling, selection, and cross-sectional ML for panels.
-- catch22 features are clean-room reimplemented from Lubba et al. 2019, NOT vendored from GPL pycatch22.
+- Complements polars-ds and polars_ta (general Polars-native primitives); does not compete with them.
+- Nixtla (statsforecast/mlforecast) owns general forecasting; PanelKit centers on leak-safe feature engineering, labeling, selection, attribution and cross-sectional ML for panels.
+- catch22 features are clean-room reimplemented from Lubba et al. (2019), NOT vendored from the GPL `pycatch22`.
 
 ## Optional
 
+- functime upstream (Apache-2.0): https://github.com/functime-org/functime
 - Legacy functime documentation: https://docs.functime.ai/
-- functime upstream (Apache-2.0, unmaintained): https://github.com/functime-org/functime
 - Polars: https://pola.rs/
