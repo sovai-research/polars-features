@@ -14,6 +14,59 @@ effective.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`pk.detect` raised `AttributeError`.** `detect` — 0.4.0's headline feature,
+  37 public symbols — was never added to `polars_features/__init__.py`. Nine
+  modules were unreachable in total (`detect`, `forecasting`, `llm`, `metrics`,
+  `backtesting`, `conformal`, `cross_validation`, `evaluation`, `plotting`);
+  seven more resolved only by import side-effect and were absent from
+  `__all__`. All are now reachable, and `tests/test_public_api.py` fails the
+  build if a public subpackage is ever left unwired again.
+- **`polars_features.backtesting` could not be imported by any path.** A cycle
+  (`backtesting` → `forecasting._reduction` → `forecasting/__init__` →
+  `elite` → `backtesting`) meant every import of it raised `ImportError`.
+  `forecasting/elite.py` now imports `backtest` inside the function that uses
+  it, matching the pattern `base/forecaster.py` already used.
+- **Broken `pip install` hints.** `forecasting/__init__` advertised the extras
+  `lgb`, `cat` and `xgb`; none exist (the real names are `lightgbm`,
+  `catboost`, `xgboost`), so following the hint produced "no matches found".
+  Those names were also bound to an `ImportError` *instance*, making
+  `fc.lightgbm` a value rather than something that raised, so failures
+  surfaced later as a confusing "not callable" `TypeError`.
+- **`import polars_features.llm` required an API key.** The OpenAI client was
+  constructed at module scope and raised `ValueError` when `OPENAI_API_KEY`
+  was unset. It is now built on first use, and the module's imports route
+  through `_deps.require` like every other optional dependency (its old hint,
+  `polars_features[llm]`, was not a pasteable distribution name).
+- `polars_features/forecasting/elite.py` no longer imports scikit-learn at
+  module scope, which was defeating the light-core guarantee that the extras
+  matrix exists to defend.
+
+### Changed
+
+- The test suite runs with `-n auto --dist loadfile` in CI and `make test`:
+  **15+ minutes serial → 67 seconds** on 8 cores (1585 passed, 8 pre-existing
+  failures in `tests/test_cusum_pure.py`).
+- The mypy job no longer pretends. It reported ~1040 errors while configured as
+  a hard gate, so it had never passed; it now ratchets against a baseline and
+  fails only when the count rises.
+- Every CI job has a `timeout-minutes`.
+- `make check` runs lint, type-check and tests as one command.
+- Documentation is published by CI. GitHub Pages had never been enabled and the
+  declared `site_url` returned 404; `docs/CNAME` pointed at `docs.functime.ai`,
+  a domain this project does not control.
+
+### Removed
+
+- The `signatures` extra (documented RESERVED/UNUSED; its only reference
+  anywhere was the `_deps` mapping), the `rust` keyword and the `maturin` dev
+  dependency (no Rust extension since 0.4.0), the dead `[tool.hypothesis]`
+  block (Hypothesis does not read `pyproject.toml`, so `deadline = 0` had no
+  effect), a tracked 4.5 MB pre-0.4.0 Windows wheel, and `functime_rename.py`
+  (a one-shot fork-migration script that rewrote every `.py` in the repo).
+
+
 Five design plans implemented in one round. Four new capability pillars land
 (`explain`, `validation`, `econ`, factor extraction in `reduce`), two long-standing
 numerical bugs are closed, and the light-core gains from 0.4.0 are locked behind
@@ -371,9 +424,11 @@ labeling, and validation layer landing on top of the functime-derived engine.
 - Documentation: mkdocstrings API pages now target `polars_features.*`; `mkdocs.yml`
   site/repo URLs point at the PanelKit / sovai-research locations.
 
-## [Unreleased]
+## [Phase 0] — Modernization & foundation
 
-### Phase 0 — Modernization & foundation
+Historical. This was previously a second `## [Unreleased]` heading, which
+left the file with two of them and no way to tell which was current.
+
 
 #### Added
 - `NOTICE` file crediting functime as the upstream this work is derived from, with
