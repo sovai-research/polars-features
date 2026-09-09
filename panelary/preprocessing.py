@@ -543,16 +543,139 @@ def impute(
     return transform
 
 
-def _require_cafe():
-    """Lazily import the optional ``cafe`` dependency with an actionable error."""
-    try:
-        import cafe
-    except ImportError as exc:  # pragma: no cover - trivial guard
-        raise ImportError(
-            "cafe_impute requires the optional `cafe` dependency, which is not "
-            "installed. Install it with `pip install panelary[cafe]`."
-        ) from exc
-    return cafe
+def _require_cafe(feature: str = "cafe_impute"):
+    """Lazily import the optional ``cafe`` dependency with an actionable error.
+
+    The single entry point to CAFE for the whole package: both
+    :func:`cafe_impute` and :class:`panelary.imputation.CafeImputer` reach the
+    ``cafe`` package through here (and only through :func:`_cafe_impute_frame`),
+    so the optional dependency is imported lazily, inside the function that
+    needs it, exactly once in the codebase.
+
+    Parameters
+    ----------
+    feature : str, default "cafe_impute"
+        Human-readable name of the caller, used to make the missing-dependency
+        error concrete.
+
+    Returns
+    -------
+    ModuleType
+        The imported ``cafe`` module.
+
+    Raises
+    ------
+    ImportError
+        If ``cafe`` is not installed, with a ``pip install`` hint.
+    """
+    return require("cafe", feature=feature)
+
+
+def _cafe_impute_frame(
+    df: pl.DataFrame,
+    *,
+    entity_col: str,
+    time_col: str,
+    engine: Literal["joint", "per_entity"] = "joint",
+    columns: list[str] | None = None,
+    add_uncertainty: bool = False,
+    add_anomaly: bool = False,
+    add_missingness: bool = False,
+    feature: str = "cafe_impute",
+) -> pl.DataFrame:
+    """Fill a collected panel with CAFE, optionally appending by-products.
+
+    The single CAFE imputation kernel. :func:`cafe_impute` (the functime-shaped
+    transformer) and :class:`panelary.imputation.CafeImputer` (the
+    :class:`~panelary.core.protocol.PanelTransformer`) are both thin adapters
+    over this function, so the two public names cannot drift apart.
+
+    CAFE is strictly point-in-time: every filled cell and every by-product uses
+    only past + contemporaneous information within its entity, so this is safe
+    inside walk-forward cross-validation and must still be applied per fold.
+
+    Parameters
+    ----------
+    df : polars.DataFrame
+        The collected long-format panel.
+    entity_col, time_col : str
+        The panel keys.
+    engine : {"joint", "per_entity"}, default "joint"
+        Panel imputation strategy passed through to CAFE.
+    columns : list of str, optional
+        Restrict imputation (and any by-products) to these numeric feature
+        columns. Defaults to every numeric feature column.
+    add_uncertainty : bool, default False
+        Append ``<col>__cafe_sigma`` per imputed column.
+    add_anomaly : bool, default False
+        Append a single per-row ``cafe_anomaly`` score in ``[0, 1]``.
+    add_missingness : bool, default False
+        Append a boolean ``<col>__cafe_was_imputed`` indicator per imputed column.
+    feature : str, default "cafe_impute"
+        Caller name used in the missing-dependency error message.
+
+    Returns
+    -------
+    polars.DataFrame
+        The filled panel, with any requested by-product columns appended.
+
+    Raises
+    ------
+    ImportError
+        If the optional ``cafe`` dependency is not installed.
+    """
+    cafe = _require_cafe(feature)
+
+    keys = {entity_col, time_col}
+    num_cols = [c for c, dt in df.schema.items() if dt.is_numeric() and c not in keys]
+    target_cols = list(columns) if columns is not None else num_cols
+
+    # The fill itself (lean, cross-entity-aware path).
+    filled = cafe.impute(df, panel=(time_col, entity_col), engine=engine)
+
+    # Honour `columns`: restore the original values for numeric columns the
+    # caller did not ask to impute.
+    untouched = [c for c in num_cols if c not in set(target_cols)]
+    if untouched:
+        filled = filled.with_columns([df.get_column(c) for c in untouched])
+
+    extra: list[pl.Series] = []
+
+    if add_missingness:
+        for col in target_cols:
+            extra.append(df.get_column(col).is_null().alias(f"{col}__cafe_was_imputed"))
+
+    if (add_uncertainty or add_anomaly) and target_cols:
+        n_rows = df.height
+        col_idx = {c: j for j, c in enumerate(target_cols)}
+        sigma = np.full((n_rows, len(target_cols)), np.nan)
+        anomaly = np.full(n_rows, np.nan)
+
+        # Per-entity, strictly point-in-time traced pass. Rows are gathered in
+        # time order within each entity and scattered back to their original
+        # positions, so every by-product is causal per entity.
+        df_idx = df.with_row_index("__cafe_row__")
+        for _, sub in df_idx.group_by(entity_col, maintain_order=True):
+            sub = sub.sort(time_col)
+            rows = sub.get_column("__cafe_row__").to_numpy()
+            mat = sub.select(target_cols).to_numpy().astype(float)
+            res = cafe.CAFE().run(mat)
+            if add_uncertainty:
+                sigma[rows] = np.asarray(res.uncertainty)
+            if add_anomaly:
+                anomaly[rows] = np.asarray(res.anomaly_scores())
+
+        for col in target_cols:
+            j = col_idx[col]
+            if add_uncertainty:
+                extra.append(pl.Series(f"{col}__cafe_sigma", sigma[:, j]))
+        if add_anomaly:
+            extra.append(pl.Series("cafe_anomaly", anomaly))
+
+    if extra:
+        filled = filled.with_columns(extra)
+
+    return filled
 
 
 @transformer
@@ -619,6 +742,10 @@ def cafe_impute(
     The by-products (uncertainty / anomaly) are produced by the strictly-causal
     per-entity traced pass, so appending future rows never changes an earlier
     ``(entity, time)`` cell's value or by-product.
+
+    The work is done by :func:`_cafe_impute_frame`, the one CAFE kernel;
+    :class:`panelary.imputation.CafeImputer` is the ``PanelTransformer``-shaped
+    adapter over the same kernel.
     """
     if add_recoverability:
         raise NotImplementedError(
@@ -630,66 +757,19 @@ def cafe_impute(
             "the per-cell posterior standard deviation instead."
         )
 
-    want_byproducts = add_uncertainty or add_anomaly
-
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
-        cafe = _require_cafe()
         entity_col, time_col = X.collect_schema().names()[:2]
-        df = X.collect()
-
-        keys = {entity_col, time_col}
-        num_cols = [
-            c for c, dt in df.schema.items() if dt.is_numeric() and c not in keys
-        ]
-        target_cols = list(columns) if columns is not None else num_cols
-
-        # The fill itself (lean, cross-entity-aware path).
-        filled = cafe.impute(df, panel=(time_col, entity_col), engine=engine)
-
-        # Honour `columns`: restore the original values for numeric columns the
-        # caller did not ask to impute.
-        untouched = [c for c in num_cols if c not in set(target_cols)]
-        if untouched:
-            filled = filled.with_columns([df.get_column(c) for c in untouched])
-
-        extra: list[pl.Series] = []
-
-        if add_missingness:
-            for col in target_cols:
-                extra.append(
-                    df.get_column(col).is_null().alias(f"{col}__cafe_was_imputed")
-                )
-
-        if want_byproducts and target_cols:
-            n_rows = df.height
-            col_idx = {c: j for j, c in enumerate(target_cols)}
-            sigma = np.full((n_rows, len(target_cols)), np.nan)
-            anomaly = np.full(n_rows, np.nan)
-
-            # Per-entity, strictly point-in-time traced pass. Rows are gathered in
-            # time order within each entity and scattered back to their original
-            # positions, so every by-product is causal per entity.
-            df_idx = df.with_row_index("__cafe_row__")
-            for _, sub in df_idx.group_by(entity_col, maintain_order=True):
-                sub = sub.sort(time_col)
-                rows = sub.get_column("__cafe_row__").to_numpy()
-                mat = sub.select(target_cols).to_numpy().astype(float)
-                res = cafe.CAFE().run(mat)
-                if add_uncertainty:
-                    sigma[rows] = np.asarray(res.uncertainty)
-                if add_anomaly:
-                    anomaly[rows] = np.asarray(res.anomaly_scores())
-
-            for col in target_cols:
-                j = col_idx[col]
-                if add_uncertainty:
-                    extra.append(pl.Series(f"{col}__cafe_sigma", sigma[:, j]))
-            if add_anomaly:
-                extra.append(pl.Series("cafe_anomaly", anomaly))
-
-        if extra:
-            filled = filled.with_columns(extra)
-
+        filled = _cafe_impute_frame(
+            X.collect(),
+            entity_col=entity_col,
+            time_col=time_col,
+            engine=engine,
+            columns=columns,
+            add_uncertainty=add_uncertainty,
+            add_anomaly=add_anomaly,
+            add_missingness=add_missingness,
+            feature="cafe_impute",
+        )
         return {"X_new": filled.lazy()}
 
     return transform

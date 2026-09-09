@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 import polars as pl
 
-from panelary._progress import progress, trange
+from panelary._internal._progress import progress, trange
 from panelary.cross_validation import expanding_window_split
 from panelary.forecasting._evaluate import evaluate
 from panelary.forecasting._reduction import (

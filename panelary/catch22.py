@@ -45,7 +45,7 @@ from collections.abc import Sequence
 import numpy as np
 import polars as pl
 
-from panelary import _numpy_stats
+from panelary._internal import _numpy_stats
 
 
 def _bspline_design(x: np.ndarray, knots: np.ndarray, k: int) -> np.ndarray:

@@ -9,6 +9,9 @@ catboost_info
 bin/
 .data
 
+# Benchmark results (pytest-benchmark writes its saved runs here)
+.benchmarks/
+
 # Datasets (never commit data; the repo already carries a large tracked data/
 # tree from before this rule -- these patterns stop it growing any further).
 data/

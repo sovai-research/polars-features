@@ -1,4 +1,4 @@
-"""Parity tests: :mod:`panelary._numpy_stats` vs SciPy.
+"""Parity tests: :mod:`panelary._internal._numpy_stats` vs SciPy.
 
 These pin the dependency-free numpy replacements to SciPy's reference output to
 the tolerances measured in the D3 investigation.  SciPy is a test-only import
@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from panelary import _numpy_stats as ns
+from panelary._internal import _numpy_stats as ns
 
 scipy_stats = pytest.importorskip("scipy.stats")
 scipy_signal = pytest.importorskip("scipy.signal")

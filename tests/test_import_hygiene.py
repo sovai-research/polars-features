@@ -110,7 +110,7 @@ def test_import_panelary_is_clean():
         "panelary.reduce",
         "panelary.cluster",
         "panelary.select",
-        "panelary._numpy_stats",
+        "panelary._internal._numpy_stats",
         "panelary._deps",
     ],
 )

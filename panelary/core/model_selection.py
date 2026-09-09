@@ -11,8 +11,11 @@ long-format Polars panels:
   (CPCV) scheme that tests every combination of ``k`` of ``N`` groups, producing
   many backtest paths (de Prado, Ch. 12).
 * :func:`expanding_window_split` / :func:`sliding_window_split` — walk-forward
-  splitters, panel-aware re-exposures of
-  :mod:`panelary.cross_validation`.
+  splitters on the shared unique-time axis. They take their fold schedule from
+  the one kernel the library has for it,
+  :func:`panelary.cross_validation._walk_forward_cutoffs`, but they are *not*
+  the row-based splitters of the same name in :mod:`panelary.cross_validation`:
+  those slice each entity's own rows, these slice the common time index.
 * :func:`deflated_sharpe_ratio` — the Deflated Sharpe Ratio (Bailey & de Prado,
   2014) correcting for multiple testing, non-normality and sample length.
 * :func:`probability_of_backtest_overfitting` — the PBO via Combinatorially
@@ -52,6 +55,7 @@ import polars as pl
 
 from panelary.core.panel_frame import PanelFrame, as_panel
 from panelary.core.protocol import PanelTransformer
+from panelary.cross_validation import _walk_forward_cutoffs
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -698,20 +702,22 @@ def _window_panel_split(
 ) -> list[PanelFold]:
     """Shared walk-forward split logic on the unique-time axis.
 
-    Mirrors the slicing approach in
-    :mod:`panelary.cross_validation._window_split`, but slices the **shared
+    The fold schedule is :func:`panelary.cross_validation._walk_forward_cutoffs`
+    — the same kernel the row-based splitters in
+    :mod:`panelary.cross_validation` use, so the two families place folds
+    identically. The difference is the axis: this slices the **shared
     unique-time index** (so all entities are aligned on the same train/test
-    times) and returns PanelFrames.
+    dates) and returns PanelFrames, whereas ``_window_split`` slices each
+    entity's own rows inside ``group_by(entity)``.
     """
     times = _unique_times(pf)
     n_times = times.shape[0]
 
-    backward_steps = np.arange(1, n_splits) * step_size + test_size
-    cutoffs = np.flip(np.concatenate([np.array([test_size]), backward_steps]))
+    cutoffs = _walk_forward_cutoffs(test_size, n_splits, step_size)
 
     folds: list[PanelFold] = []
     for i in range(n_splits):
-        cutoff = int(cutoffs[i])
+        cutoff = cutoffs[i]
         test_start = n_times - cutoff
         test_end = test_start + test_size
         if test_start < 0:
@@ -775,8 +781,14 @@ def expanding_window_split(
 
     See Also
     --------
-    panelary.cross_validation.expanding_window_split : the row-based
-        functime original this thinly wraps.
+    panelary.cross_validation.expanding_window_split : the row-based functime
+        original. This function does **not** wrap it — it is a second splitter
+        with the same fold schedule (both call
+        :func:`panelary.cross_validation._walk_forward_cutoffs`) and a different
+        axis. The original slices each entity's own rows and returns
+        ``(train, test)`` LazyFrames, so on a ragged panel entities are tested on
+        different dates; this one slices the shared unique-time index and returns
+        ``PanelFrame`` folds, so they are tested on the same dates.
     """
 
     def split(panel: PanelFrame | pl.DataFrame | pl.LazyFrame) -> list[PanelFold]:
@@ -820,6 +832,19 @@ def sliding_window_split(
     -------
     callable
         ``split(panel) -> list[(train_panel, test_panel)]``.
+
+    Notes
+    -----
+    Splits with less than ``window_size`` of history get a training window
+    truncated at the start of the index, never one that reaches past the test
+    block.
+
+    See Also
+    --------
+    panelary.cross_validation.sliding_window_split : the row-based functime
+        original. Same fold schedule (both call
+        :func:`panelary.cross_validation._walk_forward_cutoffs`), different
+        axis and different return type; this function does not wrap it.
     """
 
     def split(panel: PanelFrame | pl.DataFrame | pl.LazyFrame) -> list[PanelFold]:

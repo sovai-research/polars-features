@@ -12,10 +12,10 @@ try:  # polars>=1.0 moved type aliases to the private `_typing` module
     from polars._typing import ClosedInterval
 except ImportError:  # pragma: no cover - older polars
     from polars.type_aliases import ClosedInterval
-from panelary import _numpy_stats
-from panelary._compat import rle_fields
 from panelary._deps import have
-from panelary._utils import warn_is_unstable
+from panelary._internal import _numpy_stats
+from panelary._internal._compat import rle_fields
+from panelary._internal._utils import warn_is_unstable
 from panelary.registry import FeatureSpec, registry
 from panelary.type_aliases import DetrendMethod
 
@@ -341,7 +341,7 @@ def _chebyshev_counter():
       across ``workers=-1`` threads, and measurement shows it is the faster of
       the two from roughly 1k points upward (4x at n=2k, 5x at n=20k), so it
       stays the preferred path.
-    * :func:`panelary._numpy_stats.chebyshev_neighbour_counts` otherwise
+    * :func:`panelary._internal._numpy_stats.chebyshev_neighbour_counts` otherwise
       -- a sorted-sweep counter that returns **the same integer counts** (see
       ``tests/test_numpy_stats_parity.py``), so the feature now works in the
       bare ``numpy + polars`` core instead of raising ImportError.  It is
@@ -361,7 +361,7 @@ def _chebyshev_counter():
 
         return count
 
-    from panelary._numpy_stats import chebyshev_neighbour_counts
+    from panelary._internal._numpy_stats import chebyshev_neighbour_counts
 
     return chebyshev_neighbour_counts
 

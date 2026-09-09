@@ -16,10 +16,11 @@ import numpy as np
 import polars as pl
 import pytest
 
-from panelary._ffd import SAFETY_MAX_WIDTH, estimate_ffd_order, ffd_weights
+from panelary._ffd import SAFETY_MAX_WIDTH, ffd_weights
 from panelary.core import PanelFrame
 from panelary.econ.features import (
     AutoFracDiff,
+    estimate_ffd_order,
     estimate_fractional_order,
     gph,
     local_whittle,

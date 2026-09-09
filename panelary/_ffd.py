@@ -29,7 +29,6 @@ import polars as pl
 __all__ = [
     "DEFAULT_THRESHOLD",
     "SAFETY_MAX_WIDTH",
-    "estimate_ffd_order",
     "ffd_weights",
     "frac_diff_expr",
 ]
@@ -151,61 +150,6 @@ def ffd_weights(
         )
     # newest-first by construction (w_0 multiplies x_t); reverse to oldest-first
     return np.asarray(weights[::-1], dtype=np.float64)
-
-
-def estimate_ffd_order(
-    x: np.ndarray,
-    *,
-    method: str = "local_whittle",
-    bandwidth_exponent: float = 0.5,
-    lower: float = 0.0,
-    upper: float = 1.0,
-) -> float:
-    """Estimate a data-driven fractional-differencing order ``d`` for ``x``.
-
-    Thin, lazily-wired convenience so callers can make frac-diff *data driven*
-    per entity/window instead of hard-coding one ``d`` for a whole panel: it
-    estimates the fractional-integration order of ``x`` with a semiparametric
-    long-memory estimator and clips it into ``[lower, upper]`` so the result is
-    always a legal :func:`ffd_weights` order.
-
-    The estimator lives in
-    :mod:`panelary.econ.features._longmemory` and is imported *inside*
-    this function, so :mod:`panelary._ffd` keeps its leaf-module property
-    (module-level imports remain numpy + polars only) and the ``namespaces``
-    layer can go on importing it without picking up the estimator layer.
-
-    Parameters
-    ----------
-    x : numpy.ndarray
-        1-D series, in time order. Only rows available to the caller (i.e. the
-        *training* rows) should be passed: this is a fitted quantity.
-    method : {"local_whittle", "gph"}, default="local_whittle"
-        Semiparametric estimator of ``d``.
-    bandwidth_exponent : float, default=0.5
-        Number of periodogram ordinates used is ``n ** bandwidth_exponent``.
-    lower, upper : float
-        Clipping bounds for the returned order. The default ``[0, 1]`` matches
-        the range over which the fixed-width FFD kernel is well behaved.
-
-    Returns
-    -------
-    float
-        The estimated, clipped differencing order.
-
-    See Also
-    --------
-    panelary.econ.features.estimate_fractional_order
-    panelary.econ.features.AutoFracDiff
-    """
-    from panelary.econ.features._longmemory import estimate_fractional_order
-
-    d_hat = estimate_fractional_order(
-        x, method=method, bandwidth_exponent=bandwidth_exponent
-    ).d
-    if not np.isfinite(d_hat):
-        return float(lower)
-    return float(min(max(d_hat, lower), upper))
 
 
 def frac_diff_expr(

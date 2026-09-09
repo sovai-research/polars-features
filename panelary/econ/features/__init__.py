@@ -19,7 +19,8 @@ Unit roots and persistence (:mod:`._unitroot`)
 Long memory (:mod:`._longmemory`)
     :func:`gph` and :func:`local_whittle` estimate the fractional-integration
     order ``d``; :func:`estimate_fractional_order` handles the non-stationary
-    region; :class:`AutoFracDiff` makes
+    region; :func:`estimate_ffd_order` clips that estimate into a legal
+    fixed-width kernel order; :class:`AutoFracDiff` makes
     :mod:`panelary._ffd` **data driven per entity**, fitted train-only.
 
 Realized volatility (:mod:`._harrv`)
@@ -104,6 +105,7 @@ from panelary.econ.features._liquidity import (
 from panelary.econ.features._longmemory import (
     AutoFracDiff,
     LongMemoryResult,
+    estimate_ffd_order,
     estimate_fractional_order,
     gph,
     local_whittle,
@@ -151,6 +153,7 @@ __all__ = [
     "gph",
     "local_whittle",
     "estimate_fractional_order",
+    "estimate_ffd_order",
     "long_memory_table",
     "rolling_long_memory_features",
     "AutoFracDiff",

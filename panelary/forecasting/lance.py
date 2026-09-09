@@ -6,7 +6,7 @@ import lance
 import numpy as np
 import polars as pl
 
-from panelary._progress import progress
+from panelary._internal._progress import progress
 from panelary.base import Forecaster
 from panelary.forecasting._ar import fit_autoreg
 

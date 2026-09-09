@@ -36,7 +36,7 @@ def test_forecasting_import_does_not_pull_flaml_or_tqdm():
 
 
 def test_progress_shim_iterates_transparently():
-    from panelary._progress import progress, trange
+    from panelary._internal._progress import progress, trange
 
     assert list(progress([1, 2, 3])) == [1, 2, 3]
     assert list(progress(iter("ab"), desc="anything", total=2)) == ["a", "b"]

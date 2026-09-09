@@ -8,7 +8,7 @@ from typing import Literal
 
 import polars as pl
 
-from panelary.metrics import (
+from panelary.metrics.point import (
     mae,
     mase,
     mse,

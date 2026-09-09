@@ -6,7 +6,7 @@ from typing import Literal
 import polars as pl
 import polars.selectors as cs
 
-from panelary._numpy_stats import norm_ppf, normaltest_stat
+from panelary._internal._numpy_stats import norm_ppf, normaltest_stat
 from panelary.base.metric import METRIC_TYPE
 from panelary.metrics import (
     mae,

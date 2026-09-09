@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from functools import partial
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,31 @@ import pytest
 
 from panelary.cross_validation import train_test_split
 from panelary.offsets import freq_to_sp
+
+# Test data lives in `<repo root>/data`. Anchor every read to this file rather
+# than to the current working directory, so the suite runs from anywhere.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _data_path(relative: str) -> str:
+    """Absolute path to `relative` under the repo root.
+
+    Returns a string, not a Path: some callers pass glob patterns (e.g.
+    ``data/m4_1d_train.parquet/*/*``), which `pl.read_parquet` only expands
+    when given a string.
+    """
+    return str(_REPO_ROOT / relative)
+
+
+@pytest.fixture(scope="session")
+def commodities_path() -> str:
+    """Absolute path to the commodities panel, readable from any cwd.
+
+    Shared by `test_evaluation.py` and `test_fourier.py`, which both used a
+    bare relative `data/commodities.parquet` and so only worked when pytest
+    was launched from the repo root.
+    """
+    return _data_path("data/commodities.parquet")
 
 
 @pytest.fixture(params=[50], ids=lambda x: f"n_periods({x})")
@@ -85,7 +111,7 @@ def m4_freq_to_lags():
 def m4_dataset(request):
     def load_panel_data(path: str) -> pl.LazyFrame:
         return (
-            pl.read_parquet(path)
+            pl.read_parquet(_data_path(path))
             .pipe(
                 lambda df: df.select(
                     [
@@ -243,10 +269,10 @@ def m5_dataset():
     n_samples = 30
 
     # Load data
-    y_train = pl.read_parquet("data/m5_y_train_sample.parquet")
-    X_train = pl.read_parquet("data/m5_X_train_sample.parquet")
-    y_test = pl.read_parquet("data/m5_y_test_sample.parquet")
-    X_test = pl.read_parquet("data/m5_X_test_sample.parquet")
+    y_train = pl.read_parquet(_data_path("data/m5_y_train_sample.parquet"))
+    X_train = pl.read_parquet(_data_path("data/m5_X_train_sample.parquet"))
+    y_test = pl.read_parquet(_data_path("data/m5_y_test_sample.parquet"))
+    X_test = pl.read_parquet(_data_path("data/m5_X_test_sample.parquet"))
 
     # Check series lengths
     entity_col, time_col, value_col = y_train.columns[:3]
@@ -324,7 +350,7 @@ def dunnhumby_retail():
     fh = 12
     freq = "1d"
 
-    data = pl.read_parquet("data/dunnhumby.parquet").with_columns(
+    data = pl.read_parquet(_data_path("data/dunnhumby.parquet")).with_columns(
         # Create UNIT_PRICE column
         (pl.col("SALES_VALUE") / pl.col("QUANTITY"))
         .round(2)
@@ -343,10 +369,3 @@ def dunnhumby_retail():
     X_train, X_test = X.pipe(train_test_split(test_size=fh))
 
     return y_train.lazy(), X_train.lazy(), y_test.lazy(), X_test.lazy(), fh, freq
-
-
-# if __name__ == "__main__":
-# y_train.collect().write_parquet("m5_y_train.parquet")
-# X_train.collect().write_parquet("m5_X_train.parquet")
-# y_test.collect().write_parquet("m5_y_test.parquet")
-# X_test.collect().write_parquet("m5_X_test.parquet")

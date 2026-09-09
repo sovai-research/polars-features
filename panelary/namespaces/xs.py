@@ -23,14 +23,17 @@ For these frame-level cross-sectional ops the ``over`` cross-section key is
 Architecture / import boundary
 ------------------------------
 This module is part of the ``namespaces`` package — **Tier 1, the Polars-native
-extension layer**. It imports ONLY from :mod:`polars`, :mod:`numpy` (for the
-per-date OLS in :meth:`XSExprNamespace.neutralize`), the Rust plugin, and
-:mod:`panelary.registry`. It must NOT import from
+extension layer**. It imports ONLY from :mod:`polars`, the Rust plugin,
+:mod:`panelary.registry` and the dependency-free leaf
+:mod:`panelary.namespaces._neutralize_kernel` (numpy + polars only, which backs
+the per-date OLS in :meth:`XSExprNamespace.neutralize`). It must NOT import from
 ``panelary.core`` or ``panelary.transform`` (the estimator layer),
 so the expression layer stays independently splittable into a standalone
-``polars-panel`` plugin later. The cross-sectional OLS residualization is
-re-implemented here (self-contained) rather than imported from
-``transform/neutralize.py``, to keep that import boundary intact.
+``polars-panel`` plugin later. The cross-sectional OLS residual therefore lives
+in that leaf and is shared with — not duplicated by —
+:class:`panelary.transform.neutralize.Neutralize`, which imports the same
+kernel; the import boundary stays intact because the dependency points from the
+estimator layer *down* to the leaf, never the other way.
 
 The expression-building logic is factored into module-level ``_expr_*`` helpers
 so the expression namespace and both frame-level namespaces share **one**
@@ -59,9 +62,9 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import TypeVar
 
-import numpy as np
 import polars as pl
 
+from panelary.namespaces._neutralize_kernel import cross_section_residuals
 from panelary.registry import FeatureSpec, registry
 
 __all__ = [
@@ -248,42 +251,17 @@ def _neutralize_residual(
     internally) and whose remaining fields are the factor columns, for the rows
     of a single cross-section (one date). Numeric factors enter directly;
     string/categorical/boolean factors are one-hot encoded per cross-section.
-    Rows with a null target or any null factor receive a null residual.
+    Rows with a null target or any null numeric factor receive a null residual.
+
+    The arithmetic itself lives in
+    :func:`panelary.namespaces._neutralize_kernel.cross_section_residuals`, the
+    single implementation shared with
+    :class:`panelary.transform.neutralize.Neutralize`.
     """
     df = struct_s.struct.unnest()
-    target_name = df.columns[0]
-    n = df.height
-    y_full = df.get_column(target_name).to_numpy().astype(np.float64)
-
-    schema = df.schema
-    numeric_cols = [f for f in factors if schema[f].is_numeric()]
-    cat_cols = [f for f in factors if not schema[f].is_numeric()]
-    parts: list[np.ndarray] = []
-    if numeric_cols:
-        parts.append(df.select(numeric_cols).to_numpy().astype(np.float64))
-    if cat_cols:
-        dummies = df.select(cat_cols).to_dummies(columns=cat_cols)
-        parts.append(dummies.to_numpy().astype(np.float64))
-    design = np.hstack(parts) if parts else np.empty((n, 0), dtype=np.float64)
-    if add_intercept:
-        design = np.hstack([np.ones((n, 1), dtype=np.float64), design])
-
-    residual = np.full(n, np.nan, dtype=np.float64)
-    valid = np.isfinite(y_full)
-    if design.shape[1] > 0:
-        valid &= np.isfinite(design).all(axis=1)
-    n_valid = int(valid.sum())
-    # Need at least as many observations as parameters, else leave nulls.
-    if n_valid == 0 or (design.shape[1] > 0 and n_valid < design.shape[1]):
-        return pl.Series(residual)
-
-    x = design[valid]
-    y = y_full[valid]
-    if x.shape[1] == 0:  # no regressors at all -> residual is the raw value
-        residual[valid] = y
-        return pl.Series(residual)
-    coef, *_ = np.linalg.lstsq(x, y, rcond=None)
-    residual[valid] = y - x @ coef
+    residual = cross_section_residuals(
+        df, df.columns[0], factors, add_intercept=add_intercept
+    )
     return pl.Series(residual)
 
 

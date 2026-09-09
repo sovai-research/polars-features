@@ -9,6 +9,14 @@ inside walk-forward / purged cross-validation.
 
 The heavy dependency (``cafe``) is optional and imported lazily, so importing
 this module never requires it.
+
+There is exactly one CAFE imputation kernel in the package,
+:func:`panelary.preprocessing._cafe_impute_frame` (which owns the single
+``_require_cafe`` lazy import). :class:`CafeImputer` and
+:func:`panelary.preprocessing.cafe_impute` are two adapter shapes over it, so
+they cannot drift apart. The kernel is imported *inside* :meth:`CafeImputer._transform`
+rather than at module scope, which keeps this module's import graph to
+``panelary.core`` alone and leaves the light-core import budget untouched.
 """
 
 from __future__ import annotations
@@ -19,18 +27,6 @@ from panelary.core.panel_frame import PanelFrame
 from panelary.core.protocol import PanelTransformer
 
 __all__ = ["CafeImputer"]
-
-
-def _require_cafe():
-    """Lazily import the optional ``cafe`` dependency with an actionable error."""
-    try:
-        import cafe
-    except ImportError as exc:  # pragma: no cover - trivial guard
-        raise ImportError(
-            "CafeImputer requires the optional `cafe` dependency, which is not "
-            "installed. Install it with `pip install panelary[cafe]`."
-        ) from exc
-    return cafe
 
 
 class CafeImputer(PanelTransformer):
@@ -60,7 +56,18 @@ class CafeImputer(PanelTransformer):
     -----
     ``fit`` only records the feature columns present at training time (CAFE fits
     no cross-fold state); the actual, strictly-causal fill happens in
-    ``transform``.
+    ``transform``. Being a fit step, it is still applied per fold, on training
+    data only.
+
+    The fill is delegated to the single CAFE kernel,
+    :func:`panelary.preprocessing._cafe_impute_frame`, shared with
+    :func:`panelary.preprocessing.cafe_impute`.
+
+    See Also
+    --------
+    panelary.preprocessing.cafe_impute : the same kernel, as a pipeline
+        transformer, with opt-in uncertainty / anomaly / missingness
+        by-products.
     """
 
     panel_safe = True
@@ -83,12 +90,18 @@ class CafeImputer(PanelTransformer):
         self.feature_cols_ = list(panel.feature_cols)
 
     def _transform(self, panel: PanelFrame) -> PanelFrame:
-        cafe = _require_cafe()
-        df = panel.collect()
-        filled = cafe.impute(
-            df,
-            panel=(panel.time_col, panel.entity_col),
+        # Imported here, not at module scope: the kernel lives in the heavier
+        # `preprocessing` module, and this keeps `panelary.imputation` importable
+        # (and cheap) without it. `_cafe_impute_frame` performs the lazy,
+        # `_deps.require`-routed import of the optional `cafe` package itself.
+        from panelary.preprocessing import _cafe_impute_frame
+
+        filled = _cafe_impute_frame(
+            panel.collect(),
+            entity_col=panel.entity_col,
+            time_col=panel.time_col,
             engine=self.engine,
+            feature="CafeImputer",
         )
         return PanelFrame(
             filled,

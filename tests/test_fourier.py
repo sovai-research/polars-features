@@ -64,13 +64,13 @@ def test_fourier_with_dates(freq: str, sp: int):
 
 
 @pytest.mark.benchmark
-def test_fourier_compare_with_aeon():
+def test_fourier_compare_with_aeon(commodities_path):
     pytest.importorskip("aeon")
     from aeon.transformations.series.fourier import FourierFeatures
 
     sp = 12
     K = 4
-    y = pl.read_parquet("data/commodities.parquet")
+    y = pl.read_parquet(commodities_path)
     entity_col, time_col, target_col = y.columns
     result = (
         y.pipe(add_fourier_terms(sp=sp, K=K)).sort([entity_col, time_col]).collect()

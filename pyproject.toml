@@ -208,7 +208,20 @@ markers = [
 [tool.mypy]
 # `ty` (astral) is the preferred type checker going forward, but mypy config is
 # kept as the portable fallback that runs everywhere today.
-python_version = "3.10"
+# `python_version` is deliberately UNSET, so mypy targets whichever interpreter
+# it runs under. It used to be pinned to "3.10" (our floor), but `python_version`
+# also selects the *parser*: under 3.10 rules mypy cannot read numpy's own
+# bundled stubs, which use a PEP 695 `type` statement
+# (`numpy/__init__.pyi:737: Type statement is only supported in Python 3.12 and
+# greater`). That is a syntax error, so mypy aborted before checking anything --
+# `make typecheck`, and therefore the documented `make check` gate, was dead for
+# every contributor on 3.12+ while CI hid it by pinning 3.10 for that one job.
+# The alternatives were worse: pinning "3.12"/"3.13" drops 3.10 checking for
+# everyone including CI, and silencing the numpy stubs (`follow_imports = skip`)
+# would turn every ndarray into `Any` -- a real loss of coverage to work around
+# a parser flag. Unset, the 3.10 semantics we care about are still enforced,
+# just by the CI matrix: the mypy job installs Python 3.10 (see
+# `.github/workflows/ci.yml`), so 3.11+-only syntax or stdlib still fails there.
 files = ["panelary"]
 warn_unused_ignores = true
 # The optional back-ends (sklearn, scipy, flaml, plotly, boosters, ...) are not

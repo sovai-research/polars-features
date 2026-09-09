@@ -29,7 +29,7 @@ import math
 
 import numpy as np
 
-from panelary._numpy_stats import norm_cdf, norm_ppf
+from panelary._internal._numpy_stats import norm_cdf, norm_ppf
 
 __all__ = [
     "chi2_sf",

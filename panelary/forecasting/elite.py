@@ -7,8 +7,8 @@ from typing import Any, Literal
 import polars as pl
 import polars.selectors as cs
 
-from panelary import _deps
-from panelary._progress import progress
+import panelary._deps as _deps
+from panelary._internal._progress import progress
 from panelary.base.forecaster import Forecaster
 from panelary.base.metric import METRIC_TYPE
 from panelary.conversion import X_to_numpy, y_to_numpy

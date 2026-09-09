@@ -35,7 +35,7 @@ import pytest
 
 import panelary.catch22 as c22
 from panelary import feature_extractors as fe
-from panelary._numpy_stats import chebyshev_neighbour_counts
+from panelary._internal._numpy_stats import chebyshev_neighbour_counts
 from panelary.cluster._kshape import KShapeCore, _distance_matrix, ncc
 
 GOLDEN_PATH = pathlib.Path(__file__).parent / "data" / "perf_parity_golden.json"

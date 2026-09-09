@@ -11,6 +11,13 @@ This is leak-safe by construction: the regression for date ``t`` uses only the
 cross-section at date ``t`` (same-date entities), so no past or future
 information enters any row, and there is no fitted state carried across a
 train/test boundary.
+
+The per-cross-section OLS itself lives in the dependency-free leaf
+:mod:`panelary.namespaces._neutralize_kernel`, which is also what backs
+``pl.col(...).xs.neutralize(...)``. The transformer and the expression namespace
+therefore share **one** implementation rather than two that can silently
+diverge. (The kernel sits under ``namespaces/`` because that package must not
+import ``transform``; see its module docstring.)
 """
 
 from __future__ import annotations
@@ -23,6 +30,10 @@ import polars as pl
 
 from panelary.core.panel_frame import PanelFrame
 from panelary.core.protocol import PanelTransformer
+from panelary.namespaces._neutralize_kernel import (
+    build_design,
+    cross_section_residuals,
+)
 
 if TYPE_CHECKING:
     pass
@@ -136,66 +147,24 @@ class Neutralize(PanelTransformer):
     def _build_design(self, df: pl.DataFrame) -> tuple[np.ndarray, list[str]]:
         """Build the (one-hot expanded) numeric design matrix for one date.
 
-        Returns the design matrix (without intercept) and the column names used.
+        Thin wrapper over
+        :func:`panelary.namespaces._neutralize_kernel.build_design`; returns the
+        design matrix (without intercept) and the column names used.
         """
-        schema = df.schema
-        numeric_cols: list[str] = []
-        cat_cols: list[str] = []
-        for f in self.factors:
-            dtype = schema[f]
-            if dtype.is_numeric():
-                numeric_cols.append(f)
-            else:
-                cat_cols.append(f)
-
-        parts: list[np.ndarray] = []
-        if numeric_cols:
-            parts.append(df.select(numeric_cols).to_numpy().astype(np.float64))
-        if cat_cols:
-            dummies = df.select(cat_cols).to_dummies(columns=cat_cols)
-            parts.append(dummies.to_numpy().astype(np.float64))
-
-        if parts:
-            design = np.hstack(parts)
-        else:  # pragma: no cover - guarded by __init__
-            design = np.empty((df.height, 0), dtype=np.float64)
-        return design, numeric_cols + cat_cols
+        return build_design(df, self.factors)
 
     def _residual_for_group(self, df: pl.DataFrame) -> pl.Series:
-        """Compute per-row residuals for one date's cross-section."""
-        n = df.height
-        y_full = df.get_column(self.target).to_numpy().astype(np.float64)
-        design, _ = self._build_design(df)
+        """Compute per-row residuals for one date's cross-section.
 
-        if self.add_intercept:
-            design = np.hstack([np.ones((n, 1), dtype=np.float64), design])
-
-        residual = np.full(n, np.nan, dtype=np.float64)
-
-        # rows usable for the fit: finite y and finite design row
-        valid = np.isfinite(y_full)
-        if design.shape[1] > 0:
-            valid &= np.isfinite(design).all(axis=1)
-
-        n_valid = int(valid.sum())
-        # Need at least as many observations as parameters; otherwise leave nulls.
-        if n_valid == 0 or (design.shape[1] > 0 and n_valid < design.shape[1]):
-            # Not enough to fit; if intercept-only with >=1 obs, just de-mean.
-            if design.shape[1] == 0 and n_valid >= 1:
-                pass  # handled below by the lstsq path (design has the ones col)
-            else:
-                return pl.Series(self.target, residual)
-
-        X = design[valid]
-        y = y_full[valid]
-        if X.shape[1] == 0:
-            # No regressors at all (e.g. add_intercept=False, factors all-null):
-            # residual equals the original value.
-            residual[valid] = y
-            return pl.Series(self.target, residual)
-
-        coef, *_ = np.linalg.lstsq(X, y, rcond=None)
-        residual[valid] = y - X @ coef
+        Delegates to
+        :func:`panelary.namespaces._neutralize_kernel.cross_section_residuals`,
+        the single implementation shared with ``pl.col(...).xs.neutralize(...)``
+        (:mod:`panelary.namespaces.xs`), so the transformer and the expression
+        namespace can never drift apart.
+        """
+        residual = cross_section_residuals(
+            df, self.target, self.factors, add_intercept=self.add_intercept
+        )
         return pl.Series(self.target, residual)
 
     def _transform(self, panel: PanelFrame) -> PanelFrame:
