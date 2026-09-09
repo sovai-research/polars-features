@@ -52,8 +52,28 @@ Lubba et al. (2019), **not** copied from the GPL `pycatch22`.
 ## Getting started
 
 1. Fork and clone the repo.
-2. Set up the dev environment (see the [Makefile](./Makefile) and `pyproject.toml`).
-3. Run the test suite and `pre-commit` hooks before pushing.
+2. Set up the dev environment. We use [**uv**](https://docs.astral.sh/uv/) — it is the same
+   installer CI uses, and it is an order of magnitude faster than pip:
+
+   ```bash
+   # one-time: install uv (https://docs.astral.sh/uv/getting-started/installation/)
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+
+   uv venv                                    # create ./.venv
+   source .venv/bin/activate
+   uv pip install -e ".[dev,recommended]"     # editable install + dev tooling
+   uv run pre-commit install --install-hooks
+   ```
+
+   No uv? Everything still works with plain pip (`python3 -m pip install -e ".[dev,recommended]"`).
+   The [Makefile](./Makefile) picks uv automatically when it is available and falls back to pip
+   otherwise: `make venv && make edit`, `make test`, `make lint`, `make typecheck`.
+3. Run the test suite and `pre-commit` hooks before pushing:
+
+   ```bash
+   uv run pytest -q --ignore=tests/test_forecasting.py   # the 40-min forecasting suite is nightly
+   uv run pre-commit run --all-files
+   ```
 4. Open a PR describing the change, the tier, and the leakage/panel safety implications.
 
 For the longer developer walkthrough, see

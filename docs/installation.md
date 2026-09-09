@@ -7,6 +7,13 @@ PanelKit is published to PyPI as the `polars_features` package (the public renam
 pip install polars_features
 ```
 
+Prefer [uv](https://docs.astral.sh/uv/)? It installs the same wheel, just much faster:
+
+```bash
+uv pip install polars_features       # into an existing environment
+uv add polars_features               # into a uv-managed project (pyproject.toml)
+```
+
 Then import it as:
 
 ```python
@@ -19,8 +26,9 @@ import polars_features as pk   # PanelKit
 - **Polars** is a required dependency and is installed automatically. PanelKit is developed and
   tested against **Polars 1.x** (the `.panel` / `.xs` / `ts` namespaces register on
   `polars.Expr`, `polars.DataFrame`, and `polars.LazyFrame`).
-- The Rust-accelerated feature extractors ship as prebuilt wheels for common platforms; no
-  Rust toolchain is needed to install a release.
+- **Pure Python** since 0.4.0: the distribution is a single universal `py3-none-any` wheel, so
+  there is no compiler, no Rust toolchain and no platform-specific build -- it installs the same
+  way on every OS and every supported Python.
 
 ## Extras
 
@@ -35,13 +43,16 @@ pip install "polars_features[llm,cafe]"
 - `cafe`: CAFE imputation backend for `cafe_impute` / `CafeImputer` (MIT, Sov.ai).
 - `gpu`: Polars GPU engine via the `cudf-polars` backend (`.collect(engine="gpu")`).
 - `viz`: plotting utilities, powered by [`plotly`](https://plotly.com/python/).
-- `signatures`: path-signature transforms via `iisignature`.
+- `signatures`: **reserved / not yet implemented.** No module imports `iisignature` today;
+  the extra name exists only so the `_deps` install hint stays resolvable. Installing it
+  currently enables nothing.
 - `explain`: feature-attribution fallbacks for `polars_features.explain` --
   [`shap`](https://shap.readthedocs.io/) for non-booster models and
   [`shapiq`](https://shapiq.readthedocs.io/) for any-order Shapley interactions.
   The `TreeAttributor` fast path needs neither: it calls the boosters' own
   native exact TreeSHAP.
-- `all`: convenience extra unioning every optional feature set above.
+- `all`: convenience extra unioning every optional feature set above (except the reserved
+  `signatures`).
 - `dev`: development / CI tooling (ruff, pytest, hypothesis, mypy, pre-commit, maturin).
 
 Install everything at once with:

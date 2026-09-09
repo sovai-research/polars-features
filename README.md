@@ -31,6 +31,10 @@ PanelKit is a feature-engineering and machine-learning toolkit for **panel data*
 
 ```bash
 pip install polars_features
+
+# or, with uv (https://docs.astral.sh/uv/) -- same package, much faster:
+uv pip install polars_features       # into an existing environment
+uv add polars_features               # into a uv-managed project
 ```
 
 > **Note on names.** The project/brand is **PanelKit**. The current PyPI/import package is `polars_features` (the public rename to `panelkit` is planned but not yet effective). Import it as:

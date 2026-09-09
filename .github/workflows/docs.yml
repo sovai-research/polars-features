@@ -1,0 +1,97 @@
+name: Docs
+
+# Build and publish the PanelKit documentation site (mkdocs-material; config in
+# mkdocs.yml, sources in docs/).
+#
+# Before this workflow existed the site was only ever built on a laptop and was
+# never published: there is no gh-pages branch and GitHub Pages was not enabled
+# for the repository, so `site_url` (https://sovai-research.github.io/polars-features/)
+# 404'd. Two jobs now cover the two cases:
+#
+#   * `build`  - always runs (PRs included). `mkdocs build --strict` turns every
+#                MkDocs/griffe warning (bad nav target, unresolved mkdocstrings
+#                identifier, malformed docstring) into a red build, so docs rot
+#                is caught in review. On a PR it stops here: nothing is deployed.
+#   * `deploy` - only on a push to the default branch, publishing the artifact
+#                built above via the official GitHub Pages actions.
+#
+# ONE-TIME SETUP REQUIRED: in the repository settings, Pages -> Build and
+# deployment -> Source must be set to "GitHub Actions". Until then `deploy`
+# fails with "Get Pages site failed".
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - Wenda
+  # Allow publishing the current default-branch docs on demand.
+  workflow_dispatch:
+
+concurrency:
+  # Never let two deployments race; queue rather than cancel an in-flight
+  # publish so the live site is not left half-written.
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Strict build. Runs on every PR and push; uploads the site as a Pages
+  # artifact so `deploy` never rebuilds (what is reviewed is what ships).
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build docs (strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # mkdocs-material's git-revision plugins (and any future `mike`
+          # versioning) need real history, not a shallow clone.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Create venv & install (docs extra)
+        # The docs extra pins the mkdocs stack; the package itself is installed
+        # editable because mkdocstrings resolves `::: polars_features.*`.
+        run: |
+          uv venv
+          uv pip install -e ".[docs]"
+
+      - name: mkdocs build --strict
+        run: uv run mkdocs build --strict
+
+      - name: Upload Pages artifact
+        # Only the default-branch build is ever deployed, but uploading on PRs
+        # too keeps the artifact available for download when reviewing.
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  # ---------------------------------------------------------------------------
+  # Publish to GitHub Pages. Default branch only -- PRs build but never deploy.
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

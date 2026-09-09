@@ -891,19 +891,19 @@ def sieve_bootstrap_cv(
     cross-check against:
 
     * **The reference R implementation's panel sieve bootstrap never accumulates
-      across entities.** It assigns the per-entity statistic inside the entity
-      loop rather than adding to a running total, then divides by ``N``, so it
-      returns the *last* entity's statistic over ``N``. Its published panel
-      critical values (:data:`R_PANEL_CV_BUGGY`, ``0.105 / 0.122 / 0.155``) are
-      an order of magnitude below independently computed ones for a comparable
-      design (:data:`R_PANEL_CV_INDEPENDENT`, ``1.04 / 1.24 / 1.79``). **Do not
-      calibrate against them.**
+        across entities.** It assigns the per-entity statistic inside the entity
+        loop rather than adding to a running total, then divides by ``N``, so it
+        returns the *last* entity's statistic over ``N``. Its published panel
+        critical values (:data:`R_PANEL_CV_BUGGY`, ``0.105 / 0.122 / 0.155``) are
+        an order of magnitude below independently computed ones for a comparable
+        design (:data:`R_PANEL_CV_INDEPENDENT`, ``1.04 / 1.24 / 1.79``). **Do not
+        calibrate against them.**
     * **Correct panel critical values for the mean statistic are near zero or
-      negative.** Averaging ``N`` entity sequences concentrates the aggregate
-      around the mean ADF t-statistic (about ``-0.4``) rather than around a
-      supremum (about ``2.2``). A reviewer who sanity-checks a correct panel cv
-      against the familiar univariate GSADF value of ~2.2 will conclude, wrongly,
-      that the code is broken. See :data:`PANEL_MEAN_CV_UPPER_BOUND`.
+        negative.** Averaging ``N`` entity sequences concentrates the aggregate
+        around the mean ADF t-statistic (about ``-0.4``) rather than around a
+        supremum (about ``2.2``). A reviewer who sanity-checks a correct panel cv
+        against the familiar univariate GSADF value of ~2.2 will conclude, wrongly,
+        that the code is broken. See :data:`PANEL_MEAN_CV_UPPER_BOUND`.
 
     References
     ----------

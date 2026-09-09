@@ -4,82 +4,102 @@ Thanks for taking the time to contribute! We appreciate all contributions, from 
 
 ## Opening an issue
 
-You can report any issue by opening a [new issue](https://github.com/functime-org/functime/issues/new/choose).
+You can report any issue by opening a [new issue](https://github.com/sovai-research/polars-features/issues/new/choose).
 
 **Bug reports** should include:
 
-1. Your **OS, the Python version and `functime` version** you are using.
+1. Your **OS, the Python version and PanelKit (`polars_features`) version** you are using.
 2. A **minimal reproducible example (MRE)**, i.e. the code and some (fake) data that can be used to reproduce the error you encounter. It might take a bit more time on your side, but it greatly helps maintainers to solve your issue quickly.
 
 **Feature requests** should also start from a dedicated issue, even if you plan to contribute to the feature yourself. In this way, maintainers can help you plan the design of the new feature and ease the development.
 
 ## Contributing to the codebase
 
-Contributions should always start from an issue: even if you wish to contribute to `functime`'s  features, it is best to open a new issue so that the maintainers can help you through the design process.
+Contributions should always start from an issue: even if you wish to contribute to PanelKit's features, it is best to open a new issue so that the maintainers can help you through the design process.
 
 ### Picking an issue
 
-Pick an issue by going through the [issue tracker](https://github.com/functime-org/functime/issues) and finding an issue you would like to work on. To work on an issue, please leave a new message below the discussion to show your interest. We use the [`help wanted`](https://github.com/functime-org/functime/labels/help%20wanted) label to indicate issues that are high on our wishlist. However, if you are a first time contributor, you might want to look for issues labeled [`good first issue`](https://github.com/functime-org/functime/labels/good%20first%20issue).
+Pick an issue by going through the [issue tracker](https://github.com/sovai-research/polars-features/issues) and finding an issue you would like to work on. To work on an issue, please leave a new message below the discussion to show your interest. We use the [`help wanted`](https://github.com/sovai-research/polars-features/labels/help%20wanted) label to indicate issues that are high on our wishlist. However, if you are a first time contributor, you might want to look for issues labeled [`good first issue`](https://github.com/sovai-research/polars-features/labels/good%20first%20issue).
 
 ### Set up your local environment
 
-This might be slightly complex, because `functime` uses some Rust plugins to accelerate some features. In other words, you need to make sure you have installed both [Python](https://www.python.org/) and [Rust](https://www.rust-lang.org/) on your machine (see below).
+PanelKit is **pure Python** as of 0.4.0 -- the Rust extension is gone and the distribution is a
+single universal `py3-none-any` wheel. There is no Rust toolchain to install and no compiler
+step: a checkout plus a Python 3.10+ interpreter is the whole prerequisite list.
 
->[!NOTE] This might raise unexpected issue if you use Windows. For that case, it would be best if you develop using [WSL](https://learn.microsoft.com/en-us/windows/wsl/install) to install Linux on Windows.
+We use [**uv**](https://docs.astral.sh/uv/) for environments and installs. It is the same
+installer CI uses (`.github/workflows/ci.yml`), and it resolves and installs an order of
+magnitude faster than pip. Everything below also works with plain `pip` if you prefer -- see the
+fallback at the end.
 
-1. **Fork the repository**. you can follow [this guide](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo). For example, using the GitHub CLI, you would just need to do this:
+1. **Install uv** (one time):
 
 ```bash
-gh repo fork functime-org/functime
+curl -LsSf https://astral.sh/uv/install.sh | sh     # macOS / Linux
+# Windows (PowerShell):
+# powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-The CLI will prompt you to clone the fork locally.
-
-2. **Clone the repository locally**.
+2. **Fork and clone the repository**:
 
 ```bash
 # via gh CLI
-gh repo clone functime-org/functime
+gh repo fork sovai-research/polars-features --clone
 
-# via https
-git clone https://github.com/<your-username>/functime
-
-# via ssh (safer)
-git clone git@github.com:functime-org/functime
+# or via ssh
+git clone git@github.com:<your-username>/polars-features.git
+cd polars-features
 ```
 
-3. **Install Rust**. This is easily done with [`rustup`](https://rustup.rs/). Use the latest stable version.
-
-3. **Install Python**. Since `functime` depends on some packages from Python's scientific ecosystem, we respect **numpy's minimum supported version** (see [here](https://numpy.org/neps/nep-0029-deprecation_policy.html#support-table)). Though you can download Python from the [official page](https://www.python.org/downloads/), **we recommend you use [`rye`](https://rye-up.com/) to manage your Python versions and install the project dependencies**. This will make the next installation step easier. You can also use [`pdm`](https://pdm-project.org/en/latest/) or [`hatch`](https://hatch.pypa.io/1.9/). `poetry` will not work, as it does not comply with with PEP517 and PEP518.
-
-4. **Install the project's dependencies**. If you use `rye`, run the following:
+3. **Create the environment and install the project**. uv will download a managed CPython for
+   you if the version you ask for is not already present:
 
 ```bash
-# with rye
-rye sync --features=dev
+uv python install 3.10        # optional: matches the minimum supported version
+uv venv                        # creates ./.venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+
+# editable install + dev tooling + the batteries-included optional deps
+uv pip install -e ".[dev,recommended]"
 ```
 
-5. Install pre-commit hooks:
+4. **Install the pre-commit hooks**:
 
 ```bash
-rye run pre-commit install --install-hooks
+uv run pre-commit install --install-hooks
 ```
+
+5. **Run the tests**:
+
+```bash
+# the 40-minute forecasting suite runs nightly, not on every change
+uv run pytest -q --ignore=tests/test_forecasting.py
+```
+
+**Without uv.** Nothing here requires it; the equivalents are
+`python3 -m venv .venv`, `python3 -m pip install -e ".[dev,recommended]"`,
+`pre-commit install --install-hooks` and `pytest -q`. The [Makefile](https://github.com/sovai-research/polars-features/blob/main/Makefile)
+detects uv automatically and falls back to pip when it is absent, so
+`make venv && make edit`, `make test`, `make lint` and `make typecheck` work either way.
 
 ### While working on your issue
 
 Create a new git branch from the `main` branch in your local repository, and start coding!
 
-The Rust code is located in the `src` directory, while the Python codebase is located under `functime`. To run the tests, use the following:
+The Python package lives under `polars_features/` and the suite under `tests/`. To run the
+tests:
 
 ```bash
-rye test
+uv run pytest -q --ignore=tests/test_forecasting.py
+# or: make test
 ```
 
-`pre-commit` checks will run before any commit. To format the code, use the following:
+`pre-commit` checks will run before any commit. To lint and format the tree yourself:
 
 ```bash
-rye fmt
-rye lint
+uv run ruff check --fix .
+uv run ruff format .
+# or: make fmt
 ```
 
 Note that your work cannot be merged if these checks fail!
@@ -99,7 +119,7 @@ When you have resolved your issue, [open a pull request](https://docs.github.com
 * Add any relevant information to the description that you think may help the maintainers review your code.
 * Make sure your branch is [rebased](https://docs.github.com/en/get-started/using-git/about-git-rebase) against the latest version of the main branch.
 * Make sure all GitHub Actions checks pass.
-* After you have opened your pull request, a maintainer will review it and possibly leave some comments. Once all issues are resolved, the maintainer will merge your pull request, and your work will be part of the next functime release!
+* After you have opened your pull request, a maintainer will review it and possibly leave some comments. Once all issues are resolved, the maintainer will merge your pull request, and your work will be part of the next PanelKit release!
 
 Keep in mind that your work does not have to be perfect right away! If you are stuck or unsure about your solution, feel free to open a draft pull request and ask for help.
 
