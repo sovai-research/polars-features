@@ -17,7 +17,6 @@ keywords = [
   "finance",
   "quant",
   "machine-learning",
-  "rust",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -93,10 +92,6 @@ cafe = ["cafe-impute>=0.1"]
 # Non-linear dimensionality reduction (reduce.PanelUMAP). PCA/SVD/FA/NMF use the
 # `ml` extra's scikit-learn; only UMAP needs this extra.
 dimreduce = ["umap-learn>=0.5"]
-# Path-signature transforms. RESERVED / UNUSED: no code imports `iisignature`
-# yet, and signatory / iisignature licenses must be verified before enabling
-# this as a hard dependency. Kept only because `_deps` maps it to this name.
-signatures = ["iisignature"]
 # --- feature attribution (polars_features.explain). The v1 TreeAttributor path
 # uses the boosters' own native exact TreeSHAP and needs nothing here; `shap`
 # provides the sklearn/interventional fallback and `shapiq` the any-order
@@ -132,7 +127,9 @@ dev = [
   "hypothesis>=6.0",
   "mypy>=1.8",
   "pre-commit>=3.5",
-  "maturin>=1.3.2,<2",
+  # Parallel test execution: the suite is 1600+ tests and runs ~14x
+  # faster with `-n auto` (measured: 15+ min serial -> 67 s on 8 cores).
+  "pytest-xdist>=3.5",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -164,7 +161,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "E402"]
-"tests/**" = ["B", "F401", "F811"]
+# E402: tests guard optional-dependency imports with
+# `pytest.importorskip(...)`, which must run BEFORE the import it guards.
+"tests/**" = ["B", "F401", "F811", "E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["polars_features"]
@@ -192,6 +191,3 @@ module = [
 ]
 ignore_missing_imports = true
 
-[tool.hypothesis]
-# Disable per-example deadlines; Rust-backed ops can have variable warm-up cost.
-deadline = 0
