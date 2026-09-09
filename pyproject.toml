@@ -20,12 +20,19 @@ keywords = [
   "rust",
 ]
 classifiers = [
+  "Development Status :: 4 - Beta",
   "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Intended Audience :: Financial and Insurance Industry",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Typing :: Typed",
 ]
 # Light core: the mandatory footprint is numpy + polars only. Everything heavier
@@ -42,8 +49,10 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/sovai-research/polars-features"
 Repository = "https://github.com/sovai-research/polars-features"
-Documentation = "https://github.com/sovai-research/polars-features"
+# The real docs site (mkdocs `site_url`), not the repo root.
+Documentation = "https://sovai-research.github.io/polars-features/"
 Changelog = "https://github.com/sovai-research/polars-features/blob/main/CHANGELOG.md"
+Issues = "https://github.com/sovai-research/polars-features/issues"
 
 [project.optional-dependencies]
 # Extra names below intentionally mirror `polars_features._deps._MODULE_TO_EXTRA`
@@ -102,6 +111,20 @@ recommended = ["polars_features[ml,scipy,seasonality,cafe]"]
 all = [
   "polars_features[ml,scipy,progress,seasonality,forecasting,automl,lightgbm,catboost,xgboost,ann,fast,llm,gpu,viz,cafe,dimreduce,explain]",
 ]
+# Documentation toolchain (mkdocs-material site under docs/, config in
+# mkdocs.yml). Kept out of `dev` so test/lint CI stays lean; the docs workflow
+# installs `.[docs]`. Upper bounds are deliberate: MkDocs 2.0 / Material 10 are
+# announced as backward-incompatible (plugin system + theme overrides removed),
+# and this site uses both plugins and a `docs/overrides` custom_dir.
+docs = [
+  "mkdocs>=1.6.1,<2",
+  "mkdocs-material>=9.5,<10",
+  "mkdocstrings>=1.0,<2",
+  "mkdocstrings-python>=2.0,<3",
+  "mkdocs-jupyter>=0.25,<1",
+  "pymdown-extensions>=10.0",
+]
+
 # Development / CI tooling.
 dev = [
   "ruff>=0.8.0",
