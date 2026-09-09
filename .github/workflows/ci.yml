@@ -44,10 +44,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # No lockfile is committed, so the default glob (**/uv.lock,
-          # **/requirements*.txt) matches nothing and the cache is never
-          # invalidated -- setup-uv warns about exactly this. Key it on the
-          # file that actually declares our dependencies.
+          # setup-uv's default glob is **/uv.lock and **/requirements*.txt.
+          # This repo commits neither -- dependency resolution is deliberately
+          # unpinned for a library (see .gitignore) -- so without this the
+          # cache is never invalidated and every job warns about it. Key it on
+          # the file that does declare our dependencies.
           cache-dependency-glob: "pyproject.toml"
 
       # `uv pip install --system` cannot be used here: the hosted runner's
@@ -78,10 +79,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # No lockfile is committed, so the default glob (**/uv.lock,
-          # **/requirements*.txt) matches nothing and the cache is never
-          # invalidated -- setup-uv warns about exactly this. Key it on the
-          # file that actually declares our dependencies.
+          # setup-uv's default glob is **/uv.lock and **/requirements*.txt.
+          # This repo commits neither -- dependency resolution is deliberately
+          # unpinned for a library (see .gitignore) -- so without this the
+          # cache is never invalidated and every job warns about it. Key it on
+          # the file that does declare our dependencies.
           cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
@@ -137,10 +139,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # No lockfile is committed, so the default glob (**/uv.lock,
-          # **/requirements*.txt) matches nothing and the cache is never
-          # invalidated -- setup-uv warns about exactly this. Key it on the
-          # file that actually declares our dependencies.
+          # setup-uv's default glob is **/uv.lock and **/requirements*.txt.
+          # This repo commits neither -- dependency resolution is deliberately
+          # unpinned for a library (see .gitignore) -- so without this the
+          # cache is never invalidated and every job warns about it. Key it on
+          # the file that does declare our dependencies.
           cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python ${{ matrix.python-version }}
@@ -201,10 +204,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # No lockfile is committed, so the default glob (**/uv.lock,
-          # **/requirements*.txt) matches nothing and the cache is never
-          # invalidated -- setup-uv warns about exactly this. Key it on the
-          # file that actually declares our dependencies.
+          # setup-uv's default glob is **/uv.lock and **/requirements*.txt.
+          # This repo commits neither -- dependency resolution is deliberately
+          # unpinned for a library (see .gitignore) -- so without this the
+          # cache is never invalidated and every job warns about it. Key it on
+          # the file that does declare our dependencies.
           cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
@@ -269,10 +273,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # No lockfile is committed, so the default glob (**/uv.lock,
-          # **/requirements*.txt) matches nothing and the cache is never
-          # invalidated -- setup-uv warns about exactly this. Key it on the
-          # file that actually declares our dependencies.
+          # setup-uv's default glob is **/uv.lock and **/requirements*.txt.
+          # This repo commits neither -- dependency resolution is deliberately
+          # unpinned for a library (see .gitignore) -- so without this the
+          # cache is never invalidated and every job warns about it. Key it on
+          # the file that does declare our dependencies.
           cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
@@ -313,10 +318,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # No lockfile is committed, so the default glob (**/uv.lock,
-          # **/requirements*.txt) matches nothing and the cache is never
-          # invalidated -- setup-uv warns about exactly this. Key it on the
-          # file that actually declares our dependencies.
+          # setup-uv's default glob is **/uv.lock and **/requirements*.txt.
+          # This repo commits neither -- dependency resolution is deliberately
+          # unpinned for a library (see .gitignore) -- so without this the
+          # cache is never invalidated and every job warns about it. Key it on
+          # the file that does declare our dependencies.
           cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
