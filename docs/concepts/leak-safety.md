@@ -221,8 +221,8 @@ values, which is precisely why purging exists.
 | --- | --- | --- | --- |
 | Within-entity time-series transform | one entity, time-ordered | `df.panel.*(..., over=entity)` | `panel_safe`, `leakage_safe` |
 | Cross-sectional comparison | one timestamp, across entities | `df.xs.*(..., over=time)` | `leakage_safe` (mixes entities by design) |
-| Forward-looking label | explicit `[t, t1]` span | `label.triple_barrier(...)` → `t1` column |
-| Validation | purged + embargoed folds | `PurgedKFold` / `CombinatorialPurgedCV` |
+| Forward-looking label | explicit `[t, t1]` span | `label.triple_barrier(...)` → `t1` column | n/a — the span is the contract |
+| Validation | purged + embargoed folds | `PurgedKFold` / `CombinatorialPurgedCV` | n/a — consumes `t1` |
 
 If an operation can't be expressed within one of these scopes, that's the tooling
 telling you it would leak.
@@ -234,7 +234,7 @@ telling you it would leak.
 - [Quickstart](../quickstart.md)
 - López de Prado, M. (2018). *Advances in Financial Machine Learning.* Wiley.
 
-[panelframe]: ../api-reference/cross-validation.md
-[featurespec]: ../api-reference/feature-extractors.md
-[panel-ns]: ../api-reference/preprocessing.md
-[testing]: ../leakage.md
+[panelframe]: ../api-reference/panel-frame.md
+[featurespec]: ../api-reference/registry.md
+[panel-ns]: two-tier-api.md#tier-1-bare-frame-namespaces-panel-xs-ts
+[testing]: ../api-reference/testing.md

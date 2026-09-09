@@ -5,10 +5,6 @@ over *time*. A ticker's price every day, a customer's spend every month, a count
 GDP every quarter. Every feature, transformer, and cross-validator in the library
 assumes this shape and protects its two axes from leaking into each other.
 
-!!! info "Naming"
-    The project/brand is **Panelary**; the current import/PyPI package is
-    `panelary`. Import it as `import panelary as pk`.
-
 ## Long format: `(entity, time, *features)`
 
 A panel is stored **long** (also called "tidy" or "stacked"): one row per
@@ -100,8 +96,8 @@ for some entities. What matters is:
   check this for you (it materialises, so it is opt-in):
 
   ```python
-  import panelary as pk
-  pk.PanelFrame(df, entity="ticker", time="date").assert_unique_keys()
+  import panelary as pn
+  pn.PanelFrame(df, entity="ticker", time="date").assert_unique_keys()
   ```
 
 - **Gaps are not zeros.** A missing row means "not observed", not "value 0". Trailing
@@ -115,9 +111,9 @@ fractional differencing — is only correct if each entity's rows are in ascendi
 order. Sort **by `(entity, time)`** once, near the top of a pipeline:
 
 ```python
-import panelary as pk
+import panelary as pn
 
-panel = pk.PanelFrame(df, entity="ticker", time="date").sort_panel()
+panel = pn.PanelFrame(df, entity="ticker", time="date").sort_panel()
 print(panel.is_sorted_per_entity())  # True
 ```
 
@@ -148,6 +144,8 @@ out = df.with_columns(
 shape: (6, 4)
 ┌────────┬──────┬───────┬───────────┐
 │ ticker ┆ date ┆ ret   ┆ ret_z     │
+│ ---    ┆ ---  ┆ ---   ┆ ---       │
+│ str    ┆ i64  ┆ f64   ┆ f64       │
 ╞════════╪══════╪═══════╪═══════════╡
 │ A      ┆ 1    ┆ 0.1   ┆ null      │
 │ A      ┆ 2    ┆ -0.05 ┆ -0.707107 │
@@ -179,6 +177,8 @@ out = df.with_columns(
 shape: (6, 5)
 ┌────────┬──────┬───────┬──────────┬─────────┐
 │ ticker ┆ date ┆ ret   ┆ ret_rank ┆ ret_csz │
+│ ---    ┆ ---  ┆ ---   ┆ ---      ┆ ---     │
+│ str    ┆ i64  ┆ f64   ┆ f64      ┆ f64     │
 ╞════════╪══════╪═══════╪══════════╪═════════╡
 │ A      ┆ 1    ┆ 0.1   ┆ 0.666667 ┆ 1.0     │
 │ A      ┆ 2    ┆ -0.05 ┆ 0.333333 ┆ -1.0    │
@@ -191,8 +191,8 @@ shape: (6, 5)
 
 `.xs` operators are inherently **leak-safe in time** (they use only same-date data) but
 are *not* panel-safe in the per-entity sense — by design they mix entities within a
-date. Shipped operators: `rank`, `demean`, `zscore`, `winsorize`, `quantile_bin`,
-`neutralize`.
+date. Shipped operators: `rank`, `demean`, `zscore`, `standardize`, `winsorize`,
+`quantile_bin`, `neutralize`.
 
 !!! tip "Which axis?"
     "Compared to its own past" → **`.panel`**, scope `.over(entity)`.
@@ -205,19 +205,19 @@ id column and **`time`** for the ordering column. You supply them once and every
 downstream trusts them.
 
 ```python
-import panelary as pk
+import panelary as pn
 
 # On the PanelFrame view:
-panel = pk.PanelFrame(df, entity="ticker", time="date")
+panel = pn.PanelFrame(df, entity="ticker", time="date")
 
 # Or on an estimator, taking a bare polars frame:
-scaler = pk.transform.TimeSeriesScaler(columns="ret")
+scaler = pn.transform.TimeSeriesScaler(columns="ret")
 scaled = scaler.fit_transform(df, entity="ticker", time="date")
 ```
 
 `entity` and `time` must name real, distinct columns; `time` must have an orderable
 dtype (numeric or temporal). When keys are omitted where a default is allowed (e.g.
-`pk.as_panel(df)`), the convention is **column 0 = entity, column 1 = time** — but
+`pn.as_panel(df)`), the convention is **column 0 = entity, column 1 = time** — but
 passing them explicitly is always clearer.
 
 In the frame-level namespaces the *same idea* appears as the `over=` argument:

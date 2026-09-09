@@ -11,7 +11,7 @@ tell you whether a good-looking backtest is real.
 
 For the *why* — the two leak axes, the `panel_safe` / `leakage_safe` contract, and
 the future-perturbation verifier — start with
-[Leak-safety: the conceptual foundation](concepts/leak-safety.md).
+[Leak-safety: the conceptual foundation](./concepts/leak-safety.md).
 
 !!! tip "Everything on this page ships today"
     `PurgedKFold`, `CombinatorialPurgedCV`, the `t1` label-driven purge,
@@ -77,7 +77,7 @@ automatically: an entity contributes its rows for the selected times only.
 
 `PurgedKFold` partitions the time axis into `n_splits` contiguous test folds and,
 for each, returns the purged-and-embargoed training panel. It yields
-`(train, test)` as [`PanelFrame`](api-reference/cross-validation.md) pairs (or
+`(train, test)` as [`PanelFrame`](./api-reference/cross-validation.md) pairs (or
 integer position arrays with `return_indices=True`).
 
 ```python
@@ -191,7 +191,7 @@ and `backtest_paths()` (the split/group assignment for each reconstructed path).
 
 `validate.cpcv` (and `validate.purged_kfold`) fit an estimator across every fold
 and, for CPCV, reconstruct the backtest paths and compute the overfitting
-statistics for you, returning a [`CVReport`](api-reference/cross-validation.md).
+statistics for you, returning a [`CVReport`](./api-reference/cross-validation.md).
 The estimator can be a Panelary `Pipeline`/estimator or any sklearn-shaped object
 (`fit(X, y)` / `predict(X)` over numpy arrays); it is deep-copied per fold.
 
@@ -317,13 +317,13 @@ assert_no_lookahead(
 )
 ```
 
-See [Leak-safety: the conceptual foundation](concepts/leak-safety.md#how-assert_no_lookahead-works)
+See [Leak-safety: the conceptual foundation](./concepts/leak-safety.md#how-assert_no_lookahead-works)
 for how it works and for the CV-boundary form, `assert_no_train_test_leak`.
 
 ## See also
 
-- [Leak-safety: the conceptual foundation](concepts/leak-safety.md)
-- [Quickstart](quickstart.md)
+- [Leak-safety: the conceptual foundation](./concepts/leak-safety.md)
+- [Quickstart](./quickstart.md)
 - López de Prado, M. (2018). *Advances in Financial Machine Learning.* Wiley.
   (triple-barrier — Ch. 3; purging, embargo — Ch. 7; CPCV — Ch. 12)
 - Bailey, D. H., & López de Prado, M. (2014). "The Deflated Sharpe Ratio."

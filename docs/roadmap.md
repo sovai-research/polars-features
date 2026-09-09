@@ -112,7 +112,7 @@ occupies.
   track-record length, a minimum-backtest-length guard, `haircut_sharpe`
   (Bonferroni/Holm/BHY), `effective_n_trials` (ONC clustering), and
   stationary-bootstrap Sharpe CIs / difference tests.
-- **`pk.audit()` panel leak auditor** — a named-check catalog on the perturbation
+- **`pn.audit()` panel leak auditor** — a named-check catalog on the perturbation
   engine, adding the panel-specific checks nobody else has: cross-sectional
   as-of leaks, cross-entity contamination, target leakage, label-horizon
   overlap, and **placebo/shuffle refutation** — all CI-gateable.
@@ -196,7 +196,7 @@ schema -> impute -> features -> label+weights -> select -> model -> validate/aud
 - **`PanelSchema` boundary validation** — validate the `(entity, time)` contract
   once, then stay lazy and trusted; makes the invariants leak-safety depends on
   explicit and enforceable.
-- **`pk.presets.{area}.{minimal,default,comprehensive}`** — the same three-tier
+- **`pn.presets.{area}.{minimal,default,comprehensive}`** — the same three-tier
   vocabulary across every area, keeping a growing surface learnable.
 - **Registry `(namespace, name)` keying** — lets `panel.zscore` and `xs.zscore`
   coexist honestly and unblocks preset/block resolution.

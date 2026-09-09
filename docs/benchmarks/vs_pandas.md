@@ -18,7 +18,7 @@ Environment: polars 1.44.1, pandas 3.0.2, Python 3.13, 15 threads (Apple Silicon
 Absolute times at 2.5M rows: rolling z-score 0.436s → 0.041s; cross-sectional rank
 0.548s → 0.031s; 10-feature bulk 0.387s → 0.031s.
 
-### Why it's faster
+## Why it's faster
 
 - **Native, multi-threaded expressions.** The whole computation stays in the Polars engine
   across all cores; pandas runs per-group Python for anything without a vectorised form
@@ -28,7 +28,7 @@ Absolute times at 2.5M rows: rolling z-score 0.436s → 0.041s; cross-sectional 
   `group_by().agg()` avoid the Python-level `groupby.apply` overhead.
 - **Lazy, one pass.** `extract_features` compiles all requested features into one lazy plan.
 
-### Honesty notes
+## Honesty notes
 
 - Compared against **pandas 3.0**, which has a fast groupby; older pandas shows larger gaps.
 - The bulk comparison gives pandas its *best* path (a single `apply` returning a `Series`),

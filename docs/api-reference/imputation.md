@@ -10,4 +10,19 @@ walk-forward / purged cross-validation.
 The heavy dependency (`cafe`) is optional and imported lazily, so importing this
 module never requires it.
 
+## What's here
+
+| Entry point | Purpose |
+| --- | --- |
+| `CafeImputer` | Point-in-time, model-based imputation as a `PanelTransformer` |
+
+The heavy dependency is optional: `pip install 'panelary[cafe]'`.
+
+## See also
+
+- [Imputation guide](../user-guide/imputation.md) — the narrative walkthrough.
+- [`preprocessing`](preprocessing.md) — the simpler `impute` / `cafe_impute` transformers.
+
+## API
+
 ::: panelary.imputation

@@ -118,4 +118,12 @@ biases the predictions and that bias survives orthogonalisation. Any object with
 `fit` / `predict` (a scikit-learn regressor, say) can be passed instead; import
 it yourself, this module adds no dependency.
 
+## See also
+
+- [Econometrics guide](../user-guide/econometrics.md) — the narrative walkthrough.
+- [`econ.features`](econ-features.md) — the cheap, causal feature generators.
+- [`validation`](validation.md) — the purged folds `dml_partial_linear` cross-fits over.
+
+## API
+
 ::: panelary.econ

@@ -56,7 +56,7 @@ force compactness — compose it with a compressor.
 
 Eight parallel research lanes (2026-09-09) plus an external report
 (`panelkit_fast_numerical_embeddings_deep_research.pdf`, filed alongside this
-plan). Where they disagree, this contract follows the lanes, because the lanes
+plan under its pre-rename filename). Where they disagree, this contract follows the lanes, because the lanes
 verified licences and benchmarks against primary sources and measured
 implementations locally.
 

@@ -87,7 +87,7 @@ makes mRMR a good de-correlating shortlist. Pass `k` in `1..n_features`; omit
 from a **purged** splitter, it fits a fresh clone of your estimator on the train
 block, scores the held-out block (accuracy for classifiers, R² for regressors),
 then permutes each feature in the test block and records the drop in score
-(Lopez de Prado, 2018, Ch. 8). Because the splitter purges overlapping label
+(López de Prado, 2018, Ch. 8). Because the splitter purges overlapping label
 windows, training and test never share information, so the importances are
 leak-free.
 
@@ -203,5 +203,5 @@ de-correlated model that fits and predicts on the same `(entity, time)` keys.
 - Ding, C., & Peng, H. (2005). *Minimum redundancy feature selection from
   microarray gene expression data.* Journal of Bioinformatics and Computational
   Biology, 3(2).
-- Lopez de Prado, M. (2018). *Advances in Financial Machine Learning*, Ch. 8
+- López de Prado, M. (2018). *Advances in Financial Machine Learning*, Ch. 8
   ("Feature Importance").

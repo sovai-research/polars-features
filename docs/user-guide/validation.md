@@ -96,7 +96,7 @@ report = cross_validate(model, data, y="label", cv=cv, entity="ticker", time="da
 report.summary()
 ```
 
-```python
+```text
 {'metric': 'neg_mean_squared_error', 'n_splits': 5,
  'mean_score': -0.00187, 'std_score': 0.00097,
  'min_score': -0.00368, 'max_score': -0.00104}
@@ -127,7 +127,7 @@ for i, (train, test) in enumerate(cv.split(data)):
     print(f"fold {i}: train_rows={tr.height} test_rows={te.height}")
 ```
 
-```
+```text
 fold 0: train_rows=225 test_rows=81
 fold 1: train_rows=219 test_rows=78
 fold 2: train_rows=219 test_rows=78
@@ -185,12 +185,13 @@ report = cross_validate(model, data, y="label", cv=cpcv, entity="ticker", time="
 report.summary()
 ```
 
-```python
+```text
 {'metric': 'neg_mean_squared_error', 'n_splits': 15,
  'mean_score': -0.00185, 'std_score': 0.00056,
  'min_score': -0.00291, 'max_score': -0.00098,
- 'n_paths': 5, 'mean_path_sharpe': -0.205,
- 'deflated_sharpe': 0.0042, 'pbo': 0.821}
+ 'n_paths': 5, 'mean_path_sharpe': -0.20365,
+ 'deflated_sharpe': 0.01578, 'n_trials': 5, 'V': 0.00344,
+ 'pbo': 0.9246}
 ```
 
 With a target present, `cross_validate` stitches the per-split test predictions
@@ -234,7 +235,9 @@ fields are:
   each reconstructed backtest path (CPCV only).
 - `performance_matrix` — the `(n_periods, n_paths)` matrix fed to the PBO
   estimator (CPCV only).
-- `deflated_sharpe`, `pbo` — the overfitting diagnostics (CPCV only).
+- `deflated_sharpe`, `pbo` — the overfitting diagnostics (CPCV only), reported
+  alongside the `n_trials` and `V` (Sharpe variance across trials) they were
+  deflated against, so the null is auditable rather than implicit.
 
 ```python
 report.fold_scores            # list[float], one per split

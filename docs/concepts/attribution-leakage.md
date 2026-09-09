@@ -76,11 +76,10 @@ reference an object with an auditable contract, not an argument you forget:
 | **Deterministic** | Sampling is seeded from `(seed, n_admissible)` — never from the frame being explained. |
 | **Auditable** | `background.describe(times)` / `attributor.background_report(X)` return the reference-set size for every explained time. That table is the evidence. |
 
-Because `TreeAttributor` is a
-`PanelTransformer`, the binding
-is automatic: `fit(train)` builds and freezes the reference, `transform(test)`
-applies it and learns nothing. Drop it behind a purged splitter and attribution
-inherits the split.
+Because `TreeAttributor` is a `PanelTransformer`, the binding is automatic:
+`fit(train)` builds and freezes the reference, `transform(test)` applies it and
+learns nothing. Drop it behind a purged splitter and attribution inherits the
+split.
 
 ## The invariants, stated precisely
 
@@ -119,5 +118,5 @@ background.
 Leak-safe attribution explains the model you actually have. If the model was
 trained on leaked features, the attribution will faithfully explain a leaky
 model — correctly, and misleadingly. Run
-[`assert_no_lookahead` / `assert_no_train_test_leak`](../api-reference/testing.md) on the features first; attribution is the
-last step, not the first.
+[`assert_no_lookahead` / `assert_no_train_test_leak`](../api-reference/testing.md)
+on the features first; attribution is the last step, not the first.

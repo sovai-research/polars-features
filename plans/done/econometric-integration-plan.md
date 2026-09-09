@@ -177,7 +177,7 @@ Every estimator here that fits parameters subclasses `PanelTransformer` (or comp
 - **Panel:** `pyfixest`/`fixest`/`reghdfe` (HDFE); `plm`/`dcce`/`xtdcce2` (CCE/PMG); `linearmodels` (Fama-MacBeth, Driscoll-Kraay).
 - **TS/features:** Corsi HAR-RV; Diebold-Li (Nelson-Siegel); GPH / Robinson local Whittle; Zivot-Andrews; Diebold-Yilmaz connectedness; Kostakis-Magdalinos-Stamatogiannis (IVX).
 - **Modern inference:** Chernozhukov et al. DML; Belloni-Chernozhukov-Hansen PDS-LASSO; Gibbs-Candès ACI; Angelopoulos et al. Conformal-PID; Xu-Xie EnbPI; Barber et al. NexCP; Romano-Patterson-Candès CQR.
-- **Known bugs to close:** DSR N/V and frac-diff divergence (`panelkit-wave2-academic.md`).
+- **Known bugs to close:** DSR N/V and frac-diff divergence (`panelkit-wave2-academic.md`, a research memo kept under its pre-rename name).
 
 ---
 

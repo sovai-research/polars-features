@@ -75,10 +75,12 @@ labeled = triple_barrier(
 labeled.select("ticker", "date", "close", "label", "ret", "t1").head(6)
 ```
 
-```
+```text
 shape: (6, 6)
 ┌────────┬──────┬────────────┬───────┬───────────┬─────┐
 │ ticker ┆ date ┆ close      ┆ label ┆ ret       ┆ t1  │
+│ ---    ┆ ---  ┆ ---        ┆ ---   ┆ ---       ┆ --- │
+│ str    ┆ i64  ┆ f64        ┆ i64   ┆ f64       ┆ i64 │
 ╞════════╪══════╪════════════╪═══════╪═══════════╪═════╡
 │ AAA    ┆ 0    ┆ 100.301915 ┆ 0     ┆ 0.00698   ┆ 10  │
 │ AAA    ┆ 1    ┆ 100.087289 ┆ 0     ┆ 0.010479  ┆ 11  │
@@ -107,10 +109,12 @@ Inspect the class balance:
 labeled.get_column("label").value_counts().sort("label")
 ```
 
-```
+```text
 shape: (3, 2)
 ┌───────┬───────┐
 │ label ┆ count │
+│ ---   ┆ ---   │
+│ i64   ┆ u32   │
 ╞═══════╪═══════╡
 │ -1    ┆ 216   │
 │ 0     ┆ 32    │
@@ -137,10 +141,12 @@ fh = fixed_horizon(
 fh.select("ticker", "date", "label", "ret", "t1").head(4)
 ```
 
-```
+```text
 shape: (4, 5)
 ┌────────┬──────┬──────────┬──────────┬─────┐
 │ ticker ┆ date ┆ label    ┆ ret      ┆ t1  │
+│ ---    ┆ ---  ┆ ---      ┆ ---      ┆ --- │
+│ str    ┆ i64  ┆ f64      ┆ f64      ┆ i64 │
 ╞════════╪══════╪══════════╪══════════╪═════╡
 │ AAA    ┆ 0    ┆ 0.011347 ┆ 0.011347 ┆ 5   │
 │ AAA    ┆ 1    ┆ 0.040816 ┆ 0.040816 ┆ 6   │
@@ -160,10 +166,12 @@ fh_sign = fixed_horizon(
 fh_sign.get_column("label").value_counts().sort("label")
 ```
 
-```
+```text
 shape: (3, 2)
 ┌───────┬───────┐
 │ label ┆ count │
+│ ---   ┆ ---   │
+│ i64   ┆ u32   │
 ╞═══════╪═══════╡
 │ -1    ┆ 110   │
 │ 0     ┆ 149   │
@@ -196,10 +204,12 @@ meta = meta_label(primary, primary_signal="signal", label="label")
 meta.get_column("meta_label").value_counts().sort("meta_label")
 ```
 
-```
+```text
 shape: (2, 2)
 ┌────────────┬───────┐
 │ meta_label ┆ count │
+│ ---        ┆ ---   │
+│ i64        ┆ u32   │
 ╞════════════╪═══════╡
 │ 0          ┆ 210   │
 │ 1          ┆ 150   │

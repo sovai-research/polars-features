@@ -44,12 +44,18 @@ train = panel.filter(pl.col("date") < 45)
 test = panel.filter(pl.col("date") >= 45)
 
 model = PanelLGBMRegressor(
-    target="fwd_ret", entity="ticker", time="date", n_estimators=100, verbose=-1
+    target="fwd_ret", entity="ticker", time="date", n_estimators=100, verbosity=-1
 ).fit(train)
 
 attr = TreeAttributor(model, entity="ticker", time="date", embargo=1).fit(train)
 shap = attr.attributions(test)
 ```
+
+!!! note "The default mode needs the `explain` extra"
+    `mode="interventional"` (the default) routes XGBoost, LightGBM and sklearn
+    ensembles through `shap`'s exact C++ kernel, so the quick start above needs
+    `pip install 'panelary[explain]'`. CatBoost is interventional natively, and
+    `mode="conditional"` uses the booster's own kernel — neither needs `shap`.
 
 `shap` is a plain Polars frame: `ticker`, `date`, one `shap_<feature>` column per
 feature, and `shap_base_value`. It is ready for `group_by` without any
@@ -73,11 +79,13 @@ The point of the object is that you can inspect it:
 
 ```python
 attr.background_report(test)
-# date │ n_admissible │ n_reference
+# time │ n_admissible │ n_reference
 ```
 
-`n_admissible` is how many training rows were strictly in the past of that date
-(after the embargo); `n_reference` is how many were sampled. This table is the
+One row per distinct explained time (the column is always named `time`,
+whatever your time column is called). `n_admissible` is how many training rows
+were strictly in the past of that time after the embargo; `n_reference` is how
+many of them were actually sampled, capped by `max_samples`. This table is the
 evidence that no explanation saw the future.
 
 ## Choosing a value function
@@ -147,10 +155,13 @@ joint = attr.group_attributions(test, groups, group_mode="joint")
 | `"additive"` (default) | "How much credit do these features receive **in total**, as a sum of individual credits?" Exact for marginal values by additivity of the value function. | Free — a `group_by` over columns you already have. |
 | `"joint"` | "What would the prediction lose if this whole group were held out **together**?" A different game: each group is one coalition player. | `2^G` coalitions × background rows × explained rows. Keep `G` small. |
 
+Either way the output is keyed by `(entity, time)` with one
+`shap_group_<name>` column per group plus `shap_base_value`.
+
 They coincide exactly when the groups do not interact, and diverge when they do
-— which is the whole point of asking. A residual `shap_group_ungrouped` column
-holds whatever the partition did not cover, so the group columns plus the base
-value still reconstruct the prediction.
+— which is the whole point of asking. When the groups do not cover every
+feature, a residual `shap_group_ungrouped` column holds the remainder, so the
+group columns plus the base value still reconstruct the prediction.
 
 ## Window attribution on each entity's own calendar
 
@@ -163,6 +174,9 @@ counts that entity's own rows; a duration string (`"30d"`, `"3i"`) uses that
 entity's own time values. Entities with ragged calendars — late listings, halted
 names, mixed frequencies — are handled by construction, because no global time
 grid is ever built.
+
+Columns come back as `shap_<feature>_w<window>` (`shap_momentum_w5` for the call
+above), keyed by `(entity, time)`.
 
 `agg="abs_mean"` gives the classic "mean |SHAP|" importance profile through time;
 `agg="sum"` preserves signed additivity within the window.
@@ -225,19 +239,58 @@ fold-bound reference, `path_dependent` → `TreeExplainer` (TreeSHAP-IQ).
     factors is the flagship combination: "factor 2 × factor 5 synergy drove this
     forecast."
 
-## Custom models
+## Custom models: the `panelary_shap_values` hook
 
-Any object exposing the documented hook is explained directly, with no booster
-involved:
+Panelary detects a model's family from its type, but one duck-typed hook
+short-circuits that detection entirely. **If your estimator defines a method
+named `panelary_shap_values`, Panelary treats it as the attribution engine** —
+no booster is imported, `shap` is not required, and every panel-side guarantee
+on this page (fold-bound background, past-only references, the efficiency check,
+group and window aggregation) applies unchanged.
+
+The contract:
 
 ```python
-def panelary_shap_values(self, X, background):
-    """Return (phi[n_rows, n_features], base[n_rows])."""
+import numpy as np
+
+class MyPanelModel:
+    def panelary_shap_values(
+        self,
+        X: np.ndarray,                  # (n_rows, n_features), float
+        background: np.ndarray | None,  # (n_reference, n_features) or None
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return (phi, base): phi is (n_rows, n_features), base is (n_rows,)."""
+        ...
 ```
 
-`background` is the reference matrix for that row group (`None` in
-`path_dependent` mode). This is the extension point for a model Panelary does not
-wrap.
+Four things to get right:
+
+* **Column order.** `X`'s columns are the resolved feature list, in the order
+  Panelary froze at `fit` time (`attr.features_`). Return `phi` in that same
+  order — Panelary names the output columns positionally.
+* **`background` is the fold-bound reference.** Under `mode="interventional"`
+  the hook is called **once per reference group**, with `background` set to that
+  group's past-only, embargoed reference matrix and `X` restricted to the rows
+  that share it. Under `mode="conditional"` and `mode="path_dependent"` the hook
+  is called once with `background=None` — your model supplies its own reference.
+  (`conditional` still builds and audits the `TimeAwareBackground`; it reports
+  `E[f]` over it as `shap_reference_expectation` rather than handing the matrix
+  to the engine.)
+* **Raw margin scale.** `base + phi.sum(axis=1)` must equal your model's raw
+  (link-scale) prediction — log-odds for a classifier, the raw score for a
+  regressor. That identity is what `attr.check_efficiency(...)` verifies.
+* **Where to put the method.** The hook is looked up on the *native* estimator.
+  If you pass a bare estimator, that is the object you pass; if you pass a
+  Panelary model wrapper, it is the wrapper's fitted `estimator_`.
+
+```python
+attr = TreeAttributor(MyPanelModel(), features=["momentum", "value", "size"],
+                      entity="ticker", time="date").fit(train)
+attr.attributions(test)
+attr.check_efficiency(test, raise_on_fail=True)   # proves the hook is consistent
+```
+
+This is the supported extension point for a model Panelary does not wrap.
 
 ## Not implemented
 

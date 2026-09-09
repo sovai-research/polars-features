@@ -128,4 +128,11 @@ and episode peak / end / duration, which are knowable only once an episode has
 ended. The leak-safe substitute for the latter is the backward-looking
 consecutive-exceedance run length emitted by `panel_features`.
 
+## See also
+
+- [`econ`](econ.md) — panel unit-root tests and cross-sectional dependence.
+- [`econ.features`](econ-features.md) — trailing-window unit-root and long-memory features.
+
+## API
+
 ::: panelary.detect

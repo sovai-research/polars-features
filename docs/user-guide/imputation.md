@@ -41,7 +41,7 @@ imputer safe to run inside cross-validation.
 
 !!! note "Optional dependency"
     The imputer wraps the optional `cafe` package. Install it with
-    `pip install panelary[cafe]`. The rest of Panelary imports fine
+    `pip install 'panelary[cafe]'`. The rest of Panelary imports fine
     without it; you only need it when you actually impute with CAFE.
 
 ## `cafe_impute` — the functional transformer

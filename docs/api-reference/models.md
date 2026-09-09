@@ -14,4 +14,19 @@ Two families live here: `PanelSklearnRegressor` / `PanelSklearnClassifier` wrap
 convenience constructors that lazily import LightGBM with a graceful sklearn
 fallback.
 
+## What's here
+
+| Your problem | Entry point |
+| --- | --- |
+| Wrap any sklearn-shaped regressor / classifier | `PanelSklearnRegressor`, `PanelSklearnClassifier` |
+| LightGBM with a graceful sklearn fallback | `PanelLGBMRegressor`, `PanelLGBMClassifier` |
+
+## See also
+
+- [Panel ML Models guide](../user-guide/models.md) — the narrative walkthrough.
+- [`explain`](explain.md) — leak-safe attribution for a fitted model.
+- [`validation`](validation.md) — evaluating one honestly.
+
+## API
+
 ::: panelary.models

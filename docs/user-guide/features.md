@@ -5,10 +5,6 @@ frames using pure, leak-safe [Polars](https://pola.rs/) expressions. Every featu
 computed **per entity** (and, where relevant, per date), so no information ever leaks
 across entities or from the future.
 
-!!! info "Naming"
-    The project/brand is **Panelary**; the current import/PyPI package is
-    `panelary`. Import it as `import panelary as pk`.
-
 There are three families of feature operators, each exposed as a Polars expression
 namespace that is registered the moment you `import panelary`:
 
@@ -16,7 +12,11 @@ namespace that is registered the moment you `import panelary`:
 | --------- | ----- | ------------ | -------- |
 | `.ts` | per-entity time-series extractors (tsfresh-style) | `group_by(entity)` / `.over(entity)` | `absolute_energy`, `longest_streak_above_mean`, `cid_ce`, `max_drawdown` |
 | `.panel` | per-entity transforms | `.over(entity)` | `frac_diff`, `zscore`, `rs_vol` |
-| `.xs` | cross-sectional (per-date) transforms | `.over(time)` | `rank`, `demean`, `zscore`, `winsorize`, `quantile_bin`, `neutralize` |
+| `.xs` | cross-sectional (per-date) transforms | `.over(time)` | `rank`, `demean`, `zscore`, `standardize`, `winsorize`, `quantile_bin`, `neutralize` |
+
+A fourth namespace, `.factor`, holds the cross-sectional factor-research
+operators (`forward_return`, `ic`, `orthogonalize`, `portfolio_sort`); see the
+[factor API reference](../api-reference/factor.md).
 
 For batch time-series featurisation there is also a one-call
 [`extract_features`](#bulk-extraction-with-extract_features) helper and a clean-room
@@ -34,7 +34,7 @@ list/struct). Because they are ordinary Polars expressions, they run eagerly on 
 ```python
 import numpy as np
 import polars as pl
-import panelary as pk  # registers the .ts / .panel / .xs namespaces
+import panelary as pn  # registers the .ts / .panel / .xs namespaces
 
 rng = np.random.default_rng(0)
 
@@ -89,8 +89,10 @@ print(feats)
 # shape: (2, 4)
 # ┌────────┬──────────┬───────────┬──────────────┐
 # │ ticker ┆ rms      ┆ skew      ┆ max_drawdown │
+# │ ---    ┆ ---      ┆ ---       ┆ ---          │
+# │ str    ┆ f64      ┆ f64       ┆ f64          │
 # ╞════════╪══════════╪═══════════╪══════════════╡
-# │ A      ┆ 0.738792 ┆ -1.255106 ┆ -1.486800    │
+# │ A      ┆ 0.738792 ┆ -1.255106 ┆ -1.4868      │
 # │ B      ┆ 0.673727 ┆ -1.235255 ┆ -5.585107    │
 # └────────┴──────────┴───────────┴──────────────┘
 ```
@@ -140,7 +142,7 @@ from panelary.registry import registry
 
 # What namespaces exist?
 print(registry.namespaces())
-# ['panel', 'ts', 'xs']
+# ['factor', 'panel', 'ts', 'xs']
 
 # Every registered ts scalar extractor (usable in extract_features)
 ts_features = [spec.name for spec in registry.by_namespace("ts")]
@@ -186,9 +188,9 @@ runs a single `group_by(entity).agg(...)` over the requested value column(s) and
 exactly one row per entity, one column per feature.
 
 ```python
-import panelary as pk
+import panelary as pn
 
-wide = pk.extract_features(
+wide = pn.extract_features(
     panel,
     entity="ticker",
     time="date",
@@ -199,9 +201,11 @@ print(wide)
 # shape: (2, 5)
 # ┌────────┬─────────────────┬─────────────────┬───────────────────────┬──────────┐
 # │ ticker ┆ absolute_energy ┆ mean_abs_change ┆ variation_coefficient ┆ cid_ce   │
+# │ ---    ┆ ---             ┆ ---             ┆ ---                   ┆ ---      │
+# │ str    ┆ f64             ┆ f64             ┆ f64                   ┆ f64      │
 # ╞════════╪═════════════════╪═════════════════╪═══════════════════════╪══════════╡
 # │ A      ┆ 3.274884        ┆ 1.180956        ┆ 2.078615              ┆ 2.890714 │
-# │ B      ┆ 2.723451        ┆ 0.670081        ┆ -0.822794             ┆ 1.691090 │
+# │ B      ┆ 2.723451        ┆ 0.670081        ┆ -0.822794             ┆ 1.69109  │
 # └────────┴─────────────────┴─────────────────┴───────────────────────┴──────────┘
 ```
 
@@ -221,7 +225,7 @@ Always pull the valid names from the registry rather than guessing:
 
 ```python
 valid = [s.name for s in registry.by_namespace("ts")]
-wide_all = pk.extract_features(panel, entity="ticker", time="date",
+wide_all = pn.extract_features(panel, entity="ticker", time="date",
                               column="ret", features=valid)
 ```
 
@@ -229,7 +233,7 @@ Multiple value columns produce a `<column>__<feature>` grid:
 
 ```python
 panel2 = panel.with_columns(vol=pl.col("ret").abs())
-multi = pk.extract_features(
+multi = pn.extract_features(
     panel2, entity="ticker", time="date",
     features=["absolute_energy", "root_mean_square"],
     column=["ret", "vol"],
@@ -332,7 +336,7 @@ cross = panel.with_columns(
 )
 ```
 
-Registered `.xs` operators include `rank`, `demean`, `zscore`, `winsorize`,
+The `.xs` operators are `rank`, `demean`, `zscore`, `standardize`, `winsorize`,
 `quantile_bin`, and `neutralize`. These are leakage-safe (they use no future
 information) but are *not* `panel_safe` — by design they read across entities within a
 date, which is exactly the cross-sectional comparison you want.
@@ -355,13 +359,18 @@ for spec in registry.by_namespace("ts")[:3]:
 # Provenance / license guard — empty lists mean the catalogue is clean
 audit = registry.audit()
 print({k: len(v) for k, v in audit.items()})
-# {'missing_panel_safe': 2, 'missing_leakage_safe': 0,
+# {'missing_panel_safe': 6, 'missing_leakage_safe': 0,
 #  'missing_provenance': 0, 'non_permissive_license': 0}
+
+print(audit["missing_panel_safe"])
+# ['ic', 'orthogonalize', 'portfolio_sort', 'demean', 'rank', 'standardize']
 ```
 
-The two `missing_panel_safe` entries are the cross-sectional `.xs` operators that read
-across entities on purpose; every operator is `leakage_safe`, has recorded provenance,
-and carries a permissive license.
+`missing_panel_safe` is the only non-empty list, and every entry is there **by
+design**: the cross-sectional `.xs` operators and the `.factor` operators read
+across entities within a date, which is the whole point of them. Everything in
+the catalogue is `leakage_safe`, has recorded provenance, and carries a
+permissive license.
 
 ---
 
@@ -373,7 +382,7 @@ catch22, producing one row per entity:
 ```python
 import numpy as np
 import polars as pl
-import panelary as pk
+import panelary as pn
 from panelary import catch22
 
 rng = np.random.default_rng(42)
@@ -393,7 +402,7 @@ panel = panel.with_columns(
 )
 
 # 2) Bulk-extract a curated set of ts scalar features (one row per ticker)
-ts_wide = pk.extract_features(
+ts_wide = pn.extract_features(
     panel,
     entity="ticker",
     time="date",

@@ -1,7 +1,7 @@
 # Panelary continuous-improvement playbook
 
 A sequenced set of **ready-to-paste prompts** for future improvement rounds on
-`panelary` (Panelary), plus **TODO experiments** and a **recheck loop** that
+Panelary, plus **TODO experiments** and a **recheck loop** that
 re-examines whatever was already improved to see if it can go further.
 
 How to use it: run the waves in order. Each wave is a single prompt you can paste
@@ -22,7 +22,7 @@ Baselines to keep current (regenerate before each wave):
 ## Wave 0 — Recheck & measure (run after EVERY wave; repeatable)
 
 > Spawn 3 parallel read-only investigator agents to VERIFY and QUANTIFY the current
-> state of Panelary (`panelary`) after the latest changes — do not modify code.
+> state of Panelary after the latest changes — do not modify code.
 > (1) **No-regression**: run the full test suite (minus the 40-min forecasting suite)
 > and report pass/fail; run `ruff check .`; confirm `import panelary` still
 > pulls only numpy+polars (no scipy/sklearn/pandas/flaml/tqdm/numba/holidays in

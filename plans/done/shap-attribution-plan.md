@@ -39,7 +39,7 @@ Three layers, shippable independently:
 
 ## 2. Design principles (inherit the moat)
 
-1. **Leak-safety is the contract.** `TreeAttributor` subclasses [`PanelTransformer`](../panelary/core/protocol.py). `_fit(train)` binds the explainer to **this fold's model + this fold's background**; `_transform(X)` emits attributions with no re-fitting and no future/other-fold information. Declare `panel_safe` / `leakage_safe`.
+1. **Leak-safety is the contract.** `TreeAttributor` subclasses [`PanelTransformer`](../../panelary/core/protocol.py). `_fit(train)` binds the explainer to **this fold's model + this fold's background**; `_transform(X)` emits attributions with no re-fitting and no future/other-fold information. Declare `panel_safe` / `leakage_safe`.
 2. **Background set is a first-class, time-aware object** (see §4). This is the single most important design element.
 3. **Reuse the models already wrapped.** `models.py` already adapts XGBoost/LightGBM/CatBoost/sklearn. The attributor consumes a *fitted* Panelary model and calls its native SHAP — it does not train anything.
 4. **Polars-native output.** Attributions come back as columns (`shap_<feature>`), keyed by `(entity, time)`, ready for `group_by`. Exploit SHAP additivity so group/window SHAP is a cheap post-aggregation, not a recompute.

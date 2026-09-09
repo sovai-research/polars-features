@@ -1,4 +1,4 @@
-# Attribution (`explain`)
+# Attribution
 
 Leak-safe, panel-aware feature attribution. Panelary does **not** reimplement
 SHAP: exact TreeSHAP already ships inside XGBoost (`pred_contribs`), LightGBM
@@ -21,8 +21,20 @@ Optional dependencies (all lazily imported): the boosters themselves,
 `shap` for the interventional engine on non-CatBoost models, and `shapiq` for
 interactions — `pip install 'panelary[explain]'`.
 
-See [Feature attribution](../user-guide/attribution.md) for the workflow and
-[The background-set leak](../concepts/attribution-leakage.md) for why the
-reference set is where attribution leaks.
+## What's here
+
+| Your problem | Entry point |
+| --- | --- |
+| A past-only, fold-bound reference set | `TimeAwareBackground` |
+| Per-row SHAP columns from a fitted booster | `TreeAttributor` |
+| A tidy long frame instead of wide columns | `TreeAttributor(output="long")` |
+
+## See also
+
+- [Feature Attribution guide](../user-guide/attribution.md) — the workflow.
+- [The background-set leak](../concepts/attribution-leakage.md) — why the reference set leaks.
+- [`models`](models.md) — the panel estimators being explained.
+
+## API
 
 ::: panelary.explain

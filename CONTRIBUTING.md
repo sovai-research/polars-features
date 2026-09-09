@@ -2,26 +2,30 @@
 
 Thank you for considering contributing to **Panelary**! We value every contribution — bug
 reports, feature requests, docs, and code. Panelary is built on the foundations of
-[functime](https://github.com/functime-org/functime) (Apache-2.0, no longer maintained) and
-is licensed under Apache-2.0.
+[functime](https://github.com/functime-org/functime) (Apache-2.0) and is licensed under
+Apache-2.0.
 
-> **Note:** the project/brand is Panelary; the current import/PyPI package is `panelary`.
-> The public rename to `panelary` is deferred — please don't rename packages or public APIs.
+> **Names.** There is exactly one: the project is **Panelary**, the PyPI distribution is
+> `panelary`, and the import is `panelary` — conventionally `import panelary as pn`. The
+> pre-0.4.0 names `polars_features` and `PanelKit` are retired; please don't reintroduce them.
 
-## Where contributions land: Tiers
+## Where contributions land: tiers
 
-Panelary is Rust + Polars under the hood, but **most contributions land in Python** — the Rust
-barrier is intentionally low for new contributors.
+Panelary is **pure Python** — the Rust extension was dropped in 0.4.0 and the distribution is
+a single universal `py3-none-any` wheel. There is no compiler in the loop and no build step
+beyond `pip install -e .`, so the barrier for a first contribution is deliberately low.
 
-- **Tier A — Rust kernels.** Performance-critical primitives in `src/`. Higher bar; usually
-  reserved for hot loops that can't be expressed efficiently as Polars expressions.
-- **Tier B — Polars-native Python.** New transforms, extractors, labelers, selectors, and
-  comparisons written as **Polars expressions** in Python. This is the sweet spot: fast,
-  lazy, no Rust required. Most new features belong here.
+- **Tier A — Polars-native operators.** New transforms, extractors, labelers, selectors and
+  comparisons written as **Polars expressions**. This is the sweet spot: fast, lazy, and the
+  home of most new features. Performance comes from expressing the work as a Polars
+  expression, not from dropping to a lower-level language — never reach for `rolling_map`
+  (measured ~249× penalty); `map_batches` per group is the escape hatch.
+- **Tier B — NumPy kernels.** Numerical routines that genuinely cannot be expressed as a
+  Polars expression, written in vectorised NumPy against float64 and driven per group.
 - **Tier C — Python glue & API.** Pipelines, `PanelFrame`, validation, docs, tests, examples.
   Great for first-time contributors.
 
-If you're new, start with **Tier B or C**. You can do a lot without writing any Rust.
+If you're new, start with **Tier A or C**.
 
 ## The correctness contract: `panel_safe` & `leakage_safe`
 
@@ -41,8 +45,8 @@ silently leak the future or the test set will not be merged.
 
 We label beginner-friendly work `good first issue`. Good entry points:
 
-- Port a `tsfresh`-style feature to a Polars-native, `panel_safe` extractor (Tier B).
-- Add a leak-safe transform or cross-sectional comparison (Tier B).
+- Port a `tsfresh`-style feature to a Polars-native, `panel_safe` extractor (Tier A).
+- Add a leak-safe transform or cross-sectional comparison (Tier A).
 - Improve docs, examples, or the quickstart (Tier C).
 - Add tests, including leakage regression tests (Tier C).
 
@@ -67,11 +71,12 @@ Lubba et al. (2019), **not** copied from the GPL `pycatch22`.
 
    No uv? Everything still works with plain pip (`python3 -m pip install -e ".[dev,recommended]"`).
    The [Makefile](./Makefile) picks uv automatically when it is available and falls back to pip
-   otherwise: `make venv && make edit`, `make test`, `make lint`, `make typecheck`.
+   otherwise: `make venv && make edit`, then `make check` (lint + typecheck + test) or the
+   individual `make lint`, `make typecheck`, `make test`.
 3. Run the test suite and `pre-commit` hooks before pushing:
 
    ```bash
-   uv run pytest -q --ignore=tests/test_forecasting.py   # the 40-min forecasting suite is nightly
+   uv run pytest -q -n auto --dist loadfile --ignore=tests/test_forecasting.py
    uv run pre-commit run --all-files
    ```
 4. Open a PR describing the change, the tier, and the leakage/panel safety implications.

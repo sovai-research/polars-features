@@ -8,6 +8,8 @@ value strictly in the future (per entity), run it again, and assert every output
 cell in the past is bit-identical across the two runs. Any difference is a
 look-ahead.
 
+## What's here
+
 - `assert_no_lookahead` — split the shared time axis at a cut `t` and assert that
   perturbing `time > t` never changes any output at `time <= t`.
 - `assert_no_train_test_leak` — perturb a *test* fold and assert the *train*-fold
@@ -15,5 +17,12 @@ look-ahead.
 
 Both accept `op` as either a `polars.Expr` or a callable `frame -> frame`, and
 failures name the first offending `(column, entity, time)`.
+
+## See also
+
+- [Leakage & Correctness](../leakage.md) — the project-wide correctness contract.
+- [Leak-safety](../concepts/leak-safety.md) — the `panel_safe` / `leakage_safe` declarations.
+
+## API
 
 ::: panelary.testing

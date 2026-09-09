@@ -13,4 +13,20 @@ The k-Shape engine is a dependency-free NumPy port (no torch); `sbd` and `ncc`
 are exposed as public utilities, and `k_from_n_entities` is a simple heuristic
 for choosing the cluster count.
 
+## What's here
+
+| Your problem | Entry point |
+| --- | --- |
+| Group entities by the *shape* of their series | `KShapeClusterer` |
+| Group entities by their same-date feature vectors | `CrossSectionalClusterer` |
+| Shape-Based Distance / normalized cross-correlation | `sbd`, `ncc` |
+| How many clusters for this many entities? | `k_from_n_entities` |
+
+## See also
+
+- [`reduce`](reduce.md) — leak-safe dimensionality reduction and latent factors.
+- [Leak-safety](../concepts/leak-safety.md) — why centroids must be frozen at `fit` time.
+
+## API
+
 ::: panelary.cluster

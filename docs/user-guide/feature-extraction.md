@@ -18,7 +18,7 @@ The `ts` namespace is registered automatically when you import the package:
 ```python
 import numpy as np
 import polars as pl
-import panelary as pk  # registers the .ts / .panel / .xs namespaces
+import panelary as pn  # registers the .ts / .panel / .xs namespaces
 ```
 
 ## A quick taste
@@ -68,7 +68,7 @@ For a one-call, tsfresh-style bulk extractor that produces a wide feature frame 
 per entity), use `extract_features`:
 
 ```python
-wide = pk.extract_features(
+wide = pn.extract_features(
     panel, entity="ticker", time="date", column="ret",
     features=["absolute_energy", "mean_abs_change", "cid_ce"],
 )

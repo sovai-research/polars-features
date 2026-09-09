@@ -2,170 +2,187 @@
 
 # Panelary
 
-**Leak-safe, fast feature engineering and ML for panel data, built on Polars.**
+**The best methods for panel data.**
 
-*Built on the foundations of [functime](https://github.com/functime-org/functime). Panel-native data science in Polars: transform → extract → label → select → model → validate, with no lookahead, ever.*
+*Leak-safe, fast feature engineering and ML for panel data, built on Polars.
+Panel-native data science: impute → engineer → label → select → model → validate,
+with no lookahead, ever.*
 
+[![PyPI](https://img.shields.io/pypi/v/panelary.svg)](https://pypi.org/project/panelary/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 [![Polars](https://img.shields.io/badge/built%20on-Polars-CD792C.svg)](https://pola.rs/)
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
+[![Docs](https://img.shields.io/badge/docs-sovai--research.github.io-informational.svg)](https://sovai-research.github.io/panelary/)
+
+[Documentation](https://sovai-research.github.io/panelary/) ·
+[Quickstart](./docs/quickstart.md) ·
+[Leakage & correctness](./docs/leakage.md) ·
+[Contributing](./CONTRIBUTING.md)
 
 </div>
 
 ---
 
-> **Your backtest is lying to you.** Most panel-data feature engineering leaks the future into the past — a single careless `.shift`, a global `StandardScaler`, a cross-sectional rank computed over the whole sample — and your beautiful Sharpe ratio evaporates in production. Panelary makes leakage-proof feature engineering the *default*, not an afterthought.
+> **Your backtest is lying to you.** Most panel-data feature engineering leaks the future into the past — a single careless `.shift`, a global `StandardScaler`, a cross-sectional rank computed over the whole sample — and your beautiful Sharpe ratio evaporates in production. Panelary makes leak-safe feature engineering the *default*, not an afterthought.
 
 ## What is Panelary?
 
-Panelary is a feature-engineering and machine-learning toolkit for **panel data** (many entities observed over time — stocks, customers, sensors, regions). It is:
+Panelary is a feature-engineering and machine-learning toolkit for **panel data** — many entities observed over time (stocks, customers, sensors, regions). It is:
 
-- **sklearn-familiar** — `fit` / `transform` / `Pipeline`, the API you already know.
+- **Panel-first** — the panel (entity × time) is the unit of work, not a bag of rows.
 - **Polars-native & lazy** — every transform is a Polars expression; nothing computes until you `.collect()`.
-- **Panel/cross-section as a first-class object** — the panel (entity × time) is the unit of work, not a bag of rows.
-- **Correct by construction** — operations are panel-aware and leak-safe. No lookahead, ever.
-
-> **Heritage.** Panelary is built on the foundations of [**functime**](https://github.com/functime-org/functime), an excellent Polars-native time-series library (Apache-2.0). functime is actively maintained (v1.0.0, May 2026); Panelary reuses and credits its feature-extraction and forecasting engine, retains its license, and adds a panel-first, leak-safe feature-engineering / labeling / validation layer on top. See [`NOTICE`](./NOTICE).
+- **sklearn-familiar** — `fit` / `transform` / `Pipeline`, the API you already know.
+- **Correct by construction** — every operation is panel-aware and leak-safe. No lookahead, ever.
+- **Light to install** — the required footprint is `numpy` + `polars`. Everything heavier is an optional extra, imported lazily at first use.
 
 ## Installation
 
 ```bash
 pip install panelary
+```
 
-# or, with uv (https://docs.astral.sh/uv/) -- same package, much faster:
+Or, with [uv](https://docs.astral.sh/uv/) — the same package, much faster:
+
+```bash
 uv pip install panelary       # into an existing environment
 uv add panelary               # into a uv-managed project
 ```
 
-> **Note on names.** The project/brand is **Panelary**. The current PyPI/import package is `panelary` (the public rename to `panelary` is planned but not yet effective). Import it as:
->
-> ```python
-> import panelary  # Panelary
-> ```
+Panelary requires **Python 3.10+**. The import name matches the package name:
 
-Optional extras (LLM analysis, CAFE imputation, GPU, plotting, path signatures):
+```python
+import panelary as pn
+```
+
+### Optional extras
+
+The base install carries only `numpy` and `polars`. Heavier capabilities live behind extras, and a missing one raises an actionable error naming the extra to install — never a bare `ImportError`.
 
 ```bash
-pip install "panelary[llm,cafe]"   # or [all] for everything
+pip install "panelary[recommended]"   # batteries included: ml, scipy, seasonality, cafe
+pip install "panelary[cafe,explain]"  # pick exactly what you need
+pip install "panelary[all]"           # every optional feature set
 ```
+
+| Extra | Unlocks |
+| --- | --- |
+| `ml` | scikit-learn-backed estimators, selection, reduction, clustering |
+| `scipy` | scientific kernels used by feature extraction, catch22, metrics |
+| `cafe` | CAFE point-in-time imputation (`CafeImputer` / `cafe_impute`) |
+| `explain` | SHAP / Shapley-interaction feature attribution |
+| `dimreduce` | UMAP non-linear dimensionality reduction |
+| `lightgbm`, `xgboost`, `catboost` | gradient-boosting back-ends |
+| `forecasting`, `automl` | the functime-derived forecasting and AutoML paths |
+| `seasonality` | holiday/calendar effects (Fourier terms need nothing) |
+| `llm` | LLM-assisted panel analysis |
+| `viz` | Plotly plotting helpers |
+| `gpu` | the Polars GPU engine (`.collect(engine="gpu")`) |
+| `ann`, `fast`, `progress` | approximate nearest neighbours, numba JIT, progress bars |
+| `recommended`, `all` | curated bundles |
+
+Development and documentation toolchains are `dev` and `docs`; see [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+
+## The golden path
+
+Each stage of the workflow has one obvious entry point on the top-level `pn` namespace, so you rarely have to remember which submodule a method lives in. Drop to the underlying classes when you want the full parameter surface.
+
+| Stage | Verb | What it covers |
+| --- | --- | --- |
+| Fill gaps | `pn.impute` | Point-in-time imputation: CAFE and simpler baselines |
+| Engineer | `pn.features` | Bulk and per-column leak-safe feature generation |
+| Narrow | `pn.select` | Feature selection under purged cross-validation |
+| Compress | `pn.reduce` | Latent factors and dimensionality reduction |
+| Group | `pn.cluster` | Time-series and cross-sectional clustering |
+| Fit | `pn.regression` | Panel regression and panel-aware ML estimators |
+| Explain | `pn.causal` | Causal and econometric panel estimators |
+| Detect | `pn.bubbles` | Explosive-behaviour and change-point detection |
+
+Full signatures live in the [documentation](https://sovai-research.github.io/panelary/).
 
 ## 60-second quickstart
 
-> **Status:** the panel core — `PanelFrame`, the leak-safe `Pipeline`, `PurgedKFold` / `CombinatorialPurgedCV`, the de Prado overfitting metrics, and the `.panel` / `.xs` namespaces — is **shipped (experimental)** today. Labeling (`triple_barrier`), bulk `extract_features`, CAFE imputation, catch22, the `assert_no_lookahead` verifier, and the `cross_validate` / `validate` CPCV runner are **landing in this release**. The exact call signatures below (e.g. `pk.transform.winsorize`, `pk.select.mrmr`, `pk.models.lgbm_classifier`) show the target ergonomics and may still shift — see [What's shipped today](#whats-shipped-today).
-
 ```python
 import polars as pl
-import panelary as pk  # panel core shipped (experimental)
+import panelary as pn
 
-# A panel: many entities (e.g. tickers) observed over time.
-prices = pl.read_parquet("prices.parquet")  # columns: ticker, date, close, volume, ...
-panel = pk.PanelFrame(prices, entity="ticker", time="date")
+# A panel is long-format data keyed by (entity, time).
+prices = pl.read_parquet("prices.parquet")   # ticker, date, close, volume, ...
+panel = pn.PanelFrame(prices, entity="ticker", time="date")
 
-# --- Panel feature engineering: operations are leak-safe by construction ---
+# --- Feature engineering: leak-safe by construction ------------------------
+# `.panel` = within-entity, causal (use .over(entity)).
+# `.xs`    = cross-sectional, per-date (use .over(time)).
 feats = panel.with_columns(
-    # within-entity transform: fractional differencing computed per ticker, in time order
-    pk.col("close").panel.frac_diff(d=0.4).over("ticker").alias("close_fd"),
-
-    # cross-sectional rank: rank each date across all tickers (no lookahead)
-    pk.col("close").xs.rank().over("date").alias("xs_rank"),
-
-    # rolling momentum, per entity
-    pk.col("close").panel.pct_change(periods=21).over("ticker").alias("mom_1m"),
+    pl.col("close").panel.frac_diff(d=0.4).over("ticker").alias("close_fd"),
+    pl.col("close").panel.zscore(window=21).over("ticker").alias("close_z"),
+    pl.col("close").xs.rank(normalize=True).over("date").alias("xs_rank"),
+    pl.col("close").xs.zscore().over("date").alias("xs_z"),
 )
 
-# --- Labels: triple-barrier (López de Prado), leak-safe horizons ---
-labels = feats.label.triple_barrier(
-    price="close", entity="ticker", time="date",
-    pt=2.0, sl=1.0, max_holding="10d",
+# --- Labels: triple-barrier (Lopez de Prado, AFML Ch. 3) -------------------
+# Trailing volatility, forward scan stops at the first touch: leak-safe.
+labels = pn.triple_barrier(
+    prices,
+    entity="ticker", time="date", price="close",
+    pt=2.0, sl=1.0, max_holding=10, vol_lookback=20,
 )
 
-# --- A leak-safe pipeline: fit only sees the past of each fold ---
-pipe = pk.Pipeline([
-    pk.transform.winsorize(limits=0.01),     # per-fold, per-date — never global
-    pk.select.mrmr(k=20),                     # feature selection inside the fold
-    pk.models.lgbm_classifier(),
-])
-
-# --- Validation: Combinatorial Purged Cross-Validation (CPCV) ---
-report = pk.model_selection.validate.cpcv(
-    pipe, feats, labels,
-    n_splits=6, n_test_groups=2,
-    embargo="5d",   # purge + embargo prevent train/test leakage around fold boundaries
+# --- Prove it: perturb every future value, assert the past is unchanged ----
+pn.assert_no_lookahead(
+    pl.col("close").panel.zscore(window=21).over("ticker").alias("z"),
+    panel,
 )
-print(report.summary())
 ```
 
-Every step above respects two contracts: **`panel_safe`** (within-entity ops stay inside their entity and in time order) and **`leakage_safe`** (cross-sectional and fit-based ops never see the future or the test fold).
+Every step respects two contracts: **`panel_safe`** (within-entity operations stay inside their entity and run in time order) and **`leakage_safe`** (cross-sectional and `fit`-based operations never see the future or the test fold).
 
-## What's shipped today
+The [Quickstart](./docs/quickstart.md) continues from here — bulk feature extraction, CAFE imputation, purged and combinatorial-purged cross-validation, and backtest-overfitting diagnostics — with every block runnable.
 
-The functime-derived engine is **available now** under the `panelary` import. You can use it for production forecasting and feature extraction over large panels:
+## What's inside
 
-```python
-import polars as pl
-from panelary.feature_extractors import binned_entropy
-from panelary.forecasting import linear_model
-from panelary.cross_validation import train_test_split
-from panelary.metrics import mase
-
-y = pl.read_parquet(
-    "https://github.com/functime-org/functime/raw/main/data/commodities.parquet"
-)
-
-# Panel-aware feature extraction via the `ts` namespace
-features = y.group_by(y.columns[0]).agg(
-    binned_entropy=pl.col(y.columns[2]).ts.binned_entropy(bin_count=10),
-    longest_streak_above_mean=pl.col(y.columns[2]).ts.longest_streak_above_mean(),
-)
-
-# Forecasting + backtesting + metrics
-y_train, y_test = y.pipe(train_test_split(test_size=3))
-y_pred = linear_model(freq="1mo", lags=24)(y=y_train, fh=3)
-scores = mase(y_true=y_test, y_pred=y_pred, y_train=y_train)
-```
-
-| Area | Status |
+| Area | Module |
 | --- | --- |
-| 100+ Polars-native feature extractors (`ts` namespace) | Shipped (from functime) |
-| Forecasting (linear, GBM, conformal, censored) | Shipped (from functime) |
-| Preprocessing, seasonality, cross-validation, metrics | Shipped (from functime) |
-| LLM forecast analysis | Shipped (from functime) |
-| Modern packaging, CI, wheels (Phase 0) | Shipped |
-| `PanelFrame` panel/cross-section object | Shipped (experimental) |
-| Leak-safe `Pipeline` + `panel_safe` / `leakage_safe` contracts | Shipped (experimental) |
-| `.panel` / `.xs` expression + frame namespaces | Shipped (experimental) |
-| `PurgedKFold`, `CombinatorialPurgedCV` (CPCV) splitters | Shipped (experimental) |
-| Deflated Sharpe ratio, Probability of Backtest Overfitting (PBO) | Shipped (experimental) |
-| CAFE imputation (`cafe_impute` / `CafeImputer`) | Landing this release |
-| Bulk feature extraction (`extract_features`) | Landing this release |
-| Cross-sectional `.xs` ops | Landing this release |
-| Labeling: triple-barrier (`triple_barrier`) | Landing this release |
-| Leakage verifier (`assert_no_lookahead`) | Landing this release |
-| CPCV runner (`cross_validate` / `validate` / `CVReport`) | Landing this release |
-| catch22 (clean-room from Lubba et al. 2019, Apache-2.0) | Landing this release |
-| Module taxonomy (`transform`, `interact`, `map`, `extract`, `select`, `synthesize`, `compare`, `label`, `signal_eval`, `models`, `model_selection`, `neutralize`) | In progress |
+| `PanelFrame`, leak-safe `Pipeline`, `PanelTransformer` / `PanelEstimator` protocols | `pn.core` |
+| `.panel` / `.xs` expression and frame namespaces (typed `.pyi` stubs ship in the wheel) | `panelary.namespaces` |
+| Panel-native preprocessing: scaling, ranking, neutralization, `frac_diff` | `pn.transform` |
+| Point-in-time imputation (CAFE and baselines) | `pn.imputation` |
+| Triple-barrier and related leak-safe labeling | `pn.label` |
+| Feature selection: MRMR, PFA, correlation, variance, MDI/MDA | `pn.select` |
+| Dimensionality reduction: PCA, ICA, hierarchical and robust factors | `pn.reduce` |
+| Panel clustering, including k-Shape and cross-sectional | `pn.cluster` |
+| Cross-sectional factor evaluation: ICs, neutralization, portfolios | `pn.factor` |
+| Econometrics: HDFE, Fama–MacBeth, IVX, DML, connectedness, EVT, HAR-RV | `pn.econ` |
+| Leak-safe, panel-aware SHAP attribution | `pn.explain` |
+| Explosive-regime, bubble and change-point detection (GSADF/BSADF, CUSUM/FOCuS) | `pn.detect` |
+| Purged and combinatorial-purged CV, deflated Sharpe, PBO | `pn.core`, `pn.validation` |
+| 100+ Polars-native feature extractors (`ts` namespace), catch22, `extract_features` | `pn.feature_extractors`, `pn.catch22` |
+| Forecasting (linear, kNN, GBM, conformal, censored, AutoML) | `pn.forecasting`, `pn.models` |
+| Metrics, evaluation, backtesting, seasonality, LLM analysis | `pn.metrics`, `pn.evaluation`, `pn.backtesting`, `pn.seasonality`, `pn.llm` |
+| The leakage verifier and test helpers | `pn.assert_no_lookahead`, `pn.testing` |
 
-See [`CHANGELOG.md`](./CHANGELOG.md) and the docs for the full roadmap.
+Every operator also registers a machine-readable `FeatureSpec` in `pn.registry` carrying its safety contract, provenance and license (56 registered today: `ts`=42, `xs`=7, `factor`=4, `panel`=3).
+
+See [`CHANGELOG.md`](./CHANGELOG.md) for release history and [the roadmap](./docs/roadmap.md) for what is next.
 
 ## How Panelary fits in the ecosystem
 
 Panelary is opinionated about **panel-native correctness and ML workflow**, and deliberately *depends on* the ecosystem rather than competing with it:
 
-- **`functime`** — Panelary is built on functime's Polars-native feature-extraction and forecasting engine, and functime is actively maintained (v1.0.0, May 2026). We reuse and credit it under Apache-2.0 and add the panel object, leakage safety, labeling, and validation on top — we interoperate with functime, we don't replace it.
-- **`polars-ds` / `polars_ta`** — we build on and recommend these for general Polars-native data-science and technical-analysis primitives; Panelary focuses on the panel object, leakage safety, labeling, and validation that sit *above* them.
-- **Nixtla (`statsforecast`, `mlforecast`, ...)** — Nixtla owns forecasting; Panelary's center of gravity is leak-safe **feature engineering, labeling, selection, and cross-sectional ML** for panels. We interoperate, we don't reinvent forecasting.
-- **`tsfresh` / `pycatch22`** — Panelary's extractors are Polars-native and far faster; catch22 features are being clean-room reimplemented from the paper (not vendored from GPL `pycatch22`).
+- **`functime`** — Panelary is built on functime's Polars-native feature-extraction and forecasting engine (Apache-2.0), which we reuse and credit. We add the panel object, leakage safety, labeling, and validation on top; we interoperate with functime, we don't replace it.
+- **`polars-ds` / `polars_ta`** — we build on and recommend these for general Polars-native data-science and technical-analysis primitives. Panelary focuses on the panel object, leakage safety, labeling and validation that sit *above* them.
+- **Nixtla (`statsforecast`, `mlforecast`, …)** — Nixtla owns forecasting. Panelary's centre of gravity is leak-safe feature engineering, labeling, selection, attribution and cross-sectional ML for panels. We interoperate; we don't reinvent forecasting.
+- **`tsfresh` / `pycatch22`** — Panelary's extractors are Polars-native and far faster. catch22 features are clean-room reimplemented from Lubba et al. (2019), not vendored from the GPL `pycatch22`.
 
 ## Documentation
 
-- [Quickstart](./docs/quickstart.md)
+- [Documentation site](https://sovai-research.github.io/panelary/)
+- [Quickstart](./docs/quickstart.md) · [Installation](./docs/installation.md) · [Roadmap](./docs/roadmap.md)
 - [Leakage & correctness-by-construction](./docs/leakage.md)
-- [Contributing](./CONTRIBUTING.md)
-- [`llms.txt`](./llms.txt) (for coding agents)
-- Legacy functime docs: <https://docs.functime.ai/>
+- [Contributing](./CONTRIBUTING.md) · [`AGENTS.md`](./AGENTS.md) (the contract for coding agents)
+- [`llms.txt`](./llms.txt) (a compact machine-readable overview)
 
 ## License
 
-Panelary is distributed under the **Apache License 2.0**, retained from functime. functime is credited as the upstream this work is derived from — see [`NOTICE`](./NOTICE) and [`LICENSE`](./LICENSE).
+Panelary is distributed under the **Apache License 2.0**, retained from [functime](https://github.com/functime-org/functime), the upstream this work is derived from — see [`NOTICE`](./NOTICE) and [`LICENSE`](./LICENSE).
 
 CAFE imputation (`cafe_impute` / `CafeImputer`) is powered by [`cafe-impute`](https://pypi.org/project/cafe-impute/) (MIT, Sov.ai), an optional dependency installed via the `cafe` extra.

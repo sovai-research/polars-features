@@ -15,7 +15,7 @@ name: Release
 #      Add a "pending publisher" (or, once the project exists, a publisher)
 #      with:
 #         PyPI Project Name : panelary
-#         Owner             : <your GitHub org/user>
+#         Owner             : sovai-research
 #         Repository name   : panelary
 #         Workflow name     : release.yml
 #         Environment name  : pypi
@@ -25,6 +25,16 @@ name: Release
 #      Optionally add required reviewers / branch restrictions to `pypi`.
 # No usernames, passwords, or API tokens are stored anywhere. The
 # `id-token: write` permission below lets PyPI verify the OIDC identity.
+#
+# ACTION REQUIRED AFTER THE 0.4.0 RENAME
+#   A trusted publisher is bound to a (project name, owner, repo, workflow,
+#   environment) tuple. Renaming the distribution `polars-features` -> `panelary`
+#   and the repository `polars-features` -> `panelary` invalidates BOTH halves of
+#   any existing binding, and PyPI will reject the upload with "not a valid
+#   publisher for this project" until a new one is registered. `panelary` does
+#   not exist on PyPI yet, so register it as a *pending* publisher (step 1
+#   above) -- pending publishers create the project on the first successful
+#   upload. Do the same on TestPyPI before the first dry-run.
 # ===========================================================================
 
 on:

@@ -6,10 +6,6 @@ stay in plain Polars and reach for the panel operators as **namespaces on a fram
 estimators and pipelines** (Tier 2). Both tiers share the same expression kernel and
 the same leak-safety guarantees; they interoperate freely.
 
-!!! info "Naming"
-    The project/brand is **Panelary**; the current import/PyPI package is
-    `panelary`. Import it as `import panelary as pk`.
-
 ## Tier 1 — bare-frame namespaces (`.panel` / `.xs` / `.ts`)
 
 Importing `panelary` registers custom Polars namespaces (a side effect). After
@@ -18,7 +14,7 @@ that, panel operators are available directly on any `DataFrame` / `LazyFrame` /
 
 ```python
 import polars as pl
-import panelary as pk  # registers .panel / .xs / .ts namespaces
+import panelary as pn  # registers .panel / .xs / .ts namespaces
 
 df = pl.DataFrame(
     {
@@ -40,7 +36,7 @@ There are three registered namespaces:
 | Namespace | Axis | Scope | Shipped operators |
 | --------- | ---- | ----- | ----------------- |
 | `.panel`  | per-entity, causal | `over=<entity>` | `frac_diff`, `zscore`, `rs_vol` |
-| `.xs`     | cross-sectional, same-date | `over=<time>` | `rank`, `demean`, `zscore`, `winsorize`, `quantile_bin`, `neutralize` |
+| `.xs`     | cross-sectional, same-date | `over=<time>` | `rank`, `demean`, `zscore`, `standardize`, `winsorize`, `quantile_bin`, `neutralize` |
 | `.ts`     | single-series feature extraction | your own `group_by`/`over` | tsfresh-style features (`absolute_energy`, `autocorrelation`, …) |
 
 Each of `.panel` and `.xs` comes in **two callable forms** built from one shared
@@ -76,13 +72,13 @@ transformers/estimators that **learn parameters on training rows only**, and a
 `Pipeline` that threads them together without leaking.
 
 ```python
-import panelary as pk
+import panelary as pn
 
 # A typed, lazy view that validates and remembers the (entity, time) keys.
-panel = pk.PanelFrame(df, entity="ticker", time="date").sort_panel()
+panel = pn.PanelFrame(df, entity="ticker", time="date").sort_panel()
 
 # A transformer learns statistics in fit(), applies them in transform().
-scaler = pk.transform.TimeSeriesScaler(columns="ret", mode="zscore")
+scaler = pn.transform.TimeSeriesScaler(columns="ret", mode="zscore")
 scaled = scaler.fit(panel).transform(panel)   # -> a PanelFrame
 print(scaled.collect())
 ```
@@ -97,7 +93,7 @@ The pieces:
   `fit` / `transform` / `fit_transform` (and `predict` for estimators). Every concrete
   subclass declares two machine-checkable booleans, `panel_safe` and `leakage_safe`,
   so callers (and cross-validators) can *refuse* an unsafe transform across a fold
-  boundary. Shipped transformers live under `pk.transform`: `TimeSeriesScaler`,
+  boundary. Shipped transformers live under `pn.transform`: `TimeSeriesScaler`,
   `CrossSectionalScaler`, `CrossSectionalRank`, `Neutralize`, `FracDiff`.
 - **`Pipeline`** — chains named steps and guarantees leak-safety end to end: `fit`
   fits each step **only on the train-fold output of its predecessors**, and
@@ -106,9 +102,9 @@ The pieces:
   integer/string indexing, and slicing.
 
 ```python
-pipe = pk.Pipeline([
-    ("scale", pk.transform.TimeSeriesScaler(columns="ret", mode="zscore", suffix="_z")),
-    ("xsrank", pk.transform.CrossSectionalScaler(columns="ret_z", suffix="_r")),
+pipe = pn.Pipeline([
+    ("scale", pn.transform.TimeSeriesScaler(columns="ret", mode="zscore", suffix="_z")),
+    ("xsrank", pn.transform.CrossSectionalScaler(columns="ret_z", suffix="_r")),
 ])
 result = pipe.fit_transform(df, entity="ticker", time="date")
 print(result.collect())
@@ -128,16 +124,16 @@ frame is wrapped on the fly.
 
 ```python
 # Way A — pass a PanelFrame (its keys win):
-panel = pk.PanelFrame(df, entity="ticker", time="date")
-pk.transform.TimeSeriesScaler(columns="ret").fit_transform(panel)
+panel = pn.PanelFrame(df, entity="ticker", time="date")
+pn.transform.TimeSeriesScaler(columns="ret").fit_transform(panel)
 
 # Way B — pass a bare frame + keys per call:
-pk.transform.TimeSeriesScaler(columns="ret").fit_transform(
+pn.transform.TimeSeriesScaler(columns="ret").fit_transform(
     df, entity="ticker", time="date"
 )
 
 # Way C — configure the keys once on the constructor, then pass bare frames:
-scaler = pk.transform.TimeSeriesScaler(columns="ret", entity="ticker", time="date")
+scaler = pn.transform.TimeSeriesScaler(columns="ret", entity="ticker", time="date")
 scaler.fit(df).transform(df)
 ```
 
@@ -166,7 +162,7 @@ Cross-sectional (same-date) z-score of returns, done in each tier:
 
     ```python
     import polars as pl
-    import panelary as pk
+    import panelary as pn
 
     result = df.xs.zscore("ret", over="date", suffix="_z")
     print(result.sort(["ticker", "date"]))
@@ -189,10 +185,10 @@ Cross-sectional (same-date) z-score of returns, done in each tier:
 === "Tier 2 — estimator + PanelFrame"
 
     ```python
-    import panelary as pk
+    import panelary as pn
 
-    panel = pk.PanelFrame(df, entity="ticker", time="date")
-    scaler = pk.transform.CrossSectionalScaler(columns="ret")
+    panel = pn.PanelFrame(df, entity="ticker", time="date")
+    scaler = pn.transform.CrossSectionalScaler(columns="ret")
     result = scaler.fit_transform(panel).collect()
     print(result.sort(["ticker", "date"]))
     ```

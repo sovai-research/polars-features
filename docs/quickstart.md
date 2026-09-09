@@ -5,19 +5,14 @@
 leak-safe features, extract a feature matrix, label events, impute gaps, and validate a model
 with combinatorial purged cross-validation — proving no lookahead along the way.
 
-!!! info "Naming"
-    The project/brand is **Panelary**. The current import/PyPI package is `panelary`
-    — the public rename to `panelary` is planned but not yet effective. Import it as
-    `import panelary as pk`.
-
-Every code block below runs against the synthetic panel we build in step 1 — copy them in
-order.
+The canonical import is `import panelary as pn`. Every code block below runs against the
+synthetic panel we build in step 1 — copy them in order.
 
 ## Install
 
 ```bash
-pip install panelary        # core
-pip install "panelary[cafe]" # + CAFE imputation (step 5)
+pip install panelary           # core: numpy + polars only
+pip install 'panelary[cafe]'   # + CAFE imputation (step 5)
 ```
 
 See [Installation](./installation.md) for all extras and version notes.
@@ -31,7 +26,7 @@ computes nothing until you `.collect()`.
 ```python
 import numpy as np
 import polars as pl
-import panelary as pk
+import panelary as pn
 
 rng = np.random.default_rng(0)
 rows = []
@@ -42,7 +37,7 @@ for ticker, base in [("AAA", 100.0), ("BBB", 50.0)]:
         rows.append((ticker, day, px, float(rng.integers(1_000, 5_000))))
 
 prices = pl.DataFrame(rows, schema=["ticker", "day", "close", "volume"], orient="row")
-panel = pk.PanelFrame(prices, entity="ticker", time="day")
+panel = pn.PanelFrame(prices, entity="ticker", time="day")
 
 print(panel.feature_cols)          # ['close', 'volume']
 print(panel.collect().shape)       # (120, 4)
@@ -92,7 +87,7 @@ producing exactly one row per entity. Every feature is a pure per-entity aggrega
 nothing leaks across entities or from the future.
 
 ```python
-summary = pk.extract_features(
+summary = pn.extract_features(
     prices,
     entity="ticker",
     time="day",
@@ -114,7 +109,7 @@ volatility, or the vertical time barrier (`0`). The volatility estimate is trail
 forward scan stops at the first touch, so labels are leak-safe.
 
 ```python
-labels = pk.triple_barrier(
+labels = pn.triple_barrier(
     prices,
     entity="ticker",
     time="day",
@@ -145,9 +140,9 @@ gappy = prices.with_columns(
     .otherwise(pl.col("close"))
     .alias("close")
 )
-gp = pk.PanelFrame(gappy, entity="ticker", time="day")
+gp = pn.PanelFrame(gappy, entity="ticker", time="day")
 
-imputer = pk.CafeImputer(engine="joint")
+imputer = pn.CafeImputer(engine="joint")
 filled = imputer.fit(gp).transform(gp).collect()
 
 print(gappy["close"].null_count(), "->", filled["close"].null_count())   # 18 -> 0
@@ -155,7 +150,7 @@ print(gappy["close"].null_count(), "->", filled["close"].null_count())   # 18 ->
 
 !!! note "Function form"
     A pipe-friendly transformer factory is also available:
-    `gappy.pipe(pk.cafe_impute(engine="joint")).collect()`. Both share the same leak-safe
+    `gappy.pipe(pn.cafe_impute(engine="joint")).collect()`. Both share the same leak-safe
     engine; `CafeImputer` additionally slots into a Panelary `Pipeline`.
 
 ## 6. Prove no lookahead (`assert_no_lookahead`)
@@ -165,14 +160,14 @@ every past output cell is bit-identical — a direct future-perturbation test of
 
 ```python
 # A causal op passes silently.
-pk.assert_no_lookahead(
+pn.assert_no_lookahead(
     pl.col("close").panel.zscore(window=5).over("ticker").alias("z"),
     panel,
 )
 
 # A forward-looking op is caught.
 try:
-    pk.assert_no_lookahead(
+    pn.assert_no_lookahead(
         pl.col("close").shift(-1).over("ticker").alias("lead"),
         panel,
     )
@@ -199,7 +194,7 @@ from panelary.models import PanelSklearnRegressor
 
 est = PanelSklearnRegressor(target="target", features=["x1", "x2"])
 
-report = pk.validate.cpcv(
+report = pn.validate.cpcv(
     est, train, "target",
     n_groups=6, n_test_groups=2, embargo=1,
     entity="ticker", time="day",
@@ -215,7 +210,7 @@ Prefer a plain purged K-fold? Build the splitter and pass it to `cross_validate`
 from panelary import PurgedKFold
 
 cv = PurgedKFold(n_splits=4, embargo=1)
-report = pk.cross_validate(est, train, "target", cv, entity="ticker", time="day")
+report = pn.cross_validate(est, train, "target", cv, entity="ticker", time="day")
 print(report.summary())
 ```
 
@@ -227,5 +222,8 @@ estimators and `Pipeline`s; the estimator is deep-copied per fold so folds stay 
 - **[Leakage & correctness-by-construction](./leakage.md)** — the `panel_safe` /
   `leakage_safe` contracts in depth.
 - **[Benchmarks](./benchmarks/vs_pandas.md)** — the 10–19× vs pandas numbers and methodology.
-- Feature selection (`pk.select.mrmr` / `mda` / `mdi`) and panel models
-  (`pk.models.PanelLGBMClassifier`, …) for building the rest of the pipeline.
+- **[The golden path](./index.md#the-golden-path)** — the top-level verbs (`pn.impute`,
+  `pn.features`, `pn.select`, `pn.reduce`, `pn.cluster`, `pn.regression`, `pn.causal`,
+  `pn.bubbles`) that front each stage of the workflow.
+- Feature selection (`pn.select.mrmr` / `mda` / `mdi`) and panel models
+  (`pn.models.PanelLGBMClassifier`, …) for building the rest of the pipeline.

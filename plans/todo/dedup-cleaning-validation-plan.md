@@ -2,7 +2,7 @@
 
 **Status:** design / ready for pickup · **Owner:** TBD
 **Author of plan:** research + design session, 2026-09-08 (5-agent sweep: 60+ repos/methods across Rust/Polars dedup, Python ER, dedup academia, Polars validation libs, cleaning frameworks)
-**Branch context:** `panelkit-roadmap-impl`
+**Branch context:** `panelkit-roadmap-impl` (branch name predates the PanelKit → Panelary rename; left as-is)
 **Siblings (already implemented — in `plans/done/`):** [factor-extraction-plan.md](../done/factor-extraction-plan.md) · [shap-attribution-plan.md](../done/shap-attribution-plan.md) · [interactions-theme-plan.md](../done/interactions-theme-plan.md) · [econometric-integration-plan.md](../done/econometric-integration-plan.md)
 **This plan lives in `plans/todo/`** — not yet implemented; pick it up when ready.
 
@@ -58,7 +58,7 @@ Steps 1–3 and survivorship are pure Polars; step 4 is ~30 lines of numpy. **No
 
 ## 3. Ranked technique shortlist → what we actually build
 
-From the 5-agent sweep, filtered by the zero-dep constraint (full ranking lives in [[panelkit-dedup-validation-research]]):
+From the 5-agent sweep, filtered by the zero-dep constraint (full ranking lives in [[panelkit-dedup-validation-research]] — memo filed under its pre-rename name):
 
 | Rank | Technique | How we ship it |
 |---|---|---|

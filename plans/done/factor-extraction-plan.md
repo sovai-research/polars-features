@@ -1,6 +1,6 @@
 # Implementation Plan — `reduce`: a leak-safe latent-factor family (HFA + friends)
 
-**Status:** ready to implement · **Owner:** TBD · **Target branch:** `panelkit-roadmap-impl` (or a fresh `feat/reduce-factors`)
+**Status:** ready to implement · **Owner:** TBD · **Target branch:** `panelkit-roadmap-impl` (or a fresh `feat/reduce-factors`) — that branch name predates the PanelKit → Panelary rename and is deliberately left as-is
 **Author of plan:** research + design session, 2026-09-04
 
 ---
@@ -14,7 +14,7 @@
 
 ## 1. Objective
 
-Add a first-class **factor-extraction** capability to `panelary` (Panelary): a small, cohesive family of leak-safe latent-factor estimators that *emit new factor columns* (`F = X · U`), sharing one `Fit/Transform` contract and one factor-count selector.
+Add a first-class **factor-extraction** capability to Panelary: a small, cohesive family of leak-safe latent-factor estimators that *emit new factor columns* (`F = X · U`), sharing one `Fit/Transform` contract and one factor-count selector.
 
 The centrepiece is **HFA — Higher-order multi-cumulant Factor Analysis** (Huang, Lu et al., *JBES*), which does eigenanalysis on a higher-order **cumulant** matrix instead of PCA on the covariance matrix. It recovers **weak / non-Gaussian factors** where ordinary PCA fails. No implementation of HFA exists in Python or Rust today (only the authors' R package `hofa`), so this is a genuine differentiator.
 
@@ -34,7 +34,7 @@ HFA ships alongside three siblings so the module reads as a designed system, not
 ## 2. Design principles (inherit the existing moat)
 
 1. **Leak-safety is the contract.** Every estimator subclasses
-   [`PanelTransformer`](../panelary/core/protocol.py): `_fit` learns
+   [`PanelTransformer`](../../panelary/core/protocol.py): `_fit` learns
    parameters on the training panel **only** (standardization stats + loadings);
    `_transform` applies them. `transformer.fit(train).transform(test)` must never
    let test-fold statistics leak in. Declare `panel_safe` / `leakage_safe`

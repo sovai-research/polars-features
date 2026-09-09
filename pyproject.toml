@@ -4,19 +4,30 @@ build-backend = "hatchling.build"
 
 [project]
 name = "panelary"
-version = "0.4.0"
-description = "Leak-safe, fast feature engineering and ML for panel data, Polars-native and pure-Python."
+version = "0.5.0"
+# One line, shown on the PyPI project page and in `pip show`. Keep it a claim we
+# can defend: what it is (panel data), what is distinctive (leak-safe), and what
+# it runs on (Polars). The brand tagline is "The best methods for panel data."
+description = "The best methods for panel data: leak-safe feature engineering, econometrics and ML on Polars."
 requires-python = ">=3.10"
 authors = [{ name = "Sov.ai", email = "research@sov.ai" }]
 readme = "README.md"
+# PyPI search terms. Ordered from the defining idea outwards; each one should be
+# something a user would plausibly type when looking for this library.
 keywords = [
-  "polars",
   "panel-data",
+  "longitudinal-data",
+  "polars",
   "feature-engineering",
   "time-series",
+  "cross-sectional",
+  "econometrics",
+  "forecasting",
+  "machine-learning",
+  "data-leakage",
+  "backtesting",
   "finance",
   "quant",
-  "machine-learning",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -50,7 +61,9 @@ Homepage = "https://github.com/sovai-research/panelary"
 Repository = "https://github.com/sovai-research/panelary"
 # The real docs site (mkdocs `site_url`), not the repo root.
 Documentation = "https://sovai-research.github.io/panelary/"
-Changelog = "https://github.com/sovai-research/panelary/blob/main/CHANGELOG.md"
+# `HEAD` resolves to whatever the repository's default branch is, so this link
+# cannot rot when the default branch is renamed (it is `Wenda`, not `main`).
+Changelog = "https://github.com/sovai-research/panelary/blob/HEAD/CHANGELOG.md"
 Issues = "https://github.com/sovai-research/panelary/issues"
 
 [project.optional-dependencies]
@@ -69,13 +82,19 @@ progress = ["tqdm"]
 seasonality = ["holidays"]
 # --- legacy autoregressive forecasting (functime-derived): FLAML `tune` for HPO. ---
 forecasting = ["flaml>=2.0.2", "tqdm"]
-# --- FLAML AutoML path (flaml_lightgbm): needs flaml[automl] + a booster. ---
+# --- FLAML AutoML path (flaml_lightgbm): needs flaml[automl] + a booster.
+# `_deps` maps the `flaml` module to `forecasting` (the common case, `flaml.tune`
+# only), so a missing `flaml.AutoML` is hinted as [forecasting]; installing
+# [automl] is the fix, and it is a superset. ---
 automl = ["flaml[automl]>=2.0.2", "lightgbm"]
 # --- gradient-boosting back-ends (each optional, additive) for forecasting/models. ---
 lightgbm = ["lightgbm"]
 catboost = ["catboost"]
 xgboost = ["xgboost"]
-# --- approximate-nearest-neighbor reduction (forecasting.lance -> `import lance`). ---
+# --- approximate-nearest-neighbour retrieval (panelary/forecasting/lance.py).
+# The distribution is `pylance`; the module it installs is `lance`. That module
+# is imported at module scope there, not through `_deps.require`, so this extra
+# has no `_MODULE_TO_EXTRA` row. ---
 ann = ["pylance"]
 # --- optional JIT acceleration for the pure-Python CUSUM change-point kernel. ---
 fast = ["numba"]
@@ -101,8 +120,10 @@ explain = ["shap>=0.44", "shapiq>=1.0"]
 # effective feature set (minus GPU / niche back-ends). Restores the pre-slim
 # experience for users who want `pip install` to "just work".
 recommended = ["panelary[ml,scipy,seasonality,cafe]"]
-# The kitchen sink: every real optional feature set (self-referential extras
-# require pip>=21.2). Excludes the reserved/unused `signatures` extra.
+# The kitchen sink: every user-facing feature extra above (self-referential
+# extras require pip>=21.2). Only the tooling extras -- `dev` and `docs` -- are
+# deliberately left out; they are for working *on* Panelary, not with it.
+# Keep this list in sync when a feature extra is added.
 all = [
   "panelary[ml,scipy,progress,seasonality,forecasting,automl,lightgbm,catboost,xgboost,ann,fast,llm,gpu,viz,cafe,dimreduce,explain]",
 ]
@@ -187,11 +208,9 @@ markers = [
 python_version = "3.10"
 files = ["panelary"]
 warn_unused_ignores = true
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = [
-  "panelary._plotting",
-]
+# The optional back-ends (sklearn, scipy, flaml, plotly, boosters, ...) are not
+# installed in every environment and several ship no stubs, so missing-import
+# errors would be noise rather than signal. CI ratchets the remaining error
+# count instead (MYPY_BASELINE in .github/workflows/ci.yml).
 ignore_missing_imports = true
 

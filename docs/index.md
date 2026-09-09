@@ -2,22 +2,18 @@
 
 ![Panelary](./img/banner.png)
 
-## Leak-safe, fast feature engineering and ML for panel data
+**The best methods for panel data.**
 
-**Panelary** (import package `panelary`) is a Polars-native toolkit for **panel data** —
-many entities observed over time (stocks, customers, sensors, regions). It treats the
-`(entity, time)` panel as a first-class, lazy, leak-safe object and gives you the whole
-quant-ML workflow — **transform → extract → label → select → model → validate** — with no
-lookahead, ever.
+Panelary is a Polars-native toolkit for **panel data** — many entities observed over time
+(stocks, customers, sensors, regions). It treats the `(entity, time)` panel as a first-class,
+lazy, leak-safe object and gives you the whole quant-ML workflow —
+**transform → extract → label → select → model → validate** — with no lookahead, ever.
+
+Install it with `pip install panelary` and import it as `import panelary as pn`.
 
 It is built on the foundations of
 [functime](https://github.com/functime-org/functime) (Apache-2.0, actively maintained) and
 interoperates with functime and Nixtla rather than replacing them.
-
-!!! info "Naming"
-    The project/brand is **Panelary**. The current import/PyPI package is `panelary`
-    — the public rename to `panelary` is planned but not yet effective. Import it as
-    `import panelary as pk`.
 
 ## Why Panelary
 
@@ -39,11 +35,11 @@ interoperates with functime and Nixtla rather than replacing them.
 
 ```python
 import polars as pl
-import panelary as pk
+import panelary as pn
 
 # A panel: many entities (tickers) observed over time.
 prices = pl.read_parquet("prices.parquet")   # columns: ticker, day, close, volume
-panel = pk.PanelFrame(prices, entity="ticker", time="day")
+panel = pn.PanelFrame(prices, entity="ticker", time="day")
 
 # Leak-safe feature engineering — the .panel / .xs expression namespaces.
 feats = panel.with_columns(
@@ -56,7 +52,7 @@ feats = panel.with_columns(
 )
 
 # Prove a feature never looks ahead (raises if it leaks).
-pk.assert_no_lookahead(
+pn.assert_no_lookahead(
     pl.col("close").panel.zscore(window=10).over("ticker").alias("z"),
     panel,
 )
@@ -65,6 +61,23 @@ pk.assert_no_lookahead(
 Continue with the [Quickstart](./quickstart.md) for the full path — bulk feature extraction,
 triple-barrier labels, CAFE imputation, and combinatorial purged cross-validation — every
 step runnable.
+
+## The golden path
+
+Every stage of the workflow has one obvious entry point on the top-level `pn` namespace, so
+you rarely need to remember which submodule a method lives in. Reach for the underlying
+classes when you want the full parameter surface.
+
+| Stage | Verb | What it covers |
+| --- | --- | --- |
+| Fill gaps | `pn.impute` | Point-in-time imputation, CAFE and simpler baselines |
+| Engineer | `pn.features` | Bulk and per-column leak-safe feature generation |
+| Narrow | `pn.select` | Feature selection under purged cross-validation |
+| Compress | `pn.reduce` | Latent factors and dimensionality reduction |
+| Group | `pn.cluster` | Time-series and cross-sectional clustering |
+| Fit | `pn.regression` | Panel regression and panel-aware ML estimators |
+| Explain | `pn.causal` | Causal and econometric panel estimators |
+| Detect | `pn.bubbles` | Explosive-behaviour and change-point detection |
 
 ## The benchmark headline
 

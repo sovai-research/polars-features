@@ -1,7 +1,6 @@
 # Installation
 
-Panelary is published to PyPI as the `panelary` package (the public rename to
-`panelary` is planned but not yet effective). To install the latest release, run:
+Panelary is published to PyPI as the `panelary` package. To install the latest release, run:
 
 ```bash
 pip install panelary
@@ -17,7 +16,7 @@ uv add panelary               # into a uv-managed project (pyproject.toml)
 Then import it as:
 
 ```python
-import panelary as pk   # Panelary
+import panelary as pn
 ```
 
 ## Requirements
@@ -27,60 +26,88 @@ import panelary as pk   # Panelary
   tested against **Polars 1.x** (the `.panel` / `.xs` / `ts` namespaces register on
   `polars.Expr`, `polars.DataFrame`, and `polars.LazyFrame`).
 - **Pure Python** since 0.4.0: the distribution is a single universal `py3-none-any` wheel, so
-  there is no compiler, no Rust toolchain and no platform-specific build -- it installs the same
+  there is no compiler, no Rust toolchain and no platform-specific build — it installs the same
   way on every OS and every supported Python.
 
 ## Extras
 
-`panelary` ships optional feature sets as extras. For example, to install with the
-large-language-model (LLM) analysis and CAFE imputation features:
+The core install is deliberately light: **numpy and Polars only**. Everything heavier is an
+optional extra, imported lazily at first use — if a method needs something you have not
+installed, it raises with the exact `pip install 'panelary[<extra>]'` command to fix it.
+
+Install one or several at a time:
 
 ```bash
-pip install "panelary[llm,cafe]"
+pip install 'panelary[ml]'
+pip install 'panelary[ml,scipy,cafe]'
 ```
 
-- `llm`: LLM-powered forecast analyst (OpenAI/Anthropic SDKs, tokenizers, retries).
-- `cafe`: CAFE imputation backend for `cafe_impute` / `CafeImputer` (MIT, Sov.ai).
-- `gpu`: Polars GPU engine via the `cudf-polars` backend (`.collect(engine="gpu")`).
-- `viz`: plotting utilities, powered by [`plotly`](https://plotly.com/python/).
-- `signatures`: **reserved / not yet implemented.** No module imports `iisignature` today;
-  the extra name exists only so the `_deps` install hint stays resolvable. Installing it
-  currently enables nothing.
-- `explain`: feature-attribution fallbacks for `panelary.explain` --
-  [`shap`](https://shap.readthedocs.io/) for non-booster models and
-  [`shapiq`](https://shapiq.readthedocs.io/) for any-order Shapley interactions.
-  The `TreeAttributor` fast path needs neither: it calls the boosters' own
-  native exact TreeSHAP.
-- `all`: convenience extra unioning every optional feature set above (except the reserved
-  `signatures`).
-- `dev`: development / CI tooling (ruff, pytest, hypothesis, mypy, pre-commit, maturin).
+### Bundles
 
-Install everything at once with:
+Most users want one of these two rather than a hand-picked list.
+
+- `recommended` — the batteries-included bundle (`ml`, `scipy`, `seasonality`, `cafe`). This
+  is the everyday install: it covers the estimators, selection, reduction, clustering and
+  scientific kernels that most of the documentation assumes.
+- `all` — every real optional feature set below, including the boosters, LLM and GPU paths.
 
 ```bash
-pip install "panelary[all]"
+pip install 'panelary[recommended]'   # the usual choice
+pip install 'panelary[all]'           # the kitchen sink
 ```
+
+### Feature sets
+
+| Extra | Pulls in | Unlocks |
+| --- | --- | --- |
+| `ml` | scikit-learn | Panel estimators, feature selection, reduction, clustering |
+| `scipy` | scipy | Scientific kernels in feature extractors, catch22, evaluation, metrics |
+| `cafe` | cafe-impute (MIT, Sov.ai) | CAFE imputation: `cafe_impute` / `CafeImputer` |
+| `seasonality` | holidays | Calendar/holiday seasonality effects (Fourier terms need nothing) |
+| `explain` | shap, shapiq | Attribution fallbacks in `panelary.explain` for non-booster models, plus any-order Shapley interactions |
+| `dimreduce` | umap-learn | Non-linear reduction (`reduce.PanelUMAP`); PCA/SVD/FA/NMF only need `ml` |
+| `viz` | plotly | Plotting utilities |
+| `llm` | openai, anthropic, tiktoken, tenacity | LLM-powered forecast analyst |
+| `gpu` | cudf-polars-cu12 | Polars GPU engine (`.collect(engine="gpu")`) |
+| `fast` | numba | Optional JIT acceleration for the CUSUM change-point kernel |
+| `progress` | tqdm | Progress bars in forecasting loops (a no-op without it) |
+
+### Modelling back-ends
+
+| Extra | Pulls in | Unlocks |
+| --- | --- | --- |
+| `lightgbm` / `catboost` / `xgboost` | the matching booster | Gradient-boosting back-ends for forecasting and panel models |
+| `forecasting` | flaml, tqdm | Legacy autoregressive forecasting (functime-derived) with hyper-parameter tuning |
+| `automl` | flaml[automl], lightgbm | The FLAML AutoML forecasting path |
+| `ann` | pylance | Approximate-nearest-neighbour reduction in `forecasting.lance` |
+
+### Toolchain
+
+| Extra | Unlocks |
+| --- | --- |
+| `dev` | Development / CI tooling: ruff, pytest, hypothesis, mypy, pre-commit, pytest-xdist, pytest-benchmark |
+| `docs` | The MkDocs Material toolchain that builds this site |
 
 !!! note "CAFE imputation"
     The [Quickstart](./quickstart.md) imputation step uses `CafeImputer` / `cafe_impute`,
-    which require the `cafe` extra (`pip install "panelary[cafe]"`). Everything else in
-    the quickstart works with the core install.
+    which require the `cafe` extra (`pip install 'panelary[cafe]'`). Everything else in the
+    quickstart works with the core install.
 
 ## Verify your install
 
 ```python
 import polars as pl
-import panelary as pk
+import panelary as pn
 
-print("Panelary", pk.__version__)
+print("Panelary", pn.__version__)
 
 df = pl.DataFrame(
     {"ticker": ["A", "A", "B", "B"], "day": [0, 1, 0, 1], "close": [1.0, 2.0, 3.0, 4.0]}
 )
-panel = pk.PanelFrame(df, entity="ticker", time="day")
+panel = pn.PanelFrame(df, entity="ticker", time="day")
 
 # A causal within-entity op — passes the leak-safety check.
-pk.assert_no_lookahead(
+pn.assert_no_lookahead(
     pl.col("close").panel.zscore(window=2).over("ticker").alias("z"),
     panel,
 )

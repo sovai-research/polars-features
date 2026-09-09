@@ -12,8 +12,12 @@ name: Docs
 #                MkDocs/griffe warning (bad nav target, unresolved mkdocstrings
 #                identifier, malformed docstring) into a red build, so docs rot
 #                is caught in review. On a PR it stops here: nothing is deployed.
-#   * `deploy` - only on a push to the default branch, publishing the artifact
-#                built above via the official GitHub Pages actions.
+#   * `deploy` - on any non-PR run (a push to one of the branches below, or a
+#                manual dispatch), publishing the artifact built above via the
+#                official GitHub Pages actions. NOTE: both `main` and `Wenda`
+#                are wired up, and they publish to the same Pages site, so the
+#                most recent push wins. Narrow the `push.branches` list below
+#                if that ever surprises anyone.
 #
 # ONE-TIME SETUP REQUIRED: in the repository settings, Pages -> Build and
 # deployment -> Source must be set to "GitHub Actions". Until then `deploy`
@@ -85,7 +89,8 @@ jobs:
           path: site
 
   # ---------------------------------------------------------------------------
-  # Publish to GitHub Pages. Default branch only -- PRs build but never deploy.
+  # Publish to GitHub Pages. Pushes and manual dispatches only -- PRs build but
+  # never deploy (a fork's PR must not be able to overwrite the live site).
   # ---------------------------------------------------------------------------
   deploy:
     name: Deploy to GitHub Pages

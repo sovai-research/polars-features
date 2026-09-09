@@ -13,9 +13,16 @@ learn on train and freeze.
 
 ```python
 from panelary.econ.features import (
+    # per-row feature generators (trailing, causal)
     har_features, liquidity_features, evt_features,
-    rolling_unit_root_features, decompose_features,
+    rolling_unit_root_features, rolling_long_memory_features,
+    decompose_features, daily_realized_measures, nelson_siegel_factors,
+    # single-series estimators
+    zivot_andrews, local_whittle, gph, estimate_fractional_order,
+    hill_index, gpd_fit, pot_var_es,
+    # fitted transformers (train-only decisions, frozen at transform time)
     StationarityDifferencer, AutoFracDiff, HARModel, NelsonSiegel,
+    CausalSeasonalDecomposer,
 )
 ```
 
@@ -101,14 +108,14 @@ ffd.transform(test_panel)   # frozen kernels applied causally per entity
 
 ### The divergence guard
 
-`ffd_weights` now **rejects `d < 0`**. Negative `d` is fractional *integration*:
+`ffd_weights` **rejects `d < 0`**. Negative `d` is fractional *integration*:
 its weights decay like `k**(d-1)`, which is not summable, so a truncated
 fixed-width filter is dominated by its own truncation point and grows without
 bound as the window lengthens. It also raises when a legal `d` is paired with a
 threshold so small the kernel never decays within the 100 000-term safety cap —
-previously that silently produced a kernel longer than any realistic per-entity
-series, nulling every row. Passing an explicit `max_width` is an informed opt-in
-to truncation and never raises.
+without the guard that silently produces a kernel longer than any realistic
+per-entity series, nulling every row. Passing an explicit `max_width` is an
+informed opt-in to truncation and never raises.
 
 ## Realized volatility and HAR
 

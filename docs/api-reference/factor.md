@@ -13,4 +13,20 @@ neutralization in `.xs.neutralize`.
 All operations are strictly per-date (never global) and lean on the mandatory
 `over=` cross-sectional key for their leak-safety.
 
+## What's here
+
+| Your problem | Entry point |
+| --- | --- |
+| Build a forward return without an alignment leak | `forward_return` |
+| Per-date information coefficient, and its summary | `ic`, `ic_summary` |
+| Quantile buckets and the long-short spread | `portfolio_sort` |
+| De-correlate a feature set per date | `orthogonalize` |
+
+## See also
+
+- [`reduce`](reduce.md) — latent factors as model inputs, rather than evaluated signals.
+- [`labeling`](labeling.md) — span-aware labels when the horizon overlaps.
+
+## API
+
 ::: panelary.factor

@@ -1,85 +1,155 @@
-## Seasonality and Holiday Effects
+# Seasonality and Holiday Effects
 
-## Modelling Seasonality
-
-### Seasonal Periods
-
-Given a Polars offset alias `freq`, use `functime.offsets.freq_to_sp` to return a list of seasonal periods.
+Seasonality is structure that repeats on a known calendar: a weekly retail
+cycle, a monthly billing cycle, an annual weather cycle. Because the pattern is
+a function of the *timestamp alone*, it can be encoded as ordinary exogenous
+columns — which is exactly what `panelary.seasonality` does. Every helper here
+reads only the time column, so none of them can look ahead.
 
 ```python
-seasonal_periods = {
-    "1s": [60, 3_600, 86_400, 604_800, 31_557_600],
-    "1m": [60, 1_440, 10_080, 525_960],
-    "30m": [48, 336, 17_532],
-    "1h": [24, 168, 8_766],
-    "1d": [7, 365],
-    "1w": [52],
-    "1mo": [12],
-    "3mo": [4],
-    "1y": [1],
-}
+from panelary.seasonality import (
+    add_calendar_effects, add_fourier_terms, add_holiday_effects,
+)
+from panelary.offsets import freq_to_sp
 ```
 
-### Method 1. Dummy Variables / Categorical
+Like the rest of [`panelary.preprocessing`](preprocessing.md), these are curried
+and lazy: call the helper with its parameters, apply it with `X.pipe(...)`, and
+`.collect()` when you are ready.
 
-Use `add_calendar_effects` to generate datetime and calendar effects. `functime` supports two strategies to model seasonality as discrete features: though a categorical column (useful for forecasters with native categorical features support e.g. `lightgbm`) or multiple binary columns (i.e. one-hot encoding). Check out [Chapter 7.4: Seasonal dummy variables](https://otexts.com/fpp3/useful-predictors.html#seasonal-dummy-variables) for a quick primer.
+## Modelling seasonality
 
-If you choose the dummy variable strategy, beware of the "dummy variable trap" (i.e. remember to set `fit_intercept=False` if you decide to include all dummy columns).
+### Seasonal periods
 
-  - minute: 1, 2, ..., 60 (in a day)
-  - hour: 1, 2, ..., 24 (in a day)
-  - day: 1, 2, ..., 31 (in a month)
-  - weekday: 1, 2, ..., 7 (in a week)
-  - week: 1, 2,..., 52 (in a year)
-  - quarter: 1, 2, ..., 4 (in a year)
-  - year: 1999, 2000, ..., 2023 (any year)
+Given a Polars offset alias, `freq_to_sp` returns the seasonal periods that
+belong to that frequency:
 
 ```python
-from functime.seasonality import add_calendar_effects
+from panelary.offsets import freq_to_sp
 
-# Returns X with one categorical column "month" with values 1,2,...,12
+freq_to_sp("1mo")   # [12]
+freq_to_sp("1d")    # [7, 365]
+```
+
+The full table:
+
+| `freq` | Seasonal periods |
+| --- | --- |
+| `1s` | 60, 3 600, 86 400, 604 800, 31 557 600 |
+| `1m` | 60, 1 440, 10 080, 525 960 |
+| `30m` | 48, 336, 17 532 |
+| `1h` | 24, 168, 8 766 |
+| `1d` | 7, 365 |
+| `1w` | 52 |
+| `1mo` | 12 |
+| `3mo` | 4 |
+| `1y` | 1 |
+
+### Method 1 — dummy variables / categoricals
+
+`add_calendar_effects` extracts calendar attributes from the time column. There
+are two ways to model them as discrete features: as a **categorical** column
+(useful for learners with native categorical support, e.g. LightGBM) or as
+**one-hot binary** columns. See
+[Chapter 7.4: Seasonal dummy variables](https://otexts.com/fpp3/useful-predictors.html#seasonal-dummy-variables)
+for a primer.
+
+Supported attributes:
+
+- `minute` — 0…59 (within the hour)
+- `hour` — 0…23 (within the day)
+- `day` — 1…31 (within the month)
+- `weekday` — 1…7 (within the week)
+- `week` — 1…53 (ISO week within the year)
+- `month` — 1…12
+- `quarter` — 1…4
+- `year` — 1999, 2000, …
+
+Each is read straight off the time column with the corresponding Polars
+`.dt` accessor and cast to `Categorical`.
+
+```python
+from panelary.seasonality import add_calendar_effects
+
+# One categorical column "month" with values 1, 2, ..., 12
 X_new = X.pipe(add_calendar_effects(["month"])).collect()
 
-# Returns X with one-hot encoded calendar effects
-# i.e. binary columns "month_1", "month_2", ..., "month_12"
-X_new = X.pipe(add_calendar_effects(["month"]), as_dummies=True).collect()
+# One-hot encoded instead: binary columns "month_1", "month_2", ..., "month_12"
+X_new = X.pipe(add_calendar_effects(["month"], as_dummies=True)).collect()
 ```
 
-### Method 2. Fourier Terms
+!!! warning "The dummy variable trap"
+    If you include *every* dummy column alongside an intercept the design matrix
+    is rank-deficient. Either drop one level or set `fit_intercept=False` on the
+    downstream regressor.
 
-Fourier terms are a common way to model multiple seasonal periods and complex seasonality (e.g. long seasonal periods 365.25 / 7 ≈ 52.179 for weekly time series). For every seasonal period `sp` and Fourier term `k=1,..,K` pair, there are 2 fourier terms `sin_sp_k` and `cos_sp_k`.
+### Method 2 — Fourier terms
 
-Fourier terms can be used to approximate a continuous periodic signal, which can then be used as exogenous regressors to model seasonality.
-[Chapter 12.1: Complex Seasonality](https://otexts.com/fpp3/complexseasonality.html) from Hyndman's textbook "Forecasting: Principles and Practice" contains a great practical introduction to this topic.
+Fourier terms approximate a continuous periodic signal with a handful of sine
+and cosine columns, which makes them the practical way to model **multiple** or
+**long** seasonal periods — a weekly series has period 365.25 / 7 ≈ 52.179, which
+no dummy encoding handles cleanly.
+[Chapter 12.1: Complex Seasonality](https://otexts.com/fpp3/complexseasonality.html)
+is a good practical introduction.
 
-`add_fourier_terms` returns the original `X` DataFrame along with the Fourier terms as additional columns.
-For example, if `sp=12` and `K=3`, `X_new` would contain the columns `sin_12_1`, `cos_12_1`, `sin_12_2`, `cos_12_2`, `sin_12_3`, and `cos_12_3`.
-
+For each seasonal period `sp` and each order `k = 1, …, K`, `add_fourier_terms`
+appends two columns, `sin_{sp}_{k}` and `cos_{sp}_{k}`. With `sp=12` and `K=3`
+you get `sin_12_1`, `cos_12_1`, `sin_12_2`, `cos_12_2`, `sin_12_3`, `cos_12_3`
+alongside the original columns.
 
 ```python
-from functime.offsets import freq_to_sp
-from functime.seasonality import add_fourier_terms
+from panelary.offsets import freq_to_sp
+from panelary.seasonality import add_fourier_terms
 
-sp = freq_to_sp("1mo")[0]
+sp = freq_to_sp("1mo")[0]                              # 12
 X_new = X.pipe(add_fourier_terms(sp=sp, K=3)).collect()
 ```
 
-## Modelling Holidays / Special Events
+`K` must not exceed `sp`; a larger `K` raises `ValueError`.
 
-`functime` has a wrapper function around the [`holidays`](https://pypi.org/project/holidays/) Python package to generate categorical features for special events. Dates without a holiday are filled with nulls.
+## Modelling holidays and special events
+
+`add_holiday_effects` wraps the [`holidays`](https://pypi.org/project/holidays/)
+package to produce one categorical column per country, named
+`holiday__<CODE>`. Dates with no holiday are null.
 
 ```python
-from functime.seasonality import add_holiday_effects
+from panelary.seasonality import add_holiday_effects
 
-# Returns X with two categorical columns "holiday__US" and "holiday__CA"
-north_america_holidays = add_holiday_effects(country_codes=["US", "CA"])
-X_new = X.pipe(north_america_holidays).collect()
+# Two categorical columns: "holiday__US" and "holiday__CA"
+north_america = add_holiday_effects(country_codes=["US", "CA"])
+X_new = X.pipe(north_america).collect()
 
-# Returns X with one-hot encoded holidays (e.g. "holiday__US_christmas)
-north_america_holidays = add_holiday_effects(country_codes=["US", "CA"], as_dummies=True)
-X_new = X.pipe(north_america_holidays).collect()
+# One-hot encoded instead (e.g. "holiday__US_christmas")
+north_america = add_holiday_effects(country_codes=["US", "CA"], as_dummies=True)
+X_new = X.pipe(north_america).collect()
 ```
 
-!!! tip "Custom Events"
+!!! tip "Custom events"
+    For your own special events — a promotion, a product launch, a maintenance
+    window — build the
+    [dummy variables](https://otexts.com/fpp3/useful-predictors.html#dummy-variables)
+    yourself as a Polars
+    [boolean expression](https://docs.pola.rs/user-guide/expressions/casting/)
+    and join them on the time column.
 
-    If you have your own custom special events (e.g. special promotions), you can always create your own [dummy variables](https://otexts.com/fpp3/useful-predictors.html#dummy-variables) as Polars [boolean series](https://pola-rs.github.io/polars-book/user-guide/expressions/casting/#booleans).
+## Forecasting into the future
+
+Exogenous seasonal features have to exist for the *forecast* horizon too, not
+just the training window. `make_future_calendar_effects` and
+`make_future_holiday_effects` build them from a panel's index: they take the
+last timestamp of each entity, extend it `fh` steps at frequency `freq`, and
+apply the corresponding transformer to that future index.
+
+```python
+from panelary.seasonality import make_future_calendar_effects
+
+X_future = make_future_calendar_effects(
+    idx=y_train.select(entity_col, time_col), attrs=["month"], fh=3, freq="1mo",
+)
+```
+
+## See also
+
+- [Preprocessing](preprocessing.md) — the other curried panel transformers.
+- [Forecasting](forecasting.md) — passing these columns as exogenous regressors.

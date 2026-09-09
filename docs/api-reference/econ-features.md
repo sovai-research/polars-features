@@ -9,6 +9,8 @@ transforms.
 
 Everything is pure NumPy + Polars: no `scipy`, no `statsmodels`, no Rust.
 
+## What's here
+
 | Block | Module | Public surface |
 | --- | --- | --- |
 | Unit roots / persistence | `_unitroot` | `adf`, `kpss`, `phillips_perron`, `dfgls`, `ng_perron`, `zivot_andrews`, `unit_root_table`, `rolling_unit_root_features`, `StationarityDifferencer` |
@@ -64,5 +66,13 @@ comparison against a critical value is always available.
   closed form, no optimiser, no `scipy`, and stable at rolling-window sample
   sizes. Its shape estimate is bounded above by 1 by construction, so for
   infinite-mean tails read `hill_index` instead.
+
+## See also
+
+- [Econometric Features guide](../user-guide/econ-features.md) — the narrative walkthrough.
+- [`econ`](econ.md) — panel estimators and inference.
+- [`detect`](detect.md) — explosive-regime and changepoint detection.
+
+## API
 
 ::: panelary.econ.features

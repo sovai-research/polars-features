@@ -1,4 +1,4 @@
-"""Speed benchmark: Panelary (panelary) vs pandas on panel feature generation.
+"""Speed benchmark: Panelary vs pandas on panel feature generation.
 
 Panel data = many entities observed over time (long format: entity, time, value...).
 We time three representative feature-engineering workloads that every panel
@@ -48,7 +48,7 @@ def best_of(fn, repeat: int = 3) -> tuple[float, object]:
 # --------------------------------------------------------------------------- #
 # Workload 1 — per-entity rolling z-score (window=21), the classic panel feature
 # --------------------------------------------------------------------------- #
-def w1_pk(plf: pl.DataFrame) -> pl.DataFrame:
+def w1_pn(plf: pl.DataFrame) -> pl.DataFrame:
     w = 21
     return plf.select(
         "entity",
@@ -75,7 +75,7 @@ def w1_pd(pdf: pd.DataFrame) -> pd.DataFrame:
 # --------------------------------------------------------------------------- #
 # Workload 2 — cross-sectional per-date rank (leak-safe cross-section)
 # --------------------------------------------------------------------------- #
-def w2_pk(plf: pl.DataFrame) -> pl.DataFrame:
+def w2_pn(plf: pl.DataFrame) -> pl.DataFrame:
     return plf.select(
         "entity",
         "time",
@@ -94,7 +94,7 @@ def w2_pd(pdf: pd.DataFrame) -> pd.DataFrame:
 # This is the realistic "feature engineering" case: several of these have no
 # vectorised pandas form, so pandas must run Python per group (like tsfresh).
 # --------------------------------------------------------------------------- #
-PK_FEATURES = [
+PN_FEATURES = [
     pl.col("value").mean().alias("mean"),
     pl.col("value").std().alias("std"),
     pl.col("value").min().alias("min"),
@@ -108,8 +108,8 @@ PK_FEATURES = [
 ]
 
 
-def w3_pk(plf: pl.DataFrame) -> pl.DataFrame:
-    return plf.group_by("entity", maintain_order=True).agg(PK_FEATURES)
+def w3_pn(plf: pl.DataFrame) -> pl.DataFrame:
+    return plf.group_by("entity", maintain_order=True).agg(PN_FEATURES)
 
 
 def _longest_streak_above_mean(a: np.ndarray) -> float:
@@ -161,32 +161,32 @@ def run(n_entities: int, n_time: int) -> None:
 
     # W1
     t_pd, r_pd = best_of(lambda: w1_pd(pdf))
-    t_pk, r_pk = best_of(lambda: w1_pk(plf))
-    chk = _agree(r_pd["z"].to_numpy(), r_pk["z"].to_numpy(), "z")
+    t_pn, r_pn = best_of(lambda: w1_pn(plf))
+    chk = _agree(r_pd["z"].to_numpy(), r_pn["z"].to_numpy(), "z")
     print(
-        f"{'1. rolling z-score / entity':<34}{t_pd:>12.3f}{t_pk:>14.3f}{t_pd / t_pk:>9.1f}x   {chk}"
+        f"{'1. rolling z-score / entity':<34}{t_pd:>12.3f}{t_pn:>14.3f}{t_pd / t_pn:>9.1f}x   {chk}"
     )
 
     # W2
     t_pd, r_pd = best_of(lambda: w2_pd(pdf))
-    t_pk, r_pk = best_of(lambda: w2_pk(plf))
-    chk = _agree(r_pd["xs_rank"].to_numpy(), r_pk["xs_rank"].to_numpy(), "rank")
+    t_pn, r_pn = best_of(lambda: w2_pn(plf))
+    chk = _agree(r_pd["xs_rank"].to_numpy(), r_pn["xs_rank"].to_numpy(), "rank")
     print(
-        f"{'2. cross-sectional rank / date':<34}{t_pd:>12.3f}{t_pk:>14.3f}{t_pd / t_pk:>9.1f}x   {chk}"
+        f"{'2. cross-sectional rank / date':<34}{t_pd:>12.3f}{t_pn:>14.3f}{t_pd / t_pn:>9.1f}x   {chk}"
     )
 
     # W3
     t_pd, r_pd = best_of(lambda: w3_pd(pdf), repeat=2)
-    t_pk, r_pk = best_of(lambda: w3_pk(plf), repeat=2)
-    r_pk_pd = r_pk.sort("entity").to_pandas().set_index("entity")
+    t_pn, r_pn = best_of(lambda: w3_pn(plf), repeat=2)
+    r_pn_pd = r_pn.sort("entity").to_pandas().set_index("entity")
     r_pd = r_pd.sort_index()
     chk = _agree(
         r_pd["longest_streak_above_mean"].to_numpy(),
-        r_pk_pd["longest_streak_above_mean"].to_numpy(),
+        r_pn_pd["longest_streak_above_mean"].to_numpy(),
         "streak",
     )
     print(
-        f"{'3. 10 features / entity (bulk)':<34}{t_pd:>12.3f}{t_pk:>14.3f}{t_pd / t_pk:>9.1f}x   {chk}"
+        f"{'3. 10 features / entity (bulk)':<34}{t_pd:>12.3f}{t_pn:>14.3f}{t_pd / t_pn:>9.1f}x   {chk}"
     )
 
 

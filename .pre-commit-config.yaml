@@ -27,6 +27,13 @@ repos:
     rev: v0.16
     hooks:
       - id: validate-pyproject
+  # mypy over the package (config in pyproject.toml: files = ["panelary"]).
+  # Opt-in, not automatic: mypy is still ~1040 errors from clean, so a blocking
+  # commit hook would be red on every commit and would only teach contributors
+  # to reach for `--no-verify`, taking ruff down with it. CI ratchets the count
+  # instead (MYPY_BASELINE in .github/workflows/ci.yml) -- that is the gate.
+  # Run it deliberately with:
+  #     pre-commit run --hook-stage manual mypy --all-files
   - repo: local
     hooks:
       - id: mypy
@@ -36,6 +43,7 @@ repos:
         types: [python]
         files: ^panelary/
         pass_filenames: false
+        stages: [manual]
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v3.24.0
     hooks:

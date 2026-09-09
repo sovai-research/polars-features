@@ -1,8 +1,9 @@
 site_name: Panelary
-site_description: "Leak-safe, fast feature engineering and ML for panel data, built on Polars. Built on the foundations of functime (Apache-2.0, actively maintained)."
+site_description: "The best methods for panel data. Panelary is a Polars-native, leak-safe toolkit for feature engineering and ML on panel data, built on the foundations of functime (Apache-2.0, actively maintained)."
 site_url: https://sovai-research.github.io/panelary/
 repo_url: https://github.com/sovai-research/panelary
 repo_name: sovai-research/panelary
+copyright: "Apache-2.0, Sov.ai. Derived from functime (Apache-2.0)."
 
 theme:
   name: "material"
@@ -86,7 +87,10 @@ nav:
     - Feature Extraction: notebooks/benchmarks.ipynb
     - Forecast Evaluation: notebooks/evaluation.ipynb
     - LLM Analysis: notebooks/llm.ipynb
+    - Change-point Detection: notebooks/changepoint_detection.ipynb
   - API Reference:
+    - PanelFrame: api-reference/panel-frame.md
+    - registry: api-reference/registry.md
     - feature_extraction: api-reference/feature-extractors.md
     - catch22: api-reference/catch22.md
     - preprocessing: api-reference/preprocessing.md
@@ -112,7 +116,11 @@ nav:
     - offsets: api-reference/offsets.md
     - plotting: api-reference/plotting.md
 
-extra:
-  analytics:
-    provider: google
-    property: G-CYGTL9FJ4R
+# extra:
+#   analytics:
+#     provider: google
+#     # NOTE: the previous value here (G-CYGTL9FJ4R) was inherited verbatim from
+#     # the upstream functime site and is NOT a Panelary property -- leaving it
+#     # enabled would ship this site's traffic to someone else's account. Set a
+#     # real Panelary GA4 property and uncomment to re-enable analytics.
+#     property: G-XXXXXXXXXX

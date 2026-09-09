@@ -189,6 +189,8 @@ extractor drops in front of a model; `keep="factors"` returns just the
 far out they are. The final weights are worth looking at on their own:
 
 ```python
+from panelary.reduce import RobustPCAFactors
+
 ext = RobustPCAFactors(2, entity="id", time="t").fit(train)
 ext.row_weights_          # 1.0 == untouched, < 1 == downweighted outlier
 ```

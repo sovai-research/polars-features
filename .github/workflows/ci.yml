@@ -108,9 +108,21 @@ jobs:
         run: |
           set +e
           uv run mypy panelary > mypy.log 2>&1
+          STATUS=$?
           set -e
-          COUNT=$(grep -cE '^[^ ]+\.py:[0-9]+: error:' mypy.log || true)
           tail -n 30 mypy.log
+          # mypy exits 0 (clean) or 1 (type errors found). Anything else is a
+          # usage/config/internal failure -- e.g. "errors prevented further
+          # checking" from a stub that the configured python_version cannot
+          # parse. Nothing gets checked in that case, the count below reads 0,
+          # and the ratchet would pass a build that type-checked nothing.
+          if [ "$STATUS" -gt 1 ]; then
+            echo "::error::mypy did not run to completion (exit $STATUS); see the log above"
+            exit 1
+          fi
+          # Count reported diagnostics. `.pyi` is included on purpose: an error
+          # inside a stub is still an error mypy could not get past.
+          COUNT=$(grep -cE '^[^[:space:]]+\.pyi?:[0-9]+: error:' mypy.log || true)
           echo "mypy errors: $COUNT (baseline $MYPY_BASELINE)"
           if [ "$COUNT" -gt "$MYPY_BASELINE" ]; then
             echo "::error::mypy errors increased: $COUNT > $MYPY_BASELINE"
@@ -155,9 +167,11 @@ jobs:
         # which needs pyarrow for anything but simple numpy-backed columns.
         # Neither may ever become a runtime dependency --
         # tests/test_import_hygiene.py enforces that.
+        # `build` + `hatchling`: tests/test_wheel_guardrails.py builds the wheel
+        # with `--no-isolation` and skips itself unless both are importable.
         run: |
           uv venv
-          uv pip install -e ".[dev,recommended]" pandas pyarrow build
+          uv pip install -e ".[dev,recommended]" pandas pyarrow build hatchling
 
       - name: Run tests
         # The 40-minute forecasting suite runs nightly, not per-PR.
@@ -217,9 +231,12 @@ jobs:
       - name: Create venv & install ${{ matrix.variant.label }}
         # Test tooling (pytest/hypothesis/pandas/build) is installed in every
         # variant; it is deliberately NOT part of the package's dependencies.
+        # `hatchling` is needed as well as `build`: tests/test_wheel_guardrails.py
+        # builds with `--no-isolation` and *skips itself* unless both import, so
+        # without it the "wheel shape" guardrail below silently checks nothing.
         run: |
           uv venv
-          uv pip install "${{ matrix.variant.spec }}" pytest pytest-xdist pytest-benchmark hypothesis pandas pyarrow build
+          uv pip install "${{ matrix.variant.spec }}" pytest pytest-xdist pytest-benchmark hypothesis pandas pyarrow build hatchling
 
       - name: Guardrails (import hygiene, dependency drift, wheel shape)
         run: |

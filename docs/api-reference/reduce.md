@@ -11,7 +11,18 @@ so principal-component signs are stable across refits.
 feature vector. `StatisticalFactors` extracts K statistical factors from a
 returns panel (train-fit loadings; a `scope="global"` variant is gated
 `leakage_safe=False`). `CrossSectionalPCA` reduces each date's cross-section.
-`PanelUMAP` is available via the optional `dimreduce` extra.
+`PanelUMAP` is available via the optional `dimreduce` extra
+(`pip install 'panelary[dimreduce]'`).
+
+## What's here
+
+| Your problem | Reducer |
+| --- | --- |
+| Compress a row's feature vector | `PanelPCA`, `PanelSVD`, `PanelFactorAnalysis`, `PanelKernelPCA`, `PanelNMF`, `PanelRandomProjection` |
+| Non-linear embedding (optional `dimreduce` extra) | `PanelUMAP` |
+| K statistical factors from a returns panel | `StatisticalFactors` |
+| Reduce each date's cross-section | `CrossSectionalPCA` |
+| Emit named `factor_1 … factor_r` columns | `PCAFactors`, `HFAFactors`, `ICAFactors`, `RobustPCAFactors` |
 
 ## Latent-factor extraction
 
@@ -42,5 +53,13 @@ See the [Latent Factors guide](../user-guide/factors.md) for the full narrative.
 
 HFA, PCA, robust PCA and the selectors are pure NumPy; `ICAFactors` lazily
 requires `scikit-learn` (`pip install 'panelary[ml]'`).
+
+## See also
+
+- [Latent Factors guide](../user-guide/factors.md) — the narrative walkthrough.
+- [Interactions (higher-order structure)](../concepts/interactions.md) — the wider theme.
+- [`cluster`](cluster.md) — grouping entities rather than compressing features.
+
+## API
 
 ::: panelary.reduce

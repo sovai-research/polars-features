@@ -12,12 +12,17 @@ new instructions to `AGENTS.md`, not here.
 Quick reference (details and caveats in `AGENTS.md`):
 
 ```bash
-uv venv && uv pip install -e ".[dev,recommended]"   # setup
-ruff check . && ruff format --check .               # lint  (~0.1s)
-mypy                                                # types (blocking in CI)
-pytest tests/test_<area>.py -q                      # iterate on one file
-pytest -q -m "not slow"                             # full gate (>15 min)
+uv venv && uv pip install -e ".[dev,recommended]"    # setup
+ruff check . && ruff format --check .                # lint  (~0.1s)
+mypy panelary                                        # types (blocking in CI)
+pytest tests/test_<area>.py -q                       # iterate on one file
+pytest -q -n auto --dist loadfile -m "not slow"      # full gate (~1 min on 8 cores)
+make check                                           # all three, in sequence
 ```
+
+The package is `panelary` — PyPI distribution, import name and all. The
+convention is `import panelary as pn`. The pre-0.4.0 names `polars_features`
+and `PanelKit` are retired; do not reintroduce them.
 
 The one thing to internalise before editing: **no lookahead, ever.**
 Within-entity work goes `.over(entity_col)` in time order; cross-sectional work

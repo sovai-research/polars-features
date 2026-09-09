@@ -94,13 +94,21 @@ uv run pytest -q --ignore=tests/test_forecasting.py
 # or: make test
 ```
 
-`pre-commit` checks will run before any commit. To lint and format the tree yourself:
+`pre-commit` checks will run before any commit. To lint, format and type-check the tree
+yourself:
 
 ```bash
 uv run ruff check --fix .
 uv run ruff format .
 # or: make fmt
+
+uv run mypy panelary
+# or: make typecheck
 ```
+
+`mypy` is configured with `files = ["panelary"]` in `pyproject.toml`, so a bare `uv run mypy`
+checks the same paths. Type-checking is **blocking in CI** (ratcheted against a baseline error
+count), as is `ruff`. `make check` runs every gate — lint, type-check and tests — in one go.
 
 Note that your work cannot be merged if these checks fail!
 
@@ -125,7 +133,30 @@ Keep in mind that your work does not have to be perfect right away! If you are s
 
 ## Contributing to the documentation
 
-*In progress...*
+The site is [MkDocs](https://www.mkdocs.org/) with the Material theme; `mkdocs.yml` at the repo
+root holds the nav and plugin configuration. Install the toolchain and serve it locally:
+
+```bash
+uv pip install -e ".[docs]"
+uv run mkdocs serve          # live-reloading preview on http://127.0.0.1:8000
+uv run mkdocs build --strict # what CI runs: any warning is an error
+```
+
+Three conventions keep the docs consistent:
+
+* **`docs/api-reference/` pages are thin.** Each is a short hand-written introduction followed
+  by a `## API` section containing a single `::: panelary.<module>` block; the reference itself
+  is generated from the docstrings by [mkdocstrings](https://mkdocstrings.github.io/). Every
+  page follows the same shape — `# Title`, lead paragraph, `## What's here`, any narrative
+  sections, `## See also`, `## API`. Prose about *how* to use a module belongs in
+  `docs/user-guide/` instead, linked from `## See also`.
+* **Docstrings are NumPy style** (`docstring_style: numpy` in `mkdocs.yml`). Because the
+  reference is generated, improving a docstring improves the site — no page edit needed.
+* **A new page must be added to the `nav:` block** in `mkdocs.yml`, or it is built but
+  unreachable.
+
+`mkdocs build --strict` fails on a broken internal link or an unresolvable mkdocstrings
+identifier, so run it before opening a documentation pull request.
 
 ## Credits
 

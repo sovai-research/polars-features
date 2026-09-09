@@ -40,7 +40,7 @@ Möbius/Harsanyi dividends (Shapley interactions) and functional-ANOVA/Sobol ter
 are *linearly related bases* for writing a high-dimensional object as a sum of main
 effects plus interaction terms:
 
-```
+```text
 object  =  Σ main effects  +  Σ pairwise terms  +  Σ triple terms  +  …
              (order 1)          (order 2)           (order 3)
 ```
@@ -60,7 +60,7 @@ noise floor.
 HFA does eigenanalysis on a higher-order **multi-cumulant** matrix instead. For
 centered/standardized `X`:
 
-```
+```text
 G    = X @ X.T              # Gram
 M3M  = X.T @ ((G * G) @ X)  # third-order multi-cumulant matrix
 U    = top-r eigenvectors of M3M
@@ -95,12 +95,17 @@ alongside each feature's main effect you get the pairwise (and higher) terms tha
 belong to *sets* of features. The `max_order=k` kwarg selects how far up the
 expansion you go.
 
-```python
-from panelary.explain import TreeAttributor
+`max_order=k` lives on the interaction entry points, not on `TreeAttributor`
+(which computes first-order attributions):
 
-attr = TreeAttributor(model=fitted_model, max_order=2)   # main effects + pairs
-attr.fit(train)
-contributions = attr.transform(test)
+```python
+from panelary.explain import TimeAwareBackground, interaction_values
+
+background = TimeAwareBackground().fit(train, entity="id", time="t")
+
+iv = interaction_values(          # main effects + pairs
+    fitted_model, test, background=background, max_order=2, max_rows=200
+)
 ```
 
 The background/reference set is fold-bound and past-only, so the explanation itself
