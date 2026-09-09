@@ -130,6 +130,10 @@ dev = [
   # Parallel test execution: the suite is 1600+ tests and runs ~14x
   # faster with `-n auto` (measured: 15+ min serial -> 67 s on 8 cores).
   "pytest-xdist>=3.5",
+  # The `benchmark` fixture is used by tests/test_cross_validation.py and
+  # tests/test_benchmarks.py. It was never declared, so those tests only
+  # passed on machines that happened to have it installed.
+  "pytest-benchmark>=4.0",
 ]
 
 [tool.hatch.build.targets.wheel]

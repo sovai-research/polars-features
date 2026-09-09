@@ -215,7 +215,7 @@ jobs:
         # variant; it is deliberately NOT part of the package's dependencies.
         run: |
           uv venv
-          uv pip install "${{ matrix.variant.spec }}" pytest pytest-xdist hypothesis pandas pyarrow build
+          uv pip install "${{ matrix.variant.spec }}" pytest pytest-xdist pytest-benchmark hypothesis pandas pyarrow build
 
       - name: Guardrails (import hygiene, dependency drift, wheel shape)
         run: |
