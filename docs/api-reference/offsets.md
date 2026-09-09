@@ -1,1 +1,1 @@
-::: polars_features.offsets
+::: panelary.offsets

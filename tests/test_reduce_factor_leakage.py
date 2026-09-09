@@ -1,6 +1,6 @@
 """The leak-safety contract for the factor-extraction family.
 
-Every extractor in :mod:`polars_features.reduce` claims ``panel_safe = True`` and
+Every extractor in :mod:`panelary.reduce` claims ``panel_safe = True`` and
 ``leakage_safe = True``. This file is what those claims cash out to, applied
 uniformly to all four methods:
 
@@ -25,10 +25,10 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.core.panel_frame import PanelFrame
-from polars_features.core.pipeline import Pipeline
-from polars_features.cross_validation import expanding_window_split
-from polars_features.reduce import (
+from panelary.core.panel_frame import PanelFrame
+from panelary.core.pipeline import Pipeline
+from panelary.cross_validation import expanding_window_split
+from panelary.reduce import (
     HFAFactors,
     ICAFactors,
     PCAFactors,

@@ -6,8 +6,8 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from polars_features.cross_validation import train_test_split
-from polars_features.seasonality import add_fourier_terms
+from panelary.cross_validation import train_test_split
+from panelary.seasonality import add_fourier_terms
 
 
 @pytest.mark.parametrize("freq,sp", [("1h", 24), ("1d", 365), ("1w", 52)])

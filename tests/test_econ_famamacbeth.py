@@ -13,11 +13,11 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.econ import (
+from panelary.econ import (
     FamaMacBethTransformer,
     fama_macbeth,
 )
-from polars_features.econ._common import newey_west_scalar
+from panelary.econ._common import newey_west_scalar
 
 
 def _cross_section_panel(

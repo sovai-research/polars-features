@@ -5,7 +5,7 @@ from contextlib import nullcontext as does_not_raise
 import polars as pl
 import pytest
 
-from polars_features.cross_validation import (
+from panelary.cross_validation import (
     expanding_window_split,
     sliding_window_split,
     train_test_split,

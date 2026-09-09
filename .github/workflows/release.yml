@@ -14,9 +14,9 @@ name: Release
 # 1. PyPI:  https://pypi.org/manage/account/publishing/
 #      Add a "pending publisher" (or, once the project exists, a publisher)
 #      with:
-#         PyPI Project Name : polars_features
+#         PyPI Project Name : panelary
 #         Owner             : <your GitHub org/user>
-#         Repository name   : polars-features
+#         Repository name   : panelary
 #         Workflow name     : release.yml
 #         Environment name  : pypi
 # 2. TestPyPI: repeat the same at https://test.pypi.org/manage/account/publishing/
@@ -112,7 +112,7 @@ jobs:
          contains(github.ref_name, 'beta')))
     environment:
       name: testpypi
-      url: https://test.pypi.org/p/polars_features
+      url: https://test.pypi.org/p/panelary
     permissions:
       id-token: write # OIDC token for Trusted Publishing
     steps:
@@ -150,7 +150,7 @@ jobs:
         !contains(github.ref_name, 'beta'))
     environment:
       name: pypi
-      url: https://pypi.org/p/polars_features
+      url: https://pypi.org/p/panelary
     permissions:
       id-token: write # OIDC token for Trusted Publishing
     steps:

@@ -3,13 +3,13 @@
 This module deliberately carries **no test functions**. It exists so that the
 four ``tests/test_detect_*.py`` files share one set of
 
-* guarded imports of the (concurrently authored) ``polars_features.detect``
+* guarded imports of the (concurrently authored) ``panelary.detect``
   submodules,
 * deterministic data generators (``numpy.random.default_rng`` only -- the
   legacy global RNG is banned repo-wide because it makes "run it twice" tests
   meaningless), and
 * **independently written, deliberately slow and obvious** reference
-  implementations. The references never call into ``polars_features.detect``;
+  implementations. The references never call into ``panelary.detect``;
   they are the ground truth the vectorised prefix-sum kernels are measured
   against.
 
@@ -18,7 +18,7 @@ Missing-module policy
 While Agents A-D are still landing their files the suite must *collect*
 cleanly, so a missing submodule turns into a ``pytest.skip``. A skip is loud in
 the report and is never mistaken for a pass. Setting
-``PANELKIT_DETECT_STRICT=1`` promotes every such skip to a hard failure, which
+``PANELARY_DETECT_STRICT=1`` promotes every such skip to a hard failure, which
 is what CI should do once the module is complete.
 """
 
@@ -36,7 +36,7 @@ import pytest
 # Guarded imports
 # --------------------------------------------------------------------------- #
 #: Promote "module not written yet" skips to failures.
-STRICT = os.environ.get("PANELKIT_DETECT_STRICT", "").lower() in {"1", "true", "yes"}
+STRICT = os.environ.get("PANELARY_DETECT_STRICT", "").lower() in {"1", "true", "yes"}
 
 
 def _try_import(name: str) -> ModuleType | None:
@@ -46,18 +46,18 @@ def _try_import(name: str) -> ModuleType | None:
         return None
 
 
-moments = _try_import("polars_features.detect._moments")
-bsadf = _try_import("polars_features.detect._bsadf")
-critvals = _try_import("polars_features.detect._critvals")
-monitors = _try_import("polars_features.detect._monitors")
-panel = _try_import("polars_features.detect._panel")
+moments = _try_import("panelary.detect._moments")
+bsadf = _try_import("panelary.detect._bsadf")
+critvals = _try_import("panelary.detect._critvals")
+monitors = _try_import("panelary.detect._monitors")
+panel = _try_import("panelary.detect._panel")
 
 #: The package ``__init__`` is the orchestrator's file. Until it lands,
-#: ``polars_features.detect`` still imports -- as an implicit *namespace*
+#: ``panelary.detect`` still imports -- as an implicit *namespace*
 #: package, whose ``__file__`` is ``None`` and whose contents are empty. Treating
 #: that as "present" would make every package-level test pass vacuously, so it
 #: only counts once there is a real module behind it.
-_pkg = _try_import("polars_features.detect")
+_pkg = _try_import("panelary.detect")
 detect_pkg = _pkg if getattr(_pkg, "__file__", None) else None
 
 #: Every submodule, for the import-hygiene probe and the API-wide name scan.
@@ -74,16 +74,16 @@ _MODULES = {
 
 
 def require(*names: str) -> None:
-    """Skip (or fail, under ``PANELKIT_DETECT_STRICT``) if a module is absent."""
+    """Skip (or fail, under ``PANELARY_DETECT_STRICT``) if a module is absent."""
     missing = [n for n in names if _MODULES.get(n) is None]
     if not missing:
         return
     msg = (
-        "polars_features.detect: not importable (missing, broken, or -- for "
+        "panelary.detect: not importable (missing, broken, or -- for "
         f"'detect' -- still only an implicit namespace package): {missing}"
     )
     if STRICT:
-        pytest.fail(msg + " -- PANELKIT_DETECT_STRICT is set")
+        pytest.fail(msg + " -- PANELARY_DETECT_STRICT is set")
     pytest.skip(msg)
 
 

@@ -1,4 +1,4 @@
-"""Tests for panel-aware permutation in :func:`polars_features.select.mda`.
+"""Tests for panel-aware permutation in :func:`panelary.select.mda`.
 
 These cover the ``permute_within`` correctness fix:
 
@@ -16,10 +16,10 @@ import numpy as np
 import polars as pl
 from sklearn.linear_model import LinearRegression
 
-from polars_features.core import PanelFrame
-from polars_features.core.model_selection import PurgedKFold
-from polars_features.select import mda
-from polars_features.select._methods import _permute_within
+from panelary.core import PanelFrame
+from panelary.core.model_selection import PurgedKFold
+from panelary.select import mda
+from panelary.select._methods import _permute_within
 
 
 def _synthetic_panel(

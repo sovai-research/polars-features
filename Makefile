@@ -61,7 +61,7 @@ fmt:  ## Auto-fix lint findings and format the tree
 	ruff format .
 
 typecheck:  ## mypy over the package (config in pyproject.toml)
-	$(PY) -m mypy polars_features
+	$(PY) -m mypy panelary
 
 check: lint typecheck test  ## Every gate a change must pass before it is proposed
 	@printf '\033[32mAll checks passed.\033[0m\n'
@@ -70,7 +70,7 @@ clean:
 	rm -rf build/
 	rm -rf dist/
 	rm -rf *.egg-info
-	$(UNINSTALL) polars_features
+	$(UNINSTALL) panelary
 
 rebuild: clean build
 

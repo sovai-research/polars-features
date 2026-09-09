@@ -13,4 +13,4 @@ neutralization in `.xs.neutralize`.
 All operations are strictly per-date (never global) and lean on the mandatory
 `over=` cross-sectional key for their leak-safety.
 
-::: polars_features.factor
+::: panelary.factor

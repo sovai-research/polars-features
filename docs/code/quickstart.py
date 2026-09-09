@@ -3,11 +3,11 @@ from timeit import default_timer
 
 import polars as pl
 
-from polars_features.cross_validation import train_test_split
-from polars_features.forecasting import auto_linear_model, linear_model, naive, snaive
-from polars_features.metrics import smape
-from polars_features.preprocessing import scale
-from polars_features.seasonality import add_fourier_terms
+from panelary.cross_validation import train_test_split
+from panelary.forecasting import auto_linear_model, linear_model, naive, snaive
+from panelary.metrics import smape
+from panelary.preprocessing import scale
+from panelary.seasonality import add_fourier_terms
 
 start_time = default_timer()
 

@@ -1,4 +1,4 @@
-"""Tests for leak-safe feature selection in :mod:`polars_features.select`."""
+"""Tests for leak-safe feature selection in :mod:`panelary.select`."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ import polars as pl
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 
-from polars_features.core import PanelFrame
-from polars_features.core.model_selection import PurgedKFold
-from polars_features.select import MRMRSelector, mda, mdi, mrmr
+from panelary.core import PanelFrame
+from panelary.core.model_selection import PurgedKFold
+from panelary.select import MRMRSelector, mda, mdi, mrmr
 
 
 def _synthetic_panel(

@@ -1,4 +1,4 @@
-"""Tests for ``polars_features.validation._forecast_tests``.
+"""Tests for ``panelary.validation._forecast_tests``.
 
 Diebold-Mariano (HAC + Harvey-Leybourne-Newbold), Hansen's SPA, the Model
 Confidence Set, and the proper scoring rules. The distribution helpers are
@@ -14,7 +14,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.validation import (
+from panelary.validation import (
     crps_ensemble,
     crps_from_quantiles,
     crps_gaussian,
@@ -29,7 +29,7 @@ from polars_features.validation import (
     score_quantile_forecasts,
     superior_predictive_ability,
 )
-from polars_features.validation._forecast_tests import _betainc, _t_sf
+from panelary.validation._forecast_tests import _betainc, _t_sf
 
 
 # --------------------------------------------------------------------------- #
@@ -336,7 +336,7 @@ def test_pinball_expr_matches_the_numpy_implementation():
 
 def test_crps_from_quantiles_approximates_the_gaussian_crps():
     levels = np.linspace(0.01, 0.99, 99)
-    from polars_features.core.model_selection import _norm_ppf
+    from panelary.core.model_selection import _norm_ppf
 
     q = np.array([[_norm_ppf(t) for t in levels]])
     got = crps_from_quantiles(np.array([0.0]), q, levels)[0]

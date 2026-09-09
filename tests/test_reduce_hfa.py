@@ -25,10 +25,10 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.reduce import HFAFactors, hfa_cumulant_matrix, hfa_factors
-from polars_features.reduce._common import prepare_matrix
-from polars_features.reduce._estimators import pca_factors
-from polars_features.reduce._hfa import HARD_ROW_CAP
+from panelary.reduce import HFAFactors, hfa_cumulant_matrix, hfa_factors
+from panelary.reduce._common import prepare_matrix
+from panelary.reduce._estimators import pca_factors
+from panelary.reduce._hfa import HARD_ROW_CAP
 
 
 # --------------------------------------------------------------------------- #
@@ -178,7 +178,7 @@ def test_blocked_path_gives_the_same_factors():
 # (d) the memory guard
 # --------------------------------------------------------------------------- #
 def test_hard_row_cap_raises_an_actionable_error_without_block_rows():
-    from polars_features.reduce._hfa import _resolve_block_rows
+    from panelary.reduce._hfa import _resolve_block_rows
 
     with pytest.raises(ValueError) as exc:
         _resolve_block_rows(HARD_ROW_CAP + 1, None)
@@ -189,13 +189,13 @@ def test_hard_row_cap_raises_an_actionable_error_without_block_rows():
 
 
 def test_explicit_block_rows_bypasses_the_hard_cap():
-    from polars_features.reduce._hfa import _resolve_block_rows
+    from panelary.reduce._hfa import _resolve_block_rows
 
     assert _resolve_block_rows(HARD_ROW_CAP + 1, 1024) == 1024
 
 
 def test_auto_blocking_between_the_limits():
-    from polars_features.reduce._hfa import DENSE_ROW_LIMIT, _resolve_block_rows
+    from panelary.reduce._hfa import DENSE_ROW_LIMIT, _resolve_block_rows
 
     assert _resolve_block_rows(DENSE_ROW_LIMIT, None) == DENSE_ROW_LIMIT
     auto = _resolve_block_rows(20_000, None)

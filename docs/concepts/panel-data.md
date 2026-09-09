@@ -1,13 +1,13 @@
 # Panel data
 
-**PanelKit** is built for one shape of data: a **panel** — many *entities* observed
+**Panelary** is built for one shape of data: a **panel** — many *entities* observed
 over *time*. A ticker's price every day, a customer's spend every month, a country's
 GDP every quarter. Every feature, transformer, and cross-validator in the library
 assumes this shape and protects its two axes from leaking into each other.
 
 !!! info "Naming"
-    The project/brand is **PanelKit**; the current import/PyPI package is
-    `polars_features`. Import it as `import polars_features as pk`.
+    The project/brand is **Panelary**; the current import/PyPI package is
+    `panelary`. Import it as `import panelary as pk`.
 
 ## Long format: `(entity, time, *features)`
 
@@ -87,7 +87,7 @@ A **panel has both at once**, and that is exactly where leakage hides:
   over the whole column it mixes dates. Cross-sectional operations must be scoped
   `.over(time)`.
 
-PanelKit makes these scopes first-class so you cannot forget them (the frame-level
+Panelary makes these scopes first-class so you cannot forget them (the frame-level
 namespaces even *require* an `over=` key).
 
 ## Gaps and the `(entity, time)` grid
@@ -96,11 +96,11 @@ Real panels are rarely a full rectangle: entities enter and leave, dates are mis
 holidays punch holes. That is fine — the panel stays long and simply has fewer rows
 for some entities. What matters is:
 
-- **Uniqueness.** Each `(entity, time)` pair should appear at most once. PanelKit can
+- **Uniqueness.** Each `(entity, time)` pair should appear at most once. Panelary can
   check this for you (it materialises, so it is opt-in):
 
   ```python
-  import polars_features as pk
+  import panelary as pk
   pk.PanelFrame(df, entity="ticker", time="date").assert_unique_keys()
   ```
 
@@ -115,7 +115,7 @@ fractional differencing — is only correct if each entity's rows are in ascendi
 order. Sort **by `(entity, time)`** once, near the top of a pipeline:
 
 ```python
-import polars_features as pk
+import panelary as pk
 
 panel = pk.PanelFrame(df, entity="ticker", time="date").sort_panel()
 print(panel.is_sorted_per_entity())  # True
@@ -127,7 +127,7 @@ on within-entity ordering (they group by date), but sorting first never hurts.
 
 ## The two axes of operations
 
-Every panel feature falls on one of two axes. PanelKit gives each its own namespace so
+Every panel feature falls on one of two axes. Panelary gives each its own namespace so
 your intent — and the leak-safety scope — is explicit in the call.
 
 ### Per-entity — `.panel` (over each entity's own history)
@@ -136,7 +136,7 @@ Time-series transforms that walk *forward through one entity's history*, using o
 the past. Scope them with `.over(entity)`.
 
 ```python
-import polars_features  # registers the namespaces (side effect)
+import panelary  # registers the namespaces (side effect)
 
 # Causal rolling z-score of each ticker's returns, per entity.
 out = df.with_columns(
@@ -205,7 +205,7 @@ id column and **`time`** for the ordering column. You supply them once and every
 downstream trusts them.
 
 ```python
-import polars_features as pk
+import panelary as pk
 
 # On the PanelFrame view:
 panel = pk.PanelFrame(df, entity="ticker", time="date")

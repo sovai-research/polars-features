@@ -22,10 +22,10 @@ import numpy as np
 import polars as pl
 import pytest
 
-import polars_features.catch22 as c22
-from polars_features import feature_extractors as fe
-from polars_features._numpy_stats import chebyshev_neighbour_counts
-from polars_features.cluster._kshape import KShapeCore, _distance_matrix, ncc
+import panelary.catch22 as c22
+from panelary import feature_extractors as fe
+from panelary._numpy_stats import chebyshev_neighbour_counts
+from panelary.cluster._kshape import KShapeCore, _distance_matrix, ncc
 
 GOLDEN_PATH = pathlib.Path(__file__).parent / "data" / "perf_parity_golden.json"
 
@@ -293,7 +293,7 @@ def test_cross_sectional_pca_matches_golden(standardize, sign_fix, golden):
     computation -- 1e-11 is the documented ceiling.
     """
     pytest.importorskip("sklearn")
-    from polars_features.reduce.xs import CrossSectionalPCA
+    from panelary.reduce.xs import CrossSectionalPCA
 
     frame = _xs_fixture()
     reducer = CrossSectionalPCA(

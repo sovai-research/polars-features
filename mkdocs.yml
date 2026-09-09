@@ -1,8 +1,8 @@
-site_name: PanelKit
+site_name: Panelary
 site_description: "Leak-safe, fast feature engineering and ML for panel data, built on Polars. Built on the foundations of functime (Apache-2.0, actively maintained)."
-site_url: https://sovai-research.github.io/polars-features/
-repo_url: https://github.com/sovai-research/polars-features
-repo_name: sovai-research/polars-features
+site_url: https://sovai-research.github.io/panelary/
+repo_url: https://github.com/sovai-research/panelary
+repo_name: sovai-research/panelary
 
 theme:
   name: "material"
@@ -76,7 +76,7 @@ nav:
     - Seasonality: user-guide/seasonality.md
     - Feature Extraction (legacy): user-guide/feature-extraction.md
   - Benchmarks:
-    - PanelKit vs pandas: benchmarks/vs_pandas.md
+    - Panelary vs pandas: benchmarks/vs_pandas.md
   - Roadmap: roadmap.md
   - Developer Guides:
     - Custom Forecasters and Transformers: developer-guide/develop.md

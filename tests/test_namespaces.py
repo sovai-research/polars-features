@@ -18,8 +18,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-import polars_features.namespaces  # noqa: F401  (registers the namespaces)
-from polars_features.registry import registry
+import panelary.namespaces  # noqa: F401  (registers the namespaces)
+from panelary.registry import registry
 
 
 # --------------------------------------------------------------------------- #

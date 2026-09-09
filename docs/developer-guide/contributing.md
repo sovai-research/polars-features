@@ -4,26 +4,26 @@ Thanks for taking the time to contribute! We appreciate all contributions, from 
 
 ## Opening an issue
 
-You can report any issue by opening a [new issue](https://github.com/sovai-research/polars-features/issues/new/choose).
+You can report any issue by opening a [new issue](https://github.com/sovai-research/panelary/issues/new/choose).
 
 **Bug reports** should include:
 
-1. Your **OS, the Python version and PanelKit (`polars_features`) version** you are using.
+1. Your **OS, the Python version and Panelary (`panelary`) version** you are using.
 2. A **minimal reproducible example (MRE)**, i.e. the code and some (fake) data that can be used to reproduce the error you encounter. It might take a bit more time on your side, but it greatly helps maintainers to solve your issue quickly.
 
 **Feature requests** should also start from a dedicated issue, even if you plan to contribute to the feature yourself. In this way, maintainers can help you plan the design of the new feature and ease the development.
 
 ## Contributing to the codebase
 
-Contributions should always start from an issue: even if you wish to contribute to PanelKit's features, it is best to open a new issue so that the maintainers can help you through the design process.
+Contributions should always start from an issue: even if you wish to contribute to Panelary's features, it is best to open a new issue so that the maintainers can help you through the design process.
 
 ### Picking an issue
 
-Pick an issue by going through the [issue tracker](https://github.com/sovai-research/polars-features/issues) and finding an issue you would like to work on. To work on an issue, please leave a new message below the discussion to show your interest. We use the [`help wanted`](https://github.com/sovai-research/polars-features/labels/help%20wanted) label to indicate issues that are high on our wishlist. However, if you are a first time contributor, you might want to look for issues labeled [`good first issue`](https://github.com/sovai-research/polars-features/labels/good%20first%20issue).
+Pick an issue by going through the [issue tracker](https://github.com/sovai-research/panelary/issues) and finding an issue you would like to work on. To work on an issue, please leave a new message below the discussion to show your interest. We use the [`help wanted`](https://github.com/sovai-research/panelary/labels/help%20wanted) label to indicate issues that are high on our wishlist. However, if you are a first time contributor, you might want to look for issues labeled [`good first issue`](https://github.com/sovai-research/panelary/labels/good%20first%20issue).
 
 ### Set up your local environment
 
-PanelKit is **pure Python** as of 0.4.0 -- the Rust extension is gone and the distribution is a
+Panelary is **pure Python** as of 0.4.0 -- the Rust extension is gone and the distribution is a
 single universal `py3-none-any` wheel. There is no Rust toolchain to install and no compiler
 step: a checkout plus a Python 3.10+ interpreter is the whole prerequisite list.
 
@@ -44,11 +44,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh     # macOS / Linux
 
 ```bash
 # via gh CLI
-gh repo fork sovai-research/polars-features --clone
+gh repo fork sovai-research/panelary --clone
 
 # or via ssh
-git clone git@github.com:<your-username>/polars-features.git
-cd polars-features
+git clone git@github.com:<your-username>/panelary.git
+cd panelary
 ```
 
 3. **Create the environment and install the project**. uv will download a managed CPython for
@@ -78,7 +78,7 @@ uv run pytest -q --ignore=tests/test_forecasting.py
 
 **Without uv.** Nothing here requires it; the equivalents are
 `python3 -m venv .venv`, `python3 -m pip install -e ".[dev,recommended]"`,
-`pre-commit install --install-hooks` and `pytest -q`. The [Makefile](https://github.com/sovai-research/polars-features/blob/main/Makefile)
+`pre-commit install --install-hooks` and `pytest -q`. The [Makefile](https://github.com/sovai-research/panelary/blob/main/Makefile)
 detects uv automatically and falls back to pip when it is absent, so
 `make venv && make edit`, `make test`, `make lint` and `make typecheck` work either way.
 
@@ -86,7 +86,7 @@ detects uv automatically and falls back to pip when it is absent, so
 
 Create a new git branch from the `main` branch in your local repository, and start coding!
 
-The Python package lives under `polars_features/` and the suite under `tests/`. To run the
+The Python package lives under `panelary/` and the suite under `tests/`. To run the
 tests:
 
 ```bash
@@ -119,7 +119,7 @@ When you have resolved your issue, [open a pull request](https://docs.github.com
 * Add any relevant information to the description that you think may help the maintainers review your code.
 * Make sure your branch is [rebased](https://docs.github.com/en/get-started/using-git/about-git-rebase) against the latest version of the main branch.
 * Make sure all GitHub Actions checks pass.
-* After you have opened your pull request, a maintainer will review it and possibly leave some comments. Once all issues are resolved, the maintainer will merge your pull request, and your work will be part of the next PanelKit release!
+* After you have opened your pull request, a maintainer will review it and possibly leave some comments. Once all issues are resolved, the maintainer will merge your pull request, and your work will be part of the next Panelary release!
 
 Keep in mind that your work does not have to be perfect right away! If you are stuck or unsure about your solution, feel free to open a draft pull request and ask for help.
 

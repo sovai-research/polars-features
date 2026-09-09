@@ -1,14 +1,14 @@
 # Quickstart
 
-**PanelKit** is leak-safe, fast feature engineering and ML for panel data, built on
+**Panelary** is leak-safe, fast feature engineering and ML for panel data, built on
 [Polars](https://pola.rs/). This is a runnable 5-minute tour: build a panel, engineer
 leak-safe features, extract a feature matrix, label events, impute gaps, and validate a model
 with combinatorial purged cross-validation — proving no lookahead along the way.
 
 !!! info "Naming"
-    The project/brand is **PanelKit**. The current import/PyPI package is `polars_features`
-    — the public rename to `panelkit` is planned but not yet effective. Import it as
-    `import polars_features as pk`.
+    The project/brand is **Panelary**. The current import/PyPI package is `panelary`
+    — the public rename to `panelary` is planned but not yet effective. Import it as
+    `import panelary as pk`.
 
 Every code block below runs against the synthetic panel we build in step 1 — copy them in
 order.
@@ -16,8 +16,8 @@ order.
 ## Install
 
 ```bash
-pip install polars_features        # core
-pip install "polars_features[cafe]" # + CAFE imputation (step 5)
+pip install panelary        # core
+pip install "panelary[cafe]" # + CAFE imputation (step 5)
 ```
 
 See [Installation](./installation.md) for all extras and version notes.
@@ -31,7 +31,7 @@ computes nothing until you `.collect()`.
 ```python
 import numpy as np
 import polars as pl
-import polars_features as pk
+import panelary as pk
 
 rng = np.random.default_rng(0)
 rows = []
@@ -50,7 +50,7 @@ print(panel.collect().shape)       # (120, 4)
 
 ## 2. Engineer leak-safe features (`.panel` / `.xs`)
 
-PanelKit registers two Polars expression namespaces:
+Panelary registers two Polars expression namespaces:
 
 - **`.panel`** — *within-entity, causal* transforms (use `.over(entity)`): `frac_diff`,
   `zscore` (trailing rolling), `rs_vol`.
@@ -156,7 +156,7 @@ print(gappy["close"].null_count(), "->", filled["close"].null_count())   # 18 ->
 !!! note "Function form"
     A pipe-friendly transformer factory is also available:
     `gappy.pipe(pk.cafe_impute(engine="joint")).collect()`. Both share the same leak-safe
-    engine; `CafeImputer` additionally slots into a PanelKit `Pipeline`.
+    engine; `CafeImputer` additionally slots into a Panelary `Pipeline`.
 
 ## 6. Prove no lookahead (`assert_no_lookahead`)
 
@@ -195,7 +195,7 @@ train = panel.with_columns(
     pl.col("close").pct_change().shift(-1).over("ticker").alias("target"),
 ).collect().drop_nulls()
 
-from polars_features.models import PanelSklearnRegressor
+from panelary.models import PanelSklearnRegressor
 
 est = PanelSklearnRegressor(target="target", features=["x1", "x2"])
 
@@ -212,14 +212,14 @@ print(report.summary())
 Prefer a plain purged K-fold? Build the splitter and pass it to `cross_validate`:
 
 ```python
-from polars_features import PurgedKFold
+from panelary import PurgedKFold
 
 cv = PurgedKFold(n_splits=4, embargo=1)
 report = pk.cross_validate(est, train, "target", cv, entity="ticker", time="day")
 print(report.summary())
 ```
 
-Both accept any sklearn-shaped estimator (`fit(X, y)` / `predict(X)`) as well as PanelKit
+Both accept any sklearn-shaped estimator (`fit(X, y)` / `predict(X)`) as well as Panelary
 estimators and `Pipeline`s; the estimator is deep-copied per fold so folds stay independent.
 
 ## Where to next

@@ -34,7 +34,7 @@ repos:
         entry: mypy
         language: system
         types: [python]
-        files: ^polars_features/
+        files: ^panelary/
         pass_filenames: false
   - repo: https://github.com/commitizen-tools/commitizen
     rev: v3.24.0

@@ -1,13 +1,13 @@
 """The top-level public surface must stay complete.
 
-`polars_features.detect` shipped in 0.4.0 with 37 public symbols and a large
+`panelary.detect` shipped in 0.4.0 with 37 public symbols and a large
 test suite, and was unreachable as ``pk.detect`` because nothing added it to
-``polars_features/__init__.py``. Three separate audits found it independently,
+``panelary/__init__.py``. Three separate audits found it independently,
 which is the signature of a gap that review does not catch. These tests make it
 a build failure instead.
 
 The rule enforced here: every public subpackage is reachable as an attribute of
-``polars_features``, and is either exported in ``__all__`` (light modules) or
+``panelary``, and is either exported in ``__all__`` (light modules) or
 declared in ``_LAZY_SUBMODULES`` (modules whose eager import would break the
 light-core guarantee).
 """
@@ -19,7 +19,7 @@ import pathlib
 
 import pytest
 
-import polars_features as pk
+import panelary as pk
 
 _ROOT = pathlib.Path(pk.__file__).parent
 
@@ -63,8 +63,8 @@ def test_subpackage_is_reachable(name: str) -> None:
     # AttributeError), so a lazy module whose extra is missing would raise
     # here rather than return False. Check the declaration first.
     assert name in pk._LAZY_SUBMODULES or hasattr(pk, name), (
-        f"polars_features.{name} is not reachable as pk.{name}. Add it to the "
-        f"eager import block in polars_features/__init__.py, or to "
+        f"panelary.{name} is not reachable as pk.{name}. Add it to the "
+        f"eager import block in panelary/__init__.py, or to "
         f"_LAZY_SUBMODULES if importing it pulls an optional dependency."
     )
 
@@ -74,7 +74,7 @@ def test_subpackage_is_advertised(name: str) -> None:
     """Every public subpackage is in ``__all__`` or declared lazy."""
     lazy = set(pk._LAZY_SUBMODULES)
     assert name in pk.__all__ or name in lazy, (
-        f"polars_features.{name} resolves but is invisible: it is neither in "
+        f"panelary.{name} resolves but is invisible: it is neither in "
         f"__all__ nor in _LAZY_SUBMODULES."
     )
 
@@ -96,7 +96,7 @@ def test_dir_includes_lazy_submodules() -> None:
 def test_detect_is_exported() -> None:
     """Regression: `detect` is 0.4.0's headline feature and was unreachable."""
     assert "detect" in pk.__all__
-    assert pk.detect is importlib.import_module("polars_features.detect")
+    assert pk.detect is importlib.import_module("panelary.detect")
 
 
 def test_backtesting_imports_at_all() -> None:
@@ -104,10 +104,10 @@ def test_backtesting_imports_at_all() -> None:
 
     ``backtesting`` imports ``forecasting._reduction``; ``forecasting/__init__``
     imports ``elite``; ``elite`` imported ``backtesting`` at module scope. The
-    cycle meant ``import polars_features.backtesting`` raised ImportError no
+    cycle meant ``import panelary.backtesting`` raised ImportError no
     matter how it was reached.
     """
-    mod = importlib.import_module("polars_features.backtesting")
+    mod = importlib.import_module("panelary.backtesting")
     assert hasattr(mod, "backtest")
 
 

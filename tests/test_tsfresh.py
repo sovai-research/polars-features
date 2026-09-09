@@ -8,7 +8,7 @@ import pytest
 from polars.testing import assert_frame_equal, assert_series_equal
 
 # percent_recoccuring_values,
-from polars_features.feature_extractors import (
+from panelary.feature_extractors import (
     FeatureExtractor,  # noqa: F401
     absolute_energy,
     absolute_maximum,

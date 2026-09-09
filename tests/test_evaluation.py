@@ -6,16 +6,16 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from polars_features.cross_validation import train_test_split
-from polars_features.evaluation import (
+from panelary.cross_validation import train_test_split
+from panelary.evaluation import (
     acf,
     ljung_box_test,
     rank_fva,
     rank_point_forecasts,
     rank_residuals,
 )
-from polars_features.forecasting import linear_model, snaive
-from polars_features.preprocessing import scale
+from panelary.forecasting import linear_model, snaive
+from panelary.preprocessing import scale
 
 MAX_LAGS = 24
 

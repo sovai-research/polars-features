@@ -1,4 +1,4 @@
-"""Tests for ``polars_features.validation._bootstrap``.
+"""Tests for ``panelary.validation._bootstrap``.
 
 The load-bearing property is the leak-safety guardrail: **a resampled block must
 never straddle a fold boundary**. Everything else (determinism, shape, moment
@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from polars_features.validation import (
+from panelary.validation import (
     block_bootstrap_indices,
     circular_block_bootstrap,
     moving_block_bootstrap,

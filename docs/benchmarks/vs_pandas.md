@@ -1,6 +1,6 @@
-# PanelKit vs pandas — panel feature generation
+# Panelary vs pandas — panel feature generation
 
-Panel feature engineering (many entities × time) is PanelKit's core workload. These are
+Panel feature engineering (many entities × time) is Panelary's core workload. These are
 **measured, reproducible** numbers, not estimates: each computation is run **both** ways and
 the results are asserted equal (within `1e-6`) *before* the timing is reported, so no speedup
 comes from computing something cheaper.

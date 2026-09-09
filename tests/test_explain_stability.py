@@ -6,7 +6,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.explain import (
+from panelary.explain import (
     TreeAttributor,
     attribution_drift,
     attribution_stability,
@@ -23,7 +23,7 @@ class LinearStub:
     def predict(self, X):
         return np.asarray(X, dtype=float) @ self.w
 
-    def panelkit_shap_values(self, X, background):
+    def panelary_shap_values(self, X, background):
         X = np.asarray(X, dtype=float)
         mu = (
             np.zeros_like(self.w)

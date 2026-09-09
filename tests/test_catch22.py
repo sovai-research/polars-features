@@ -1,4 +1,4 @@
-"""Tests for the clean-room catch22 implementation (:mod:`polars_features.catch22`).
+"""Tests for the clean-room catch22 implementation (:mod:`panelary.catch22`).
 
 The reference ``pycatch22`` library is *not* a dependency, so these tests do not
 assert exact numerical parity.  Instead they check, for a handful of
@@ -17,8 +17,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features import catch22 as c22
-from polars_features.catch22 import (
+from panelary import catch22 as c22
+from panelary.catch22 import (
     CATCH22_NAMES,
     CO_trev_1_num,
     DN_HistogramMode_5,

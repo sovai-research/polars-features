@@ -7,7 +7,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.forecasting import (  # ann,
+from panelary.forecasting import (  # ann,
     auto_elastic_net,
     auto_lightgbm,
     censored_model,
@@ -17,9 +17,9 @@ from polars_features.forecasting import (  # ann,
     naive,
     zero_inflated_model,
 )
-from polars_features.metrics import rmsse, smape, smape_original
-from polars_features.preprocessing import detrend, diff, scale
-from polars_features.seasonality import add_fourier_terms
+from panelary.metrics import rmsse, smape, smape_original
+from panelary.preprocessing import detrend, diff, scale
+from panelary.seasonality import add_fourier_terms
 
 DEFAULT_LAGS = 12
 DIRECT_KWARGS = {"max_horizons": 28, "strategy": "direct"}

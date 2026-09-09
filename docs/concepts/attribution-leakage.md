@@ -1,6 +1,6 @@
 # The background-set leak
 
-> PanelKit's [leak-safety](leak-safety.md) page covers the two classic axes:
+> Panelary's [leak-safety](leak-safety.md) page covers the two classic axes:
 > feature leakage (a row seeing its own future) and label leakage (a fitting
 > decision seeing the test fold). Attribution adds a **third, subtler surface**
 > that every SHAP library leaves wide open: the *background set*.
@@ -31,7 +31,7 @@ In a panel, that one line commits at least two errors:
 2. **Look-ahead within the fold.** Even restricted to training rows, pooling the
    whole fold means a row at time `t` is explained against rows from `t' > t`.
    The attribution for January 2007 is computed against a distribution that
-   already knows about the crisis. This is the same look-ahead PanelKit forbids
+   already knows about the crisis. This is the same look-ahead Panelary forbids
    everywhere else in the library, arriving through a side door.
 
 ## The third form: the *implicit* background
@@ -51,19 +51,19 @@ explained. If the model is leak-free, so is this reference; if it is not, the
 explanation inherits the leak and no amount of care at the attribution call site
 will reveal it.
 
-PanelKit will not select this mode silently. It is available, but only with an
+Panelary will not select this mode silently. It is available, but only with an
 explicit acknowledgement:
 
 ```python
 TimeAwareBackground(mode="path_dependent")
-# ValueError: ... PanelKit will not select it silently.
+# ValueError: ... Panelary will not select it silently.
 
 TimeAwareBackground(
     mode="path_dependent", i_accept_path_dependent_background=True
 )  # allowed, and warns
 ```
 
-## How PanelKit closes it
+## How Panelary closes it
 
 [`TimeAwareBackground`](../api-reference/explain.md) makes the
 reference an object with an auditable contract, not an argument you forget:
@@ -99,7 +99,7 @@ These are the contract, and they are the subject of
 
 ## When there is no past
 
-The earliest rows of a panel have no admissible reference. PanelKit does not
+The earliest rows of a panel have no admissible reference. Panelary does not
 quietly widen the window; it emits **null** attributions and warns, or raises if
 you pass `on_empty="error"`. A null is a true statement about what could be
 computed without looking forward. Silently substituting a pooled background is

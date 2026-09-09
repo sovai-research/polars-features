@@ -1,10 +1,10 @@
-# PanelKit
+# Panelary
 
-![PanelKit](./img/banner.png)
+![Panelary](./img/banner.png)
 
 ## Leak-safe, fast feature engineering and ML for panel data
 
-**PanelKit** (import package `polars_features`) is a Polars-native toolkit for **panel data** —
+**Panelary** (import package `panelary`) is a Polars-native toolkit for **panel data** —
 many entities observed over time (stocks, customers, sensors, regions). It treats the
 `(entity, time)` panel as a first-class, lazy, leak-safe object and gives you the whole
 quant-ML workflow — **transform → extract → label → select → model → validate** — with no
@@ -15,11 +15,11 @@ It is built on the foundations of
 interoperates with functime and Nixtla rather than replacing them.
 
 !!! info "Naming"
-    The project/brand is **PanelKit**. The current import/PyPI package is `polars_features`
-    — the public rename to `panelkit` is planned but not yet effective. Import it as
-    `import polars_features as pk`.
+    The project/brand is **Panelary**. The current import/PyPI package is `panelary`
+    — the public rename to `panelary` is planned but not yet effective. Import it as
+    `import panelary as pk`.
 
-## Why PanelKit
+## Why Panelary
 
 - **Leak-safe by construction.** Within-entity ops stay inside their entity and in time
   order (`panel_safe`); cross-sectional and fit-based ops never see the future or the test
@@ -39,7 +39,7 @@ interoperates with functime and Nixtla rather than replacing them.
 
 ```python
 import polars as pl
-import polars_features as pk
+import panelary as pk
 
 # A panel: many entities (tickers) observed over time.
 prices = pl.read_parquet("prices.parquet")   # columns: ticker, day, close, volume
@@ -68,7 +68,7 @@ step runnable.
 
 ## The benchmark headline
 
-Panel feature generation (many entities × time) is PanelKit's core workload. Each computation
+Panel feature generation (many entities × time) is Panelary's core workload. Each computation
 is run **both** ways and the results asserted equal (within `1e-6`) *before* timing, so no
 speedup comes from computing something cheaper.
 
@@ -92,8 +92,8 @@ Full methodology and 0.5M-row numbers in the [benchmarks](./benchmarks/vs_pandas
 ## What's shipped today
 
 The functime-derived engine (100+ `ts` feature extractors, forecasting, preprocessing,
-seasonality, cross-validation, metrics) is available now under the `polars_features` import.
-On top of it, PanelKit adds the leak-safe panel layer:
+seasonality, cross-validation, metrics) is available now under the `panelary` import.
+On top of it, Panelary adds the leak-safe panel layer:
 
 | Area | Status |
 | --- | --- |
@@ -124,6 +124,6 @@ On top of it, PanelKit adds the leak-safe panel layer:
 
 ## License
 
-PanelKit is distributed under the **Apache License 2.0**, retained from functime, which is
+Panelary is distributed under the **Apache License 2.0**, retained from functime, which is
 credited as the upstream this work derives from. CAFE imputation is powered by the optional
 `cafe-impute` dependency (MIT, Sov.ai), installed via the `cafe` extra.

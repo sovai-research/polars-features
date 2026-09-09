@@ -2,7 +2,7 @@
 
 The ``bfill`` and ``interpolate`` imputation methods read *future* rows to fill a
 missing value, so they leak look-ahead information and pass silently through
-cross-validation. They must emit a :class:`~polars_features.preprocessing.LeakageWarning`
+cross-validation. They must emit a :class:`~panelary.preprocessing.LeakageWarning`
 by default, and be silent when the caller explicitly opts in with
 ``allow_leaky=True``. Leak-safe methods must never warn.
 """
@@ -14,7 +14,7 @@ import warnings
 import polars as pl
 import pytest
 
-from polars_features.preprocessing import LeakageWarning, impute
+from panelary.preprocessing import LeakageWarning, impute
 
 
 def _panel_with_gaps() -> pl.LazyFrame:

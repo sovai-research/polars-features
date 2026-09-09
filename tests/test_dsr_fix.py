@@ -22,7 +22,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.core.model_selection import (
+from panelary.core.model_selection import (
     CombinatorialPurgedCV,
     _sharpe,  # internal helper under test
     cross_validate,
@@ -30,7 +30,7 @@ from polars_features.core.model_selection import (
     probability_of_backtest_overfitting,
     validate,
 )
-from polars_features.core.panel_frame import PanelFrame
+from panelary.core.panel_frame import PanelFrame
 
 ENTITIES = ["A", "B", "C"]
 
@@ -219,7 +219,7 @@ def test_validate_cpcv_forwards_n_trials():
 
 def test_cross_validate_purged_kfold_unaffected():
     """Non-CPCV splitters ignore n_trials cleanly (no paths, no warning)."""
-    from polars_features.core.model_selection import PurgedKFold
+    from panelary.core.model_selection import PurgedKFold
 
     panel = make_signal_panel(24)
     cv = PurgedKFold(n_splits=4, horizon=1, embargo=1)

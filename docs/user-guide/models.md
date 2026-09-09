@@ -1,6 +1,6 @@
 # Panel ML Models
 
-PanelKit ships a small estimator layer that terminates a modelling pipeline with
+Panelary ships a small estimator layer that terminates a modelling pipeline with
 a **leak-safe, panel-aware** supervised model. Each estimator is a thin wrapper
 around an ordinary scikit-learn-style estimator that:
 
@@ -13,7 +13,7 @@ Because a wrapper fits solely on the `fit` panel, it is both `panel_safe` and
 `leakage_safe`: dropping one at the end of a `Pipeline` keeps the whole chain
 leak-safe under any purged / walk-forward split.
 
-Two families live in `polars_features.models`:
+Two families live in `panelary.models`:
 
 | Class | Backend | Notes |
 | --- | --- | --- |
@@ -64,7 +64,7 @@ The primary path needs nothing beyond scikit-learn. With no `estimator=`, you
 get a `HistGradientBoostingRegressor`.
 
 ```python
-from polars_features.models import PanelSklearnRegressor
+from panelary.models import PanelSklearnRegressor
 
 model = PanelSklearnRegressor(
     target="ret_fwd",
@@ -166,7 +166,7 @@ model = PanelSklearnRegressor(
 `HistGradientBoostingClassifier`.
 
 ```python
-from polars_features.models import PanelSklearnClassifier
+from panelary.models import PanelSklearnClassifier
 
 # Binary label: was the forward return positive?
 train_c = train.with_columns((pl.col("ret_fwd") > 0).cast(pl.Int64).alias("up"))
@@ -199,7 +199,7 @@ hyper-parameters. They subclass the sklearn wrappers, so everything above
 applies unchanged.
 
 ```python
-from polars_features.models import PanelLGBMRegressor
+from panelary.models import PanelLGBMRegressor
 
 gbm = PanelLGBMRegressor(
     target="ret_fwd",

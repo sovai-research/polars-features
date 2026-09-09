@@ -2,7 +2,7 @@
 
 The plan's criterion for workstream 2 is: *"a leakage test proves each is
 invariant to future rows"*. That is exactly what this file does, mechanically,
-for every generator in :mod:`polars_features.econ.features`.
+for every generator in :mod:`panelary.econ.features`.
 
 The protocol
 ------------
@@ -23,8 +23,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.core import PanelFrame
-from polars_features.econ.features import (
+from panelary.core import PanelFrame
+from panelary.econ.features import (
     AutoFracDiff,
     CausalSeasonalDecomposer,
     HARModel,

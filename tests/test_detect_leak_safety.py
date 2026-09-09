@@ -1,4 +1,4 @@
-"""The leak-safety acceptance suite for :mod:`polars_features.detect`.
+"""The leak-safety acceptance suite for :mod:`panelary.detect`.
 
 Five generic invariants, applied mechanically to **every** public entry point,
 plus the two API-shape guards. These are the point of the module: a bubble
@@ -370,7 +370,7 @@ def test_no_public_name_advertises_an_episode_or_a_duration() -> None:
         offenders += [(n, frag) for n in names if (frag := _forbidden(n))]
 
     assert not offenders, (
-        "polars_features.detect exposes "
+        "panelary.detect exposes "
         + ", ".join(f"{n!r} (matched {f!r})" for n, f in offenders)
         + ". An episode end, duration or membership flag back-dates the "
         "episode's termination -- information from after t -- into row t."
@@ -432,8 +432,8 @@ def test_no_per_row_feature_is_constant_across_the_whole_series() -> None:
 def test_transformer_output_schemas_contain_no_forward_looking_columns() -> None:
     """Fit every zero-argument transformer and scan the columns it produces."""
     S.require("detect")
-    from polars_features.core import PanelFrame
-    from polars_features.core.protocol import PanelTransformer
+    from panelary.core import PanelFrame
+    from panelary.core.protocol import PanelTransformer
 
     pkg = S.detect_pkg
     classes = [
@@ -444,7 +444,7 @@ def test_transformer_output_schemas_contain_no_forward_looking_columns() -> None
         and obj is not PanelTransformer
     ]
     if not classes:
-        pytest.skip("polars_features.detect exports no PanelTransformer subclasses yet")
+        pytest.skip("panelary.detect exports no PanelTransformer subclasses yet")
 
     n_ent, n_time = 4, 160
     mat = S.panel_matrix(n_entities=n_ent, n_time=n_time, seed=17)
@@ -497,9 +497,9 @@ print(json.dumps(sorted({{n.split(".", 1)[0] for n in sys.modules}})))
 def test_detect_import_is_clean() -> None:
     """Importing ``detect`` -- and every submodule -- stays numpy + polars only."""
     S.require("_moments", "_bsadf", "_critvals", "_monitors", "_panel")
-    mods = [f"polars_features.detect.{m}" for m in S.SUBMODULES]
+    mods = [f"panelary.detect.{m}" for m in S.SUBMODULES]
     if S.detect_pkg is not None:
-        mods.insert(0, "polars_features.detect")
+        mods.insert(0, "panelary.detect")
     proc = subprocess.run(
         [sys.executable, "-c", _HYGIENE_PROBE.format(mods=mods)],
         capture_output=True,

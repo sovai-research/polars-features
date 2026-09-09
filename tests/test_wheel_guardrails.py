@@ -1,6 +1,6 @@
 """Wheel guardrails: universal tag, no compiled artifacts, size budget.
 
-PanelKit 0.4.0 dropped its Rust extension in favour of a pure-Python
+Panelary 0.4.0 dropped its Rust extension in favour of a pure-Python
 distribution, so exactly one wheel (``py3-none-any``) serves every platform and
 Python version.  These tests build the wheel and assert that property, plus a
 size budget, so a stray compiled module or a fat data file cannot silently
@@ -29,8 +29,8 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 #: Maximum built-wheel size.  The 0.4.0 pure-Python wheel measures ~0.29 MB;
 #: 1.5 MB leaves room for genuine growth while catching an accidentally
 #: vendored binary, dataset or notebook.  Override with
-#: ``PANELKIT_WHEEL_BUDGET_MB`` if the budget is deliberately raised.
-WHEEL_BUDGET_MB = float(os.environ.get("PANELKIT_WHEEL_BUDGET_MB", "1.5"))
+#: ``PANELARY_WHEEL_BUDGET_MB`` if the budget is deliberately raised.
+WHEEL_BUDGET_MB = float(os.environ.get("PANELARY_WHEEL_BUDGET_MB", "1.5"))
 
 #: File suffixes that would mean the distribution is no longer universal.
 COMPILED_SUFFIXES = (".so", ".pyd", ".dylib", ".dll", ".a", ".lib", ".rlib")
@@ -86,7 +86,7 @@ def test_wheel_tag_is_universal(built_wheel):
     tag = "-".join(parts[-3:])
     assert tag == "py3-none-any", (
         f"wheel {built_wheel.name} has tag {tag!r}, expected 'py3-none-any'. "
-        "PanelKit is a pure-Python distribution -- a platform tag means a "
+        "Panelary is a pure-Python distribution -- a platform tag means a "
         "compiled extension or a platform-pinned build backend crept back in."
     )
 
@@ -133,9 +133,9 @@ def test_wheel_ships_only_the_package(built_wheel):
     with zipfile.ZipFile(built_wheel) as zf:
         tops = {n.split("/", 1)[0] for n in zf.namelist()}
     unexpected = {
-        t for t in tops if t != "polars_features" and not t.endswith(".dist-info")
+        t for t in tops if t != "panelary" and not t.endswith(".dist-info")
     }
     assert not unexpected, (
         f"wheel ships unexpected top-level entries {sorted(unexpected)}; only "
-        "`polars_features/` and the `.dist-info` directory belong in it."
+        "`panelary/` and the `.dist-info` directory belong in it."
     )

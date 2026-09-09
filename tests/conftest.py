@@ -9,8 +9,8 @@ import pandas as pd
 import polars as pl
 import pytest
 
-from polars_features.cross_validation import train_test_split
-from polars_features.offsets import freq_to_sp
+from panelary.cross_validation import train_test_split
+from panelary.offsets import freq_to_sp
 
 
 @pytest.fixture(params=[50], ids=lambda x: f"n_periods({x})")

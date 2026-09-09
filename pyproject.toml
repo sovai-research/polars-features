@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "polars_features"
+name = "panelary"
 version = "0.4.0"
 description = "Leak-safe, fast feature engineering and ML for panel data, Polars-native and pure-Python."
 requires-python = ">=3.10"
@@ -37,8 +37,8 @@ classifiers = [
 # Light core: the mandatory footprint is numpy + polars only. Everything heavier
 # (scikit-learn, scipy, flaml, holidays, tqdm, boosters, plotting, LLM, ...) is an
 # optional extra below, imported lazily at first use via
-# `polars_features._deps.require`, which raises an actionable
-# `pip install 'polars-features[<extra>]'` hint when it is missing. The
+# `panelary._deps.require`, which raises an actionable
+# `pip install 'panelary[<extra>]'` hint when it is missing. The
 # `recommended` extra restores the old batteries-included experience.
 dependencies = [
   "numpy",
@@ -46,16 +46,16 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/sovai-research/polars-features"
-Repository = "https://github.com/sovai-research/polars-features"
+Homepage = "https://github.com/sovai-research/panelary"
+Repository = "https://github.com/sovai-research/panelary"
 # The real docs site (mkdocs `site_url`), not the repo root.
-Documentation = "https://sovai-research.github.io/polars-features/"
-Changelog = "https://github.com/sovai-research/polars-features/blob/main/CHANGELOG.md"
-Issues = "https://github.com/sovai-research/polars-features/issues"
+Documentation = "https://sovai-research.github.io/panelary/"
+Changelog = "https://github.com/sovai-research/panelary/blob/main/CHANGELOG.md"
+Issues = "https://github.com/sovai-research/panelary/issues"
 
 [project.optional-dependencies]
-# Extra names below intentionally mirror `polars_features._deps._MODULE_TO_EXTRA`
-# so the `require(...)` install hints ("pip install 'polars-features[<extra>]'")
+# Extra names below intentionally mirror `panelary._deps._MODULE_TO_EXTRA`
+# so the `require(...)` install hints ("pip install 'panelary[<extra>]'")
 # always resolve to a real extra.
 
 # --- classical ML: sklearn-backed estimators, selection, reduction, clustering.
@@ -85,14 +85,14 @@ llm = ["openai", "anthropic", "tiktoken", "tenacity"]
 # GPU acceleration. Polars exposes its GPU engine via the collect engine
 # (`.collect(engine="gpu")`), which pulls in the cudf-polars backend.
 gpu = ["cudf-polars-cu12"]
-# Plotting utilities (see polars_features/plotting.py -> plotly).
+# Plotting utilities (see panelary/plotting.py -> plotly).
 viz = ["plotly"]
 # CAFE imputation backend (cafe_impute / CafeImputer). MIT, Sov.ai.
 cafe = ["cafe-impute>=0.1"]
 # Non-linear dimensionality reduction (reduce.PanelUMAP). PCA/SVD/FA/NMF use the
 # `ml` extra's scikit-learn; only UMAP needs this extra.
 dimreduce = ["umap-learn>=0.5"]
-# --- feature attribution (polars_features.explain). The v1 TreeAttributor path
+# --- feature attribution (panelary.explain). The v1 TreeAttributor path
 # uses the boosters' own native exact TreeSHAP and needs nothing here; `shap`
 # provides the sklearn/interventional fallback and `shapiq` the any-order
 # Shapley interaction indices. ---
@@ -100,11 +100,11 @@ explain = ["shap>=0.44", "shapiq>=1.0"]
 # Batteries-included bundle: the common heavy deps that reproduce the old
 # effective feature set (minus GPU / niche back-ends). Restores the pre-slim
 # experience for users who want `pip install` to "just work".
-recommended = ["polars_features[ml,scipy,seasonality,cafe]"]
+recommended = ["panelary[ml,scipy,seasonality,cafe]"]
 # The kitchen sink: every real optional feature set (self-referential extras
 # require pip>=21.2). Excludes the reserved/unused `signatures` extra.
 all = [
-  "polars_features[ml,scipy,progress,seasonality,forecasting,automl,lightgbm,catboost,xgboost,ann,fast,llm,gpu,viz,cafe,dimreduce,explain]",
+  "panelary[ml,scipy,progress,seasonality,forecasting,automl,lightgbm,catboost,xgboost,ann,fast,llm,gpu,viz,cafe,dimreduce,explain]",
 ]
 # Documentation toolchain (mkdocs-material site under docs/, config in
 # mkdocs.yml). Kept out of `dev` so test/lint CI stays lean; the docs workflow
@@ -138,10 +138,10 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 # Pure-Python distribution: one universal py3-none-any wheel, no compiler needed.
-packages = ["polars_features"]
+packages = ["panelary"]
 
 [tool.hatch.build.targets.sdist]
-include = ["polars_features", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md"]
+include = ["panelary", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md"]
 
 [tool.ruff]
 line-length = 88
@@ -170,7 +170,7 @@ ignore = [
 "tests/**" = ["B", "F401", "F811", "E402"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["polars_features"]
+known-first-party = ["panelary"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -185,13 +185,13 @@ markers = [
 # `ty` (astral) is the preferred type checker going forward, but mypy config is
 # kept as the portable fallback that runs everywhere today.
 python_version = "3.10"
-files = ["polars_features"]
+files = ["panelary"]
 warn_unused_ignores = true
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = [
-  "polars_features._plotting",
+  "panelary._plotting",
 ]
 ignore_missing_imports = true
 

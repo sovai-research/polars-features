@@ -416,7 +416,7 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,pycharm,macos,windows,python,rust,linux,asdf
 
-# uv: PanelKit/Panelary is a *library*, so dependency resolution is
+# uv: Panelary/Panelary is a *library*, so dependency resolution is
 # deliberately unpinned -- pyproject.toml is the contract, and a lockfile would
 # not be read from an installed package anyway. CI installs unlocked on purpose
 # (the extras matrix exists to prove unpinned resolution still works), so the

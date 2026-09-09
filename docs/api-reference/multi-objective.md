@@ -1,1 +1,1 @@
-::: polars_features.metrics.multi_objective
+::: panelary.metrics.multi_objective

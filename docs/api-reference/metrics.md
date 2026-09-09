@@ -1,2 +1,2 @@
-::: polars_features.metrics.point
-<!-- ::: polars_features.metrics.probabilistic -->
+::: panelary.metrics.point
+<!-- ::: panelary.metrics.probabilistic -->

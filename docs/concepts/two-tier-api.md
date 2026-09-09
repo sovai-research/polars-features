@@ -1,24 +1,24 @@
 # The two-tier API
 
-PanelKit exposes the same leak-safe machinery at two levels of abstraction. You can
+Panelary exposes the same leak-safe machinery at two levels of abstraction. You can
 stay in plain Polars and reach for the panel operators as **namespaces on a frame**
 (Tier 1), or you can wrap your data in a **`PanelFrame`** and compose **sklearn-shaped
 estimators and pipelines** (Tier 2). Both tiers share the same expression kernel and
 the same leak-safety guarantees; they interoperate freely.
 
 !!! info "Naming"
-    The project/brand is **PanelKit**; the current import/PyPI package is
-    `polars_features`. Import it as `import polars_features as pk`.
+    The project/brand is **Panelary**; the current import/PyPI package is
+    `panelary`. Import it as `import panelary as pk`.
 
 ## Tier 1 — bare-frame namespaces (`.panel` / `.xs` / `.ts`)
 
-Importing `polars_features` registers custom Polars namespaces (a side effect). After
+Importing `panelary` registers custom Polars namespaces (a side effect). After
 that, panel operators are available directly on any `DataFrame` / `LazyFrame` /
 `Expr` — no wrapper, no fitting, no objects to manage.
 
 ```python
 import polars as pl
-import polars_features as pk  # registers .panel / .xs / .ts namespaces
+import panelary as pk  # registers .panel / .xs / .ts namespaces
 
 df = pl.DataFrame(
     {
@@ -76,7 +76,7 @@ transformers/estimators that **learn parameters on training rows only**, and a
 `Pipeline` that threads them together without leaking.
 
 ```python
-import polars_features as pk
+import panelary as pk
 
 # A typed, lazy view that validates and remembers the (entity, time) keys.
 panel = pk.PanelFrame(df, entity="ticker", time="date").sort_panel()
@@ -166,7 +166,7 @@ Cross-sectional (same-date) z-score of returns, done in each tier:
 
     ```python
     import polars as pl
-    import polars_features as pk
+    import panelary as pk
 
     result = df.xs.zscore("ret", over="date", suffix="_z")
     print(result.sort(["ticker", "date"]))
@@ -189,7 +189,7 @@ Cross-sectional (same-date) z-score of returns, done in each tier:
 === "Tier 2 — estimator + PanelFrame"
 
     ```python
-    import polars_features as pk
+    import panelary as pk
 
     panel = pk.PanelFrame(df, entity="ticker", time="date")
     scaler = pk.transform.CrossSectionalScaler(columns="ret")

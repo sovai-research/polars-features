@@ -18,7 +18,7 @@ returns panel (train-fit loadings; a `scope="global"` variant is gated
 The reducers above project a row onto a lower-dimensional space. The **factor
 extractors** below instead emit new `factor_1 … factor_r` columns from a learned
 loading matrix, and share one `fit`/`transform` contract plus one factor-count
-selector. They are the input-side half of PanelKit's *interactions* theme:
+selector. They are the input-side half of Panelary's *interactions* theme:
 higher-order structure in the **data** (`order=k`) alongside higher-order
 structure in the **model** (`max_order=k`).
 
@@ -41,6 +41,6 @@ covariance-based methods, the eigenvalue ratio of the cumulant spectrum for HFA.
 See the [Latent Factors guide](../user-guide/factors.md) for the full narrative.
 
 HFA, PCA, robust PCA and the selectors are pure NumPy; `ICAFactors` lazily
-requires `scikit-learn` (`pip install 'polars-features[ml]'`).
+requires `scikit-learn` (`pip install 'panelary[ml]'`).
 
-::: polars_features.reduce
+::: panelary.reduce

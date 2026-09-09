@@ -1,7 +1,7 @@
 """Property-based and golden tests for PanelFrame invariants.
 
 These exercise the *correctness-by-construction* core in
-``polars_features.core.panel_frame`` only. They require no compiled Rust
+``panelary.core.panel_frame`` only. They require no compiled Rust
 extension (pure-Python Phase-1 core).
 """
 
@@ -12,7 +12,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from polars_features.core.panel_frame import PanelFrame, as_panel
+from panelary.core.panel_frame import PanelFrame, as_panel
 
 # --------------------------------------------------------------------------- #
 # Hypothesis strategies for small synthetic panels

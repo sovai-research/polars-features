@@ -5,7 +5,7 @@
     better than PCA, which can only decorrelate;
 (b) the estimator honours the shared API (shapes, names, `keep=`, determinism);
 (c) ``scikit-learn`` is imported **lazily** -- importing
-    :mod:`polars_features.reduce` must not pull it in.
+    :mod:`panelary.reduce` must not pull it in.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.reduce import ICAFactors, ica_factors
-from polars_features.reduce._estimators import pca_factors
+from panelary.reduce import ICAFactors, ica_factors
+from panelary.reduce._estimators import pca_factors
 
 pytest.importorskip("sklearn", reason="ICA needs the optional 'ml' extra")
 
@@ -125,7 +125,7 @@ def test_functional_core_validates_r():
 def test_importing_reduce_does_not_import_sklearn():
     code = (
         "import sys; "
-        "import polars_features.reduce as r; "
+        "import panelary.reduce as r; "
         "assert 'sklearn' not in sys.modules, 'sklearn was imported eagerly'; "
         "assert 'scipy' not in sys.modules, 'scipy was imported eagerly'; "
         "assert hasattr(r, 'ICAFactors')"

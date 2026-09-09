@@ -1,7 +1,7 @@
 # Interactions: higher-order structure, end to end
 
 > **Ordinary tools stop at first-order, additive structure.** PCA finds covariance
-> factors; SHAP gives additive attributions. PanelKit's throughline is what lies
+> factors; SHAP gives additive attributions. Panelary's throughline is what lies
 > *above* first order: the **interacting latent factors** hiding in your data, and
 > the **interacting features** driving your model — the same mathematical idea,
 > applied on the input side and the output side, both leak-safe on panels.
@@ -9,9 +9,9 @@
 This page is the connective tissue between two subpackages that look unrelated
 until you see the shared spine:
 
-- [`polars_features.reduce`](../api-reference/reduce.md) — higher-order **cumulant**
+- [`panelary.reduce`](../api-reference/reduce.md) — higher-order **cumulant**
   factor analysis (HFA) on the *distribution of your inputs*.
-- [`polars_features.explain`](../api-reference/explain.md) — Shapley **interaction**
+- [`panelary.explain`](../api-reference/explain.md) — Shapley **interaction**
   indices on the *function your model learned*.
 
 ## The `order` vocabulary
@@ -72,7 +72,7 @@ Because it reads third- (or fourth-) order structure, it recovers factors that a
 selects the cumulant order.
 
 ```python
-from polars_features.reduce import HFAFactors
+from panelary.reduce import HFAFactors
 
 hfa = HFAFactors(n_factors=3, order=3)
 factors_train = hfa.fit_transform(train)   # loadings learned on train only
@@ -96,7 +96,7 @@ belong to *sets* of features. The `max_order=k` kwarg selects how far up the
 expansion you go.
 
 ```python
-from polars_features.explain import TreeAttributor
+from panelary.explain import TreeAttributor
 
 attr = TreeAttributor(model=fitted_model, max_order=2)   # main effects + pairs
 attr.fit(train)

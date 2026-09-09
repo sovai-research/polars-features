@@ -14,7 +14,7 @@
 
 ## 1. Objective
 
-Add a first-class **factor-extraction** capability to `polars-features` (PanelKit): a small, cohesive family of leak-safe latent-factor estimators that *emit new factor columns* (`F = X · U`), sharing one `Fit/Transform` contract and one factor-count selector.
+Add a first-class **factor-extraction** capability to `panelary` (Panelary): a small, cohesive family of leak-safe latent-factor estimators that *emit new factor columns* (`F = X · U`), sharing one `Fit/Transform` contract and one factor-count selector.
 
 The centrepiece is **HFA — Higher-order multi-cumulant Factor Analysis** (Huang, Lu et al., *JBES*), which does eigenanalysis on a higher-order **cumulant** matrix instead of PCA on the covariance matrix. It recovers **weak / non-Gaussian factors** where ordinary PCA fails. No implementation of HFA exists in Python or Rust today (only the authors' R package `hofa`), so this is a genuine differentiator.
 
@@ -34,7 +34,7 @@ HFA ships alongside three siblings so the module reads as a designed system, not
 ## 2. Design principles (inherit the existing moat)
 
 1. **Leak-safety is the contract.** Every estimator subclasses
-   [`PanelTransformer`](../polars_features/core/protocol.py): `_fit` learns
+   [`PanelTransformer`](../panelary/core/protocol.py): `_fit` learns
    parameters on the training panel **only** (standardization stats + loadings);
    `_transform` applies them. `transformer.fit(train).transform(test)` must never
    let test-fold statistics leak in. Declare `panel_safe` / `leakage_safe`
@@ -58,10 +58,10 @@ HFA ships alongside three siblings so the module reads as a designed system, not
 
 ## 3. Module layout
 
-New subpackage `polars_features/reduce/`, structured exactly like `select/`:
+New subpackage `panelary/reduce/`, structured exactly like `select/`:
 
 ```
-polars_features/reduce/
+panelary/reduce/
     __init__.py          # public API + docstring (mirror select/__init__.py)
     _factors.py          # functional cores: pca_factors, hfa_factors, ica_factors, robust_pca_factors
     _n_factors.py        # factor-count selectors: n_factors(..., method=...)
@@ -75,7 +75,7 @@ subset of existing columns**; factor extractors **emit new columns** (`factor_1
 The name `reduce` matches the SovAI unsupervised port plan ("cluster / reduce /
 PFA / anomaly / pairwise").
 
-Register in top-level `polars_features/__init__.py` the same way `select` is
+Register in top-level `panelary/__init__.py` the same way `select` is
 surfaced, and add to docs nav (see §11).
 
 ---

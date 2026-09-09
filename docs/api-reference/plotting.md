@@ -1,1 +1,1 @@
-::: polars_features.plotting
+::: panelary.plotting

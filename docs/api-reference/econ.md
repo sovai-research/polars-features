@@ -4,7 +4,7 @@ Panel and time-series econometric estimators, written **clean-room from the
 published papers** and depending on nothing beyond `numpy` and `polars` — no
 `scipy`, `statsmodels` or `linearmodels`. The chi-squared, Student-t and F tails
 the tests need are computed from the incomplete gamma / beta expansions in
-`polars_features.econ._common`.
+`panelary.econ._common`.
 
 Every class that learns parameters subclasses `PanelTransformer`, declares
 `panel_safe` / `leakage_safe`, learns everything in `_fit` from the rows it is
@@ -108,7 +108,7 @@ frozen at `fit` time.
 `dml_partial_linear` estimates `theta` in `Y = theta D + g(X) + U` using the
 Neyman-orthogonal residual-on-residual score with **cross-fitting**: the
 nuisance predictions for a row come from a model that never saw it. The folds are
-PanelKit's own purged and embargoed
+Panelary's own purged and embargoed
 [`PurgedKFold`](cross-validation.md), so they are leak-safe temporally as well.
 `post_double_selection` is the Belloni-Chernozhukov-Hansen alternative: LASSO
 `Y` on `X`, LASSO `D` on `X`, then OLS on `D` plus the union of the two selected
@@ -118,4 +118,4 @@ biases the predictions and that bias survives orthogonalisation. Any object with
 `fit` / `predict` (a scikit-learn regressor, say) can be passed instead; import
 it yourself, this module adds no dependency.
 
-::: polars_features.econ
+::: panelary.econ

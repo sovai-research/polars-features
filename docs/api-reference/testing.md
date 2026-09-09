@@ -1,6 +1,6 @@
 # Leak verifiers
 
-Future-perturbation leak verifiers — the keystone of PanelKit's leak-safety
+Future-perturbation leak verifiers — the keystone of Panelary's leak-safety
 guarantee. A transform is *leak-free* if its output at time `t` depends only on
 data at times `<= t` (within each entity). The cleanest, model-agnostic way to
 check that is a future-perturbation experiment: run the operation, corrupt every
@@ -16,4 +16,4 @@ look-ahead.
 Both accept `op` as either a `polars.Expr` or a callable `frame -> frame`, and
 failures name the first offending `(column, entity, time)`.
 
-::: polars_features.testing
+::: panelary.testing

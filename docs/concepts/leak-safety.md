@@ -1,20 +1,20 @@
 # Leak-safety: the conceptual foundation
 
-> **Leak-safety is PanelKit's moat.** Everything else is a convenience; this is the
+> **Leak-safety is Panelary's moat.** Everything else is a convenience; this is the
 > reason the library exists.
 
 A model that scores brilliantly in research and dies in production has almost
-always been *fed the future*. PanelKit is designed so that the future cannot get
+always been *fed the future*. Panelary is designed so that the future cannot get
 in — not by convention or code review, but by the shape of the API and by a
 mechanical verifier you can run on any transform. This page explains what leakage
 is in panel data, the two independent axes it travels along, and exactly how
-PanelKit closes each one.
+Panelary closes each one.
 
 ## What is a panel, and what is leakage?
 
 A **panel** is many entities observed over time: stocks by day, customers by
 month, sensors by minute. Every row is one observation of one **entity** at one
-**time**, and the features live in the remaining columns. PanelKit models this
+**time**, and the features live in the remaining columns. Panelary models this
 directly as a [`PanelFrame`][panelframe] — a lazy view that remembers which
 column is the entity key and which is the time key.
 
@@ -53,12 +53,12 @@ Information from *other entities*, or from the whole sample, contaminates a valu
 
 The two axes are orthogonal. A `shift(1)` is temporally safe but says nothing
 about cross-entity bleed; a per-date rank is cross-sectionally scoped but says
-nothing about the future. PanelKit tracks both with two explicit flags on every
+nothing about the future. Panelary tracks both with two explicit flags on every
 operator.
 
 ## The `panel_safe` / `leakage_safe` contract
 
-Every operator PanelKit ships is registered as a
+Every operator Panelary ships is registered as a
 [`FeatureSpec`][featurespec] in a process-wide registry, and each spec carries two
 booleans that map exactly onto the two axes:
 
@@ -73,8 +73,8 @@ non-permissive license), and — for the temporal axis — independently checkab
 with [`assert_no_lookahead`](#how-assert_no_lookahead-works).
 
 ```python
-import polars_features  # registers the .panel / .xs namespaces + specs
-from polars_features import registry
+import panelary  # registers the .panel / .xs namespaces + specs
+from panelary import registry
 
 for name in ["frac_diff", "zscore", "rank", "demean"]:
     sp = registry.get(name)
@@ -93,7 +93,7 @@ date) but `panel_safe=False` — *by design*. A cross-sectional rank **must** mi
 entities within a date; that is the whole point. The flag is honest about it
 rather than pretending the op is something it isn't.
 
-## How PanelKit prevents each leak by construction
+## How Panelary prevents each leak by construction
 
 ### Mandatory `over` keys close the cross-sectional axis
 
@@ -110,7 +110,7 @@ key**.
 
 ```python
 import polars as pl
-import polars_features  # noqa: F401
+import panelary  # noqa: F401
 
 df = pl.DataFrame({
     "ticker": ["A", "A", "A", "B", "B", "B"],
@@ -153,7 +153,7 @@ uniformly `leakage_safe=True`.
 A label almost always looks *forward* — a triple-barrier or fixed-horizon label
 resolves somewhere in `[t, t1]`. That forward span is itself a leakage vector: if
 a training row's `[t, t1]` overlaps a test row's, the two share outcome
-information across the fold boundary. PanelKit's labelers emit an explicit **`t1`
+information across the fold boundary. Panelary's labelers emit an explicit **`t1`
 column** (the event-end timestamp, in the same dtype as the time axis), and the
 cross-validators consume it to **purge** overlapping training rows and **embargo**
 a buffer after each test block. The mechanics live in the practical guide,
@@ -162,7 +162,7 @@ a buffer after each test block. The mechanics live in the practical guide,
 ## How `assert_no_lookahead` works
 
 Flags and construction arguments are only as trustworthy as your ability to
-*check* them. PanelKit's keystone check is a **future-perturbation experiment** —
+*check* them. Panelary's keystone check is a **future-perturbation experiment** —
 a model-agnostic test that any temporal leak must fail:
 
 1. Run the operation on a panel and record its output.
@@ -179,7 +179,7 @@ shows up far above tolerance. On failure the assertion names the first offending
 
 ```python
 import polars as pl
-from polars_features import PanelFrame, assert_no_lookahead
+from panelary import PanelFrame, assert_no_lookahead
 
 df = pl.DataFrame({
     "ticker": ["A", "A", "A", "B", "B", "B"],
@@ -217,7 +217,7 @@ values, which is precisely why purging exists.
 
 ## The mental model
 
-| Operation kind | Safe scope | PanelKit expression | Flags |
+| Operation kind | Safe scope | Panelary expression | Flags |
 | --- | --- | --- | --- |
 | Within-entity time-series transform | one entity, time-ordered | `df.panel.*(..., over=entity)` | `panel_safe`, `leakage_safe` |
 | Cross-sectional comparison | one timestamp, across entities | `df.xs.*(..., over=time)` | `leakage_safe` (mixes entities by design) |

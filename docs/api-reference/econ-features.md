@@ -1,6 +1,6 @@
 # Econometric feature generators
 
-`polars_features.econ.features` is a self-contained subpackage of **cheap, causal**
+`panelary.econ.features` is a self-contained subpackage of **cheap, causal**
 econometric feature builders. Every generator is either a pure trailing-window
 statistic — row `t` is a function of rows `≤ t` within the same entity — or a
 `PanelTransformer` that learns its parameters on the training rows and applies
@@ -65,4 +65,4 @@ comparison against a critical value is always available.
   sizes. Its shape estimate is bounded above by 1 by construction, so for
   infinite-mean tails read `hill_index` instead.
 
-::: polars_features.econ.features
+::: panelary.econ.features

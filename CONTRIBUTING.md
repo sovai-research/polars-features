@@ -1,16 +1,16 @@
-# Contributing to PanelKit
+# Contributing to Panelary
 
-Thank you for considering contributing to **PanelKit**! We value every contribution — bug
-reports, feature requests, docs, and code. PanelKit is built on the foundations of
+Thank you for considering contributing to **Panelary**! We value every contribution — bug
+reports, feature requests, docs, and code. Panelary is built on the foundations of
 [functime](https://github.com/functime-org/functime) (Apache-2.0, no longer maintained) and
 is licensed under Apache-2.0.
 
-> **Note:** the project/brand is PanelKit; the current import/PyPI package is `polars_features`.
-> The public rename to `panelkit` is deferred — please don't rename packages or public APIs.
+> **Note:** the project/brand is Panelary; the current import/PyPI package is `panelary`.
+> The public rename to `panelary` is deferred — please don't rename packages or public APIs.
 
 ## Where contributions land: Tiers
 
-PanelKit is Rust + Polars under the hood, but **most contributions land in Python** — the Rust
+Panelary is Rust + Polars under the hood, but **most contributions land in Python** — the Rust
 barrier is intentionally low for new contributors.
 
 - **Tier A — Rust kernels.** Performance-critical primitives in `src/`. Higher bar; usually
@@ -25,7 +25,7 @@ If you're new, start with **Tier B or C**. You can do a lot without writing any 
 
 ## The correctness contract: `panel_safe` & `leakage_safe`
 
-PanelKit's whole value proposition is correctness-by-construction. Any operation you add must
+Panelary's whole value proposition is correctness-by-construction. Any operation you add must
 respect two contracts (see [docs/leakage.md](./docs/leakage.md)):
 
 - **`panel_safe`** — within-entity operations stay inside their entity and run in time order

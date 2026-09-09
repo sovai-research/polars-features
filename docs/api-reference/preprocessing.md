@@ -1,1 +1,1 @@
-::: polars_features.preprocessing
+::: panelary.preprocessing

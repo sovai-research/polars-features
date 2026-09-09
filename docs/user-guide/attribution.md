@@ -1,11 +1,11 @@
 # Feature Attribution
 
-`polars_features.explain` answers "why did the model predict *this*, for *this
+`panelary.explain` answers "why did the model predict *this*, for *this
 entity*, on *this date*?" — without letting the future into the answer.
 
-PanelKit reimplements none of the SHAP math. Exact TreeSHAP already ships inside
+Panelary reimplements none of the SHAP math. Exact TreeSHAP already ships inside
 the boosters you train; `shap` ships the reference interventional engine;
-`shapiq` ships any-order interactions. What PanelKit adds is the argument all of
+`shapiq` ships any-order interactions. What Panelary adds is the argument all of
 them leave to you and nobody gets right in a panel: **the background set**. See
 [The background-set leak](../concepts/attribution-leakage.md) for why that is the
 dominant leakage surface in attribution.
@@ -15,7 +15,7 @@ dominant leakage surface in attribution.
     the reference set; `transform(test)` applies it and learns nothing. Calling
     `fit_transform` on the whole panel explains training rows against a
     background drawn from their own past — fine — but explaining a *test* fold
-    means `fit(train).transform(test)`, exactly as with any other PanelKit step.
+    means `fit(train).transform(test)`, exactly as with any other Panelary step.
 
 ## Quick start
 
@@ -23,8 +23,8 @@ dominant leakage surface in attribution.
 import numpy as np
 import polars as pl
 
-from polars_features.explain import TimeAwareBackground, TreeAttributor
-from polars_features.models import PanelLGBMRegressor
+from panelary.explain import TimeAwareBackground, TreeAttributor
+from panelary.models import PanelLGBMRegressor
 
 rng = np.random.default_rng(0)
 n_e, n_t = 8, 60
@@ -94,14 +94,14 @@ Two honest notes:
 
 * **`conditional` and `path_dependent` run the same tree kernel.** For a tree
   ensemble, the standard exact estimator of the conditional expectation *is* the
-  trees' own path-dependent traversal. PanelKit does not pretend otherwise. The
+  trees' own path-dependent traversal. Panelary does not pretend otherwise. The
   difference is governance: `conditional` binds a fold-bound, past-only
   `TimeAwareBackground` and reports `E[f]` over it as an auditable column, while
   `path_dependent` binds nothing and must be acknowledged:
 
     ```python
     TimeAwareBackground(mode="path_dependent")
-    # ValueError: ... PanelKit will not select it silently.
+    # ValueError: ... Panelary will not select it silently.
     ```
 
 * **Interventional evaluates the model off-manifold.** Blending a row's
@@ -111,7 +111,7 @@ Two honest notes:
   the whole dataset is both leaky *and* more off-manifold.
 
     The interventional engine for XGBoost / LightGBM / sklearn is `shap`'s exact
-    C++ kernel (`pip install 'polars-features[explain]'`); CatBoost provides it
+    C++ kernel (`pip install 'panelary[explain]'`); CatBoost provides it
     natively via `reference_data` + `shap_calc_type="Independent"`.
 
 ## Choosing a background policy
@@ -171,10 +171,10 @@ grid is ever built.
 
 An attribution that moves is not automatically a signal. Redrawing the background
 moves attributions too — especially for collinear features, where credit is
-shared almost arbitrarily. PanelKit measures both on the same footing:
+shared almost arbitrarily. Panelary measures both on the same footing:
 
 ```python
-from polars_features.explain import attribution_stability
+from panelary.explain import attribution_stability
 
 attribution_stability(attr, test, seeds=(0, 1, 2, 3, 4, 5), threshold=2.0)
 # feature │ mean_abs_attribution │ reference_sd │ temporal_sd │ drift_ratio │ verdict
@@ -200,10 +200,10 @@ so it does not depend on the units of your target.
 ## Interactions (optional)
 
 `max_order=k` gives any-order Shapley interactions via `shapiq` interop
-(`pip install 'polars-features[explain]'`):
+(`pip install 'panelary[explain]'`):
 
 ```python
-from polars_features.explain import interaction_matrix, interaction_values
+from panelary.explain import interaction_matrix, interaction_values
 
 iv = interaction_values(
     model, test, background=attr.background_, max_order=2, max_rows=200
@@ -217,11 +217,11 @@ engine — `interventional` → `TabularExplainer(imputer="marginal")` against t
 fold-bound reference, `path_dependent` → `TreeExplainer` (TreeSHAP-IQ).
 
 !!! note "The interactions theme"
-    PanelKit uses one word — *interactions* — for higher-order structure on both
+    Panelary uses one word — *interactions* — for higher-order structure on both
     sides of a model, with deliberately distinct keyword names so a call site is
     never ambiguous: **`max_order=k`** on the model side (feature interactions,
     here) and **`order=3|4`** on the data side (higher-order factor analysis in
-    `polars_features.reduce`). Running `interaction_values` on HFA-derived
+    `panelary.reduce`). Running `interaction_values` on HFA-derived
     factors is the flagship combination: "factor 2 × factor 5 synergy drove this
     forecast."
 
@@ -231,19 +231,19 @@ Any object exposing the documented hook is explained directly, with no booster
 involved:
 
 ```python
-def panelkit_shap_values(self, X, background):
+def panelary_shap_values(self, X, background):
     """Return (phi[n_rows, n_features], base[n_rows])."""
 ```
 
 `background` is the reference matrix for that row group (`None` in
-`path_dependent` mode). This is the extension point for a model PanelKit does not
+`path_dependent` mode). This is the extension point for a model Panelary does not
 wrap.
 
 ## Not implemented
 
 Two items from the design are explicitly deferred, not hidden:
 
-* **A native Arrow/Polars TreeSHAP kernel** (a `pyo3-polars` plugin). PanelKit
+* **A native Arrow/Polars TreeSHAP kernel** (a `pyo3-polars` plugin). Panelary
   dropped its Rust extension in 0.4.0 and is a pure-Python distribution; this
   would reintroduce a compiled build. The native library kernels are already
   exact and fast.

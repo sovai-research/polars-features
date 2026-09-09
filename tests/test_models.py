@@ -1,4 +1,4 @@
-"""Tests for concrete panel estimators in :mod:`polars_features.models`."""
+"""Tests for concrete panel estimators in :mod:`panelary.models`."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ import numpy as np
 import polars as pl
 from sklearn.linear_model import LinearRegression
 
-from polars_features.core import PanelFrame, Pipeline
-from polars_features.models import (
+from panelary.core import PanelFrame, Pipeline
+from panelary.models import (
     PanelLGBMRegressor,
     PanelSklearnClassifier,
     PanelSklearnRegressor,
 )
-from polars_features.transform.scaling import TimeSeriesScaler
+from panelary.transform.scaling import TimeSeriesScaler
 
 
 def _synthetic_panel(

@@ -15,10 +15,10 @@ Gaussian variables have **zero cumulants above order two**. So if you swap the
 covariance matrix for a higher-order *cumulant* matrix, everything Gaussian drops
 out of the population object — bulk and mask alike — and what is left is exactly
 the non-Gaussian structure, regardless of how small its variance share is. That
-is HFA, and it is why `polars_features.reduce` ships it.
+is HFA, and it is why `panelary.reduce` ships it.
 
 !!! info "Part of the interactions theme"
-    HFA is the **input-side** half of PanelKit's interactions theme: higher-order
+    HFA is the **input-side** half of Panelary's interactions theme: higher-order
     structure in the *data* (`order=3|4` here) alongside higher-order structure
     in the *model* (Shapley interactions, `max_order=k`). Same word, same
     meaning, two places it shows up.
@@ -41,7 +41,7 @@ count selector, and one output: new `factor_1 … factor_r` columns.
 ```python
 import numpy as np
 import polars as pl
-from polars_features.reduce import HFAFactors
+from panelary.reduce import HFAFactors
 
 # A weak skewed factor hiding behind a larger Gaussian one.
 rng = np.random.default_rng(0)
@@ -77,7 +77,7 @@ Leave `n_factors=None` and the count is resolved **on the training rows**, so th
 choice of `r` is as leak-safe as the loadings:
 
 ```python
-from polars_features.reduce import n_factors, bai_ng, eigenvalue_ratio
+from panelary.reduce import n_factors, bai_ng, eigenvalue_ratio
 
 n_factors(X)                          # Bai-Ng IC_p2 (the default)
 n_factors(X, method="eigenratio")     # Ahn-Horenstein eigenvalue ratio
@@ -120,7 +120,7 @@ estimated Gaussian part (`gaussian_correction=True`, the default) and measures
 excess kurtosis rather than re-deriving the covariance.
 
 ```python
-from polars_features.reduce import hfa_factors, hfa_cumulant_matrix
+from panelary.reduce import hfa_factors, hfa_cumulant_matrix
 
 F, U, extra = hfa_factors(X, r=2, order=3)   # functional core
 M = hfa_cumulant_matrix(X_centred, order=4)  # the matrix itself
@@ -171,7 +171,7 @@ out to four guarantees:
 They compose:
 
 ```python
-from polars_features.core.pipeline import Pipeline
+from panelary.core.pipeline import Pipeline
 
 pipe = Pipeline([("factors", HFAFactors(3, keep="all"))], entity="id", time="t")
 pipe.fit(train)
@@ -203,8 +203,8 @@ run on a bare `numpy + polars` install. `ICAFactors` (and
 `pca_factors(svd_solver="randomized")`) lazily import `scikit-learn`:
 
 ```bash
-pip install 'polars-features[ml]'
+pip install 'panelary[ml]'
 ```
 
-Importing `polars_features.reduce` never pulls `scikit-learn` or `scipy` into
+Importing `panelary.reduce` never pulls `scikit-learn` or `scipy` into
 `sys.modules`.

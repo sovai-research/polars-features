@@ -11,8 +11,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.core import PanelFrame
-from polars_features.econ.features import (
+from panelary.core import PanelFrame
+from panelary.econ.features import (
     StationarityDifferencer,
     adf,
     dfgls,

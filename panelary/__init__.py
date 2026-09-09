@@ -1,0 +1,297 @@
+"""Panelary: leak-safe, fast feature engineering and ML for panel data, built on Polars.
+
+Panelary turns a long-format ``(entity, time, *features)`` panel into a first-class,
+lazy, leak-safe object. It provides the :class:`PanelFrame` view, a leak-safe
+sklearn-shaped :class:`Pipeline`, the ``.panel`` / ``.xs`` Polars expression and
+frame namespaces, finance-grade cross-validation (:class:`PurgedKFold`,
+:class:`CombinatorialPurgedCV`) and backtest-overfitting metrics
+(:func:`deflated_sharpe_ratio`, :func:`probability_of_backtest_overfitting`).
+
+Panelary is built on the foundations of `functime <https://github.com/functime-org/functime>`_
+(Apache-2.0, actively maintained) and interoperates with functime and Nixtla rather
+than replacing them. The import/PyPI package is currently ``panelary``; the
+public rename to ``panelary`` is planned but not yet effective.
+
+Public symbols are imported lazily and guarded: an optional component that fails to
+import emits a warning but never breaks the rest of the package. Whatever is actually
+available is listed in :data:`__all__`.
+"""
+
+from __future__ import annotations
+
+import importlib as _importlib
+import warnings
+
+__version__ = "0.4.0"
+
+__all__ = ["__version__"]
+
+# from panelary.feature_extractors import FeatureExtractor  # noqa: F401
+
+
+def _warn_unavailable(component: str, exc: Exception) -> None:
+    """Warn that an optional Panelary component could not be imported."""
+    warnings.warn(
+        f"Panelary: optional component {component!r} is unavailable "
+        f"({exc.__class__.__name__}: {exc}). The rest of the package is unaffected.",
+        stacklevel=3,
+    )
+
+
+# --- Panelary core (leak-safe panel ML kernel) ------------------------------
+try:
+    from panelary.core import (
+        CombinatorialPurgedCV,
+        PanelEstimator,
+        PanelFrame,
+        PanelTransformer,
+        Pipeline,
+        PurgedKFold,
+        as_panel,
+        deflated_sharpe_ratio,
+        expanding_window_split,
+        probability_of_backtest_overfitting,
+        sliding_window_split,
+    )
+except ImportError as exc:
+    _warn_unavailable("panelary.core", exc)
+else:
+    __all__ += [
+        "CombinatorialPurgedCV",
+        "PanelEstimator",
+        "PanelFrame",
+        "PanelTransformer",
+        "Pipeline",
+        "PurgedKFold",
+        "as_panel",
+        "deflated_sharpe_ratio",
+        "expanding_window_split",
+        "probability_of_backtest_overfitting",
+        "sliding_window_split",
+    ]
+
+# --- CPCV runner (cross_validate / validate / CVReport) ---------------------
+try:
+    from panelary.core.model_selection import (
+        CVReport,
+        cross_validate,
+        validate,
+    )
+except ImportError as exc:
+    _warn_unavailable("panelary.core.model_selection runner", exc)
+else:
+    __all__ += ["CVReport", "cross_validate", "validate"]
+
+# --- Feature registry + expression namespaces -------------------------------
+# Importing `namespaces` registers the `.panel` / `.xs` Polars expression and
+# frame namespaces as a side effect (idempotent).
+try:
+    from panelary import namespaces as namespaces
+    from panelary.registry import (
+        FeatureRegistry,
+        FeatureSpec,
+        register_feature,
+        registry,
+    )
+except ImportError as exc:
+    _warn_unavailable("panelary.namespaces/registry", exc)
+else:
+    __all__ += [
+        "namespaces",
+        "FeatureRegistry",
+        "FeatureSpec",
+        "register_feature",
+        "registry",
+    ]
+
+# --- Panel-native transforms ------------------------------------------------
+try:
+    from panelary import transform as transform
+except ImportError as exc:
+    _warn_unavailable("panelary.transform", exc)
+else:
+    __all__ += ["transform"]
+
+# --- Feature extraction -----------------------------------------------------
+# Importing `feature_extractors` registers the `ts` Polars namespace as a side
+# effect and exposes the bulk `extract_features` entry point.
+try:
+    from panelary import feature_extractors as feature_extractors
+except ImportError as exc:
+    _warn_unavailable("panelary.feature_extractors", exc)
+else:
+    __all__ += ["feature_extractors"]
+    try:
+        from panelary.feature_extractors import extract_features
+    except ImportError as exc:
+        _warn_unavailable("panelary.feature_extractors.extract_features", exc)
+    else:
+        __all__ += ["extract_features"]
+
+# --- CAFE imputation --------------------------------------------------------
+try:
+    from panelary.preprocessing import cafe_impute
+except ImportError as exc:
+    _warn_unavailable("panelary.preprocessing.cafe_impute", exc)
+else:
+    __all__ += ["cafe_impute"]
+
+try:
+    from panelary.imputation import CafeImputer
+except ImportError as exc:
+    _warn_unavailable("panelary.imputation.CafeImputer", exc)
+else:
+    __all__ += ["CafeImputer"]
+
+# --- Leakage verifier -------------------------------------------------------
+try:
+    from panelary.testing import assert_no_lookahead
+except ImportError as exc:
+    _warn_unavailable("panelary.testing.assert_no_lookahead", exc)
+else:
+    __all__ += ["assert_no_lookahead"]
+
+# --- catch22 feature set (clean-room) ---------------------------------------
+try:
+    from panelary import catch22 as catch22
+except ImportError as exc:
+    _warn_unavailable("panelary.catch22", exc)
+else:
+    __all__ += ["catch22"]
+
+# --- Labeling (triple-barrier) ----------------------------------------------
+try:
+    from panelary import label as label
+    from panelary.label import triple_barrier
+except ImportError as exc:
+    _warn_unavailable("panelary.label", exc)
+else:
+    __all__ += ["label", "triple_barrier"]
+
+# --- Models & feature selection subpackages ---------------------------------
+try:
+    from panelary import models as models
+except ImportError as exc:
+    _warn_unavailable("panelary.models", exc)
+else:
+    __all__ += ["models"]
+
+try:
+    from panelary import select as select
+except ImportError as exc:
+    _warn_unavailable("panelary.select", exc)
+else:
+    __all__ += ["select"]
+
+# --- Cross-sectional / factor evaluation ------------------------------------
+try:
+    from panelary import factor as factor
+except ImportError as exc:
+    _warn_unavailable("panelary.factor", exc)
+else:
+    __all__ += ["factor"]
+
+# --- Dimensionality reduction -----------------------------------------------
+try:
+    from panelary import reduce as reduce
+except ImportError as exc:
+    _warn_unavailable("panelary.reduce", exc)
+else:
+    __all__ += ["reduce"]
+
+# --- Clustering -------------------------------------------------------------
+try:
+    from panelary import cluster as cluster
+except ImportError as exc:
+    _warn_unavailable("panelary.cluster", exc)
+else:
+    __all__ += ["cluster"]
+
+# --- Feature attribution (leak-safe, panel-aware SHAP) ----------------------
+try:
+    from panelary import explain as explain
+except ImportError as exc:
+    _warn_unavailable("panelary.explain", exc)
+else:
+    __all__ += ["explain"]
+
+# --- Honest validation & selection ------------------------------------------
+try:
+    from panelary import validation as validation
+except ImportError as exc:
+    _warn_unavailable("panelary.validation", exc)
+else:
+    __all__ += ["validation"]
+
+# --- Panel & time-series econometrics ---------------------------------------
+try:
+    from panelary import econ as econ
+except ImportError as exc:
+    _warn_unavailable("panelary.econ", exc)
+else:
+    __all__ += ["econ"]
+
+# --- Causal bubble, regime & change-point detection --------------------------
+try:
+    from panelary import detect as detect
+except ImportError as exc:
+    _warn_unavailable("panelary.detect", exc)
+else:
+    __all__ += ["detect"]
+
+# --- Remaining light-core modules -------------------------------------------
+# These cost ~0-10 ms on top of the base import and pull no optional
+# dependency (verified: sklearn/scipy/pandas/plotly stay out of sys.modules),
+# so they are imported eagerly like everything above. `detect` is separate only
+# because it is the largest of them.
+for _name in (
+    "core",
+    "base",
+    "testing",
+    "offsets",
+    "imputation",
+    "preprocessing",
+    "seasonality",
+    "metrics",
+    "conformal",
+    "cross_validation",
+    "evaluation",
+):
+    try:
+        _mod = _importlib.import_module(f"panelary.{_name}")
+    except ImportError as exc:  # pragma: no cover - depends on the install
+        _warn_unavailable(f"panelary.{_name}", exc)
+    else:
+        globals()[_name] = _mod
+        __all__ += [_name]
+del _name
+
+#: Submodules that are reachable as ``pk.<name>`` but are **not** imported
+#: eagerly, because doing so would violate the light-core guarantee. Measured
+#: cost of importing them at ``import panelary`` time:
+#:
+#:   forecasting  828 ms, pulls sklearn + scipy + pandas + lightgbm
+#:   backtesting  imports forecasting._reduction, so it drags in all of the
+#:                above (measured: it took the cold import from 80 ms to 779 ms)
+#:   plotting     143 ms, pulls plotly
+#:   llm          raises outright unless the `llm` extra is installed
+#:
+#: They resolve on first attribute access via the PEP 562 hook below, so
+#: ``pk.forecasting`` works without making every ``import panelary``
+#: pay for it. They are deliberately absent from ``__all__`` so that
+#: ``from panelary import *`` cannot trigger a heavy or failing import.
+_LAZY_SUBMODULES = ("forecasting", "llm", "plotting", "backtesting")
+
+
+def __getattr__(name: str):
+    """Resolve heavy submodules on first access (PEP 562)."""
+    if name in _LAZY_SUBMODULES:
+        _mod = _importlib.import_module(f"panelary.{name}")
+        globals()[name] = _mod  # cache: __getattr__ is not called again
+        return _mod
+    raise AttributeError(f"module 'panelary' has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    """Include the lazy submodules in tab-completion and ``dir()``."""
+    return sorted(set(globals()) | set(_LAZY_SUBMODULES))

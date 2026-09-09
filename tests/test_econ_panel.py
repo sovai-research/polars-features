@@ -11,7 +11,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.econ import (
+from panelary.econ import (
     CrossSectionalAverages,
     PanelSlopeFeatures,
     cce_mg,

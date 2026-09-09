@@ -1,6 +1,6 @@
 """Tests for leak-safe **unsupervised** feature selection.
 
-Covers :mod:`polars_features.select._unsupervised`: PFA, variance and
+Covers :mod:`panelary.select._unsupervised`: PFA, variance and
 correlation selectors, the ``select_top`` helper, projection importance, and the
 ``PanelTransformer`` wrappers (including their leak-safety guarantee).
 """
@@ -10,8 +10,8 @@ from __future__ import annotations
 import numpy as np
 import polars as pl
 
-from polars_features.core import PanelFrame
-from polars_features.select import (
+from panelary.core import PanelFrame
+from panelary.select import (
     CorrelationSelector,
     PFASelector,
     VarianceSelector,

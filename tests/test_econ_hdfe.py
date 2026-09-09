@@ -1,4 +1,4 @@
-"""Tests for high-dimensional fixed effects (``polars_features.econ._hdfe``).
+"""Tests for high-dimensional fixed effects (``panelary.econ._hdfe``).
 
 The acceptance criterion for M4 is exactness: absorbing fixed effects by
 alternating projections must reproduce a **dense dummy-variable OLS** to ~1e-8,
@@ -12,8 +12,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.core.panel_frame import PanelFrame
-from polars_features.econ import (
+from panelary.core.panel_frame import PanelFrame
+from panelary.econ import (
     HDFEResult,
     HDFETransformer,
     chi2_sf,
@@ -22,7 +22,7 @@ from polars_features.econ import (
     newey_west_lrv,
     t_sf,
 )
-from polars_features.econ._common import f_sf, t_cdf
+from panelary.econ._common import f_sf, t_cdf
 
 TOL = 1e-8
 

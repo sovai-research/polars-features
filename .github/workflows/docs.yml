@@ -1,11 +1,11 @@
 name: Docs
 
-# Build and publish the PanelKit documentation site (mkdocs-material; config in
+# Build and publish the Panelary documentation site (mkdocs-material; config in
 # mkdocs.yml, sources in docs/).
 #
 # Before this workflow existed the site was only ever built on a laptop and was
 # never published: there is no gh-pages branch and GitHub Pages was not enabled
-# for the repository, so `site_url` (https://sovai-research.github.io/polars-features/)
+# for the repository, so `site_url` (https://sovai-research.github.io/panelary/)
 # 404'd. Two jobs now cover the two cases:
 #
 #   * `build`  - always runs (PRs included). `mkdocs build --strict` turns every
@@ -69,7 +69,7 @@ jobs:
 
       - name: Create venv & install (docs extra)
         # The docs extra pins the mkdocs stack; the package itself is installed
-        # editable because mkdocstrings resolves `::: polars_features.*`.
+        # editable because mkdocstrings resolves `::: panelary.*`.
         run: |
           uv venv
           uv pip install -e ".[docs]"

@@ -1,4 +1,4 @@
-"""Leakage and correctness regressions for `polars_features.evolve`.
+"""Leakage and correctness regressions for `panelary.evolve`.
 
 These are the tests that would fail under a deliberately leaky implementation,
 per the contract in `AGENTS.md`. Three distinct hazards are covered:
@@ -22,7 +22,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-evolve = pytest.importorskip("polars_features.evolve")
+evolve = pytest.importorskip("panelary.evolve")
 
 
 def _panel(n_entities: int = 20, n_times: int = 60, seed: int = 0) -> pl.DataFrame:
@@ -93,8 +93,8 @@ class TestUnitTyping:
 
     @staticmethod
     def _accepts(name: str) -> bool:
-        from polars_features.evolve._compile import validate
-        from polars_features.evolve._types import Gene, Genome
+        from panelary.evolve._compile import validate
+        from panelary.evolve._types import Gene, Genome
 
         try:
             validate(
@@ -183,7 +183,7 @@ class TestNestedOverHazard:
 
     def test_compiler_stages_partition_switches(self) -> None:
         """The compiler must produce a non-null result for cs_rank(ts_mean(x))."""
-        pytest.importorskip("polars_features.evolve._compile")
+        pytest.importorskip("panelary.evolve._compile")
         df = _panel(8, 30)
         ctx = evolve.EvalContext(
             base_columns=("close", "volume"),
@@ -203,7 +203,7 @@ class TestNestedOverHazard:
 
 def _cs_rank_of_ts_mean(ctx):
     """Build cs_rank(ts_mean(close, 5)) directly, or None if unavailable."""
-    from polars_features.evolve._types import Gene, Genome
+    from panelary.evolve._types import Gene, Genome
 
     if "ts_mean" not in evolve.OPS or "cs_rank" not in evolve.OPS:
         return None

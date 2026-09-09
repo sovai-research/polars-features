@@ -1,10 +1,10 @@
-# `polars_features/detect/` — build contract (as issued to the implementation agents, 2026-09-08)
+# `panelary/detect/` — build contract (as issued to the implementation agents, 2026-09-08)
 
 Pure **numpy + polars**. No scipy, sklearn, statsmodels, numba, Rust. Use
-`polars_features.econ._common` for `ols`, `pinv_sym`, `norm_ppf`, `norm_cdf`,
+`panelary.econ._common` for `ols`, `pinv_sym`, `norm_ppf`, `norm_cdf`,
 `t_sf`, `factorize`, `group_mean`, `winsorize`.
 
-Every public transformer subclasses `polars_features.core.protocol.PanelTransformer`
+Every public transformer subclasses `panelary.core.protocol.PanelTransformer`
 and MUST set `panel_safe` / `leakage_safe` class attributes.
 
 ## Hard invariants (every function)

@@ -15,9 +15,9 @@ Add two new leak-safe subpackages that ride the existing `PanelTransformer` cont
 - **`clean/`** — panel-aware **deduplication**, **entity resolution**, **canonicalization**, **survivorship**, and **robust outlier cleaning**.
 - **`quality/`** — panel-aware **data validation**: schema/type contracts, **panel invariants** (unique `(entity,time)`, monotone time, no gaps, coverage, min-obs), and **leak-safety invariants**. (Named `quality/`, **not** `validation/` — that name is already the *statistical* honesty layer: CPCV, Deflated Sharpe, bootstrap.)
 
-**The dependency decision (the load-bearing one).** PanelKit's mandatory footprint is exactly `numpy + polars`, the wheel is pure-Python (hatchling), and there is **no Rust extension** today. Therefore **everything here ships pure Polars + numpy, adding zero mandatory dependencies.** The one genuinely worth-it fast kernel (`rapidfuzz`) and the one nice-to-have declarative backend (`dataframely`) are **optional extras**, lazy-imported through the existing `require()` / `_MODULE_TO_EXTRA` machinery, each with a pure-Polars/numpy fallback so the capability is never *gated* on the extra.
+**The dependency decision (the load-bearing one).** Panelary's mandatory footprint is exactly `numpy + polars`, the wheel is pure-Python (hatchling), and there is **no Rust extension** today. Therefore **everything here ships pure Polars + numpy, adding zero mandatory dependencies.** The one genuinely worth-it fast kernel (`rapidfuzz`) and the one nice-to-have declarative backend (`dataframely`) are **optional extras**, lazy-imported through the existing `require()` / `_MODULE_TO_EXTRA` machinery, each with a pure-Polars/numpy fallback so the capability is never *gated* on the extra.
 
-**The moat.** Every dedup engine and validation library surveyed leaves the train/test boundary to the caller, and none is panel-native. PanelKit's differentiator is to make **"dedup and validation happen across the whole panel, and dedup collapses near-duplicate clusters *before* any split"** a first-class, `PanelTransformer`-enforced guarantee — wired into the existing `validation/_cv.py` purged/embargoed splitters. **No competitor does panel-global, split-aware dedup, and none validates ML leak-safety invariants on Polars.** That is unowned territory.
+**The moat.** Every dedup engine and validation library surveyed leaves the train/test boundary to the caller, and none is panel-native. Panelary's differentiator is to make **"dedup and validation happen across the whole panel, and dedup collapses near-duplicate clusters *before* any split"** a first-class, `PanelTransformer`-enforced guarantee — wired into the existing `validation/_cv.py` purged/embargoed splitters. **No competitor does panel-global, split-aware dedup, and none validates ML leak-safety invariants on Polars.** That is unowned territory.
 
 Must-ship: **M1** (pure-Polars `Deduplicator`: exact + MinHash-LSH near-dup, panel-global & split-aware) and **M2** (`quality.PanelValidator`: panel + leak-safety invariants).
 
@@ -83,7 +83,7 @@ From the 5-agent sweep, filtered by the zero-dep constraint (full ranking lives 
 ## 4. Module layout
 
 ```
-polars_features/clean/
+panelary/clean/
   __init__.py        # public: Deduplicator, EntityResolver, Canonicalizer, OutlierCleaner, dedup(), ...
   _dedup.py          # exact + near-dup (MinHash-LSH) row dedup; panel-global, split-aware
   _sketch.py         # MinHash / C-MinHash / OPH / SimHash / b-bit kernels (Polars + numpy)
@@ -95,7 +95,7 @@ polars_features/clean/
   _estimators.py     # PanelTransformer wrappers (fit-on-train, split-aware)
   _common.py
 
-polars_features/quality/            # DATA validation — distinct from statistical validation/
+panelary/quality/            # DATA validation — distinct from statistical validation/
   __init__.py        # public: PanelValidator, validate_panel(), quality_report()
   _panel.py          # panel invariants: unique (entity,time), monotone time, gaps, coverage, min-obs
   _schema.py         # dtype/key/nullability contracts; optional dataframely backend
@@ -149,7 +149,7 @@ schema = ["dataframely"]    # declarative schema backend for quality; pure-Polar
 er     = ["splink"]         # heavy probabilistic linkage (DuckDB/Arrow); deferred/optional
 # semantic = [...]          # M7: embeddings + ANN semantic dedup
 ```
-Map `rapidfuzz→fuzzy`, `dataframely→schema`, `splink→er` in `_MODULE_TO_EXTRA`. Each import routed through `require(...)` so a missing extra yields the actionable `pip install 'polars-features[fuzzy]'` hint — never a hard failure of the pure-Polars path.
+Map `rapidfuzz→fuzzy`, `dataframely→schema`, `splink→er` in `_MODULE_TO_EXTRA`. Each import routed through `require(...)` so a missing extra yields the actionable `pip install 'panelary[fuzzy]'` hint — never a hard failure of the pure-Polars path.
 
 ---
 

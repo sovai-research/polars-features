@@ -14,7 +14,7 @@ import sys
 import polars as pl
 import pytest
 
-from polars_features._deps import have
+from panelary._deps import have
 
 
 def test_importing_seasonality_does_not_import_holidays():
@@ -24,7 +24,7 @@ def test_importing_seasonality_does_not_import_holidays():
     leak.
     """
     code = (
-        "import polars_features.seasonality, sys; "
+        "import panelary.seasonality, sys; "
         "assert 'holidays' not in sys.modules, 'holidays imported eagerly'; "
         "print('ok')"
     )
@@ -38,9 +38,9 @@ def test_importing_seasonality_does_not_import_holidays():
 
 
 def test_importing_package_does_not_import_holidays():
-    """``import polars_features`` (reaches seasonality via preprocessing) stays clean."""
+    """``import panelary`` (reaches seasonality via preprocessing) stays clean."""
     code = (
-        "import polars_features, sys; "
+        "import panelary, sys; "
         "assert 'holidays' not in sys.modules, 'holidays imported eagerly'; "
         "print('ok')"
     )
@@ -55,7 +55,7 @@ def test_importing_package_does_not_import_holidays():
 
 def test_add_fourier_terms_works_without_holidays():
     """The Fourier path is numpy/polars only and must work regardless of holidays."""
-    from polars_features.seasonality import add_fourier_terms
+    from panelary.seasonality import add_fourier_terms
 
     df = pl.DataFrame(
         {
@@ -83,7 +83,7 @@ def test_add_fourier_terms_works_without_holidays():
 @pytest.mark.skipif(not have("holidays"), reason="holidays not installed")
 def test_add_holiday_effects_works_when_holidays_installed():
     """When ``holidays`` is installed the calendar path still works end-to-end."""
-    from polars_features.seasonality import add_holiday_effects
+    from panelary.seasonality import add_holiday_effects
 
     df = pl.DataFrame(
         {
@@ -109,7 +109,7 @@ def test_add_holiday_effects_works_when_holidays_installed():
 
 def test_add_holiday_effects_raises_helpful_error_without_holidays(monkeypatch):
     """When ``holidays`` is absent, using the calendar path raises a guided ImportError."""
-    from polars_features.seasonality import add_holiday_effects
+    from panelary.seasonality import add_holiday_effects
 
     real_import_module = importlib.import_module
 
@@ -119,7 +119,7 @@ def test_add_holiday_effects_raises_helpful_error_without_holidays(monkeypatch):
         return real_import_module(name, *args, **kwargs)
 
     monkeypatch.setattr(
-        "polars_features._deps.importlib.import_module", fake_import_module
+        "panelary._deps.importlib.import_module", fake_import_module
     )
 
     df = pl.DataFrame(
@@ -143,4 +143,4 @@ def test_add_holiday_effects_raises_helpful_error_without_holidays(monkeypatch):
 
     msg = str(excinfo.value)
     assert "holidays" in msg
-    assert "polars-features[seasonality]" in msg
+    assert "panelary[seasonality]" in msg

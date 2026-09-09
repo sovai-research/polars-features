@@ -1,7 +1,7 @@
 # Econometrics: panel estimators that are also feature generators
 
 Most feature libraries stop at what one entity's own history can tell you.
-`polars_features.econ` adds the estimators that only exist because a panel has
+`panelary.econ` adds the estimators that only exist because a panel has
 **two** dimensions — and treats their by-products as first-class features:
 
 - the residual after absorbing firm and date fixed effects,
@@ -11,12 +11,12 @@ Most feature libraries stop at what one entity's own history can tell you.
 - the part of a treatment that the other 400 features cannot explain.
 
 Everything below is pure NumPy plus Polars, written clean-room from the papers,
-and every fitted object obeys PanelKit's leak-safety contract.
+and every fitted object obeys Panelary's leak-safety contract.
 
 ## The 60-second version
 
 ```python
-import polars_features.econ as econ
+import panelary.econ as econ
 
 # 1. Absorb firm and date effects; cluster two ways.
 res = econ.hdfe(
@@ -232,7 +232,7 @@ Two ideas, both necessary:
 2. **Cross-fitting.** The nuisance predictions for a row come from a model that
    never saw that row — otherwise overfitting bias returns through the back door.
 
-PanelKit's contribution is the third idea: those cross-fitting folds are
+Panelary's contribution is the third idea: those cross-fitting folds are
 **purged and embargoed**. A random `KFold` would put tomorrow in the training set
 and today in the test set. With an overlapping-horizon target — an `h`-period
 forward return, a local projection — pass `horizon=h` so overlapping labels are

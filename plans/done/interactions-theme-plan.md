@@ -8,7 +8,7 @@
 
 ## 0. The one-sentence thesis
 
-> Ordinary tools stop at **first-order, additive** structure — PCA finds covariance factors, SHAP gives additive attributions. **PanelKit's throughline is higher-order structure:** discovering **interacting latent factors** in the data (HFA) and attributing **interacting features** in the model (Shapley interactions) — the same mathematical idea, applied on the input side and the output side, both leak-safe on panels.
+> Ordinary tools stop at **first-order, additive** structure — PCA finds covariance factors, SHAP gives additive attributions. **Panelary's throughline is higher-order structure:** discovering **interacting latent factors** in the data (HFA) and attributing **interacting features** in the model (Shapley interactions) — the same mathematical idea, applied on the input side and the output side, both leak-safe on panels.
 
 This document is not a third module. It is the **connective tissue** that makes `reduce/` (HFA) and `explain/` (SHAP-IQ) read as two halves of one deliberate idea rather than two unrelated features. It defines the shared vocabulary, the shared math, the workflows that chain them, and the product narrative.
 
@@ -56,7 +56,7 @@ The two modules become **composable in a `Pipeline`**, and the combinations are 
 4. **Cross-check.** High Shapley-interaction mass among features that also load on the same HFA factor is a consistency signal (the model is using the latent structure the data actually has); divergence is a diagnostic. Ties naturally to the Shapley-Residuals interaction diagnostic already noted in the attribution plan.
 
 ### 2.4 A shared decomposition core (optional, only if it stays clean)
-If, when both modules exist, there is real duplication in the Möbius/cumulant/basis-conversion helpers, factor them into a small internal `polars_features/_decomposition.py` (or extend `reduce/_common.py`). **Guardrail:** only do this if it removes real duplication — do not build an abstraction speculatively. The theme is a *narrative and API* commitment first, a code-sharing commitment only if earned.
+If, when both modules exist, there is real duplication in the Möbius/cumulant/basis-conversion helpers, factor them into a small internal `panelary/_decomposition.py` (or extend `reduce/_common.py`). **Guardrail:** only do this if it removes real duplication — do not build an abstraction speculatively. The theme is a *narrative and API* commitment first, a code-sharing commitment only if earned.
 
 ### 2.5 The v3 convergence point
 The attribution plan's v3 already routes any-order interactions through `shapiq`/TreeSHAP-IQ, and its moonshot is a native **sparse Möbius/Fourier (SPEX)** engine. The factor plan's HFA is higher-order **cumulant** eigenanalysis. Because Möbius, cumulant, and Fourier bases are interconvertible, a **single native Rust decomposition kernel** could eventually serve both — SPEX-style sparse recovery for model interactions and cumulant construction for factor extraction. This is the long-horizon reason to keep the two designs vocabulary- and basis-aware now, so the eventual kernel isn't two disjoint efforts. Explicitly a moonshot; not a near-term commitment.
@@ -67,7 +67,7 @@ The attribution plan's v3 already routes any-order interactions through `shapiq`
 
 One line for the README / docs index:
 
-> **PanelKit takes interactions seriously, end to end** — it finds the interacting latent factors hiding in your panel (HFA, where PCA gives up on weak non-Gaussian signal) and attributes your model's predictions to interacting features and factors (Shapley interactions), all leak-safe across entities and time.
+> **Panelary takes interactions seriously, end to end** — it finds the interacting latent factors hiding in your panel (HFA, where PCA gives up on weak non-Gaussian signal) and attributes your model's predictions to interacting features and factors (Shapley interactions), all leak-safe across entities and time.
 
 Why this is defensible (from the research sweeps): **no library does leak-safe panel attribution**, **no library does higher-order-cumulant factor analysis outside R's `hofa`**, and **nothing connects the two.** The theme is not marketing gloss — it's three independently-verified gaps that happen to share one mathematical spine.
 

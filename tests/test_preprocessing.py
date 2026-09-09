@@ -11,7 +11,7 @@ from scipy import signal
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import PowerTransformer
 
-from polars_features.preprocessing import (
+from panelary.preprocessing import (
     boxcox,
     detrend,
     diff,

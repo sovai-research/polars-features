@@ -1,4 +1,4 @@
-"""Speed benchmark: PanelKit (polars_features) vs pandas on panel feature generation.
+"""Speed benchmark: Panelary (panelary) vs pandas on panel feature generation.
 
 Panel data = many entities observed over time (long format: entity, time, value...).
 We time three representative feature-engineering workloads that every panel
@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 
-import polars_features  # noqa: F401  (registers the .panel/.xs/.ts namespaces)
+import panelary  # noqa: F401  (registers the .panel/.xs/.ts namespaces)
 
 RNG = np.random.default_rng(7)
 
@@ -156,7 +156,7 @@ def run(n_entities: int, n_time: int) -> None:
     plf, pdf = make_panel(n_entities, n_time)
     print(f"\n### Panel: {n_entities:,} entities x {n_time:,} steps = {rows:,} rows")
     print(
-        f"{'workload':<34}{'pandas (s)':>12}{'PanelKit (s)':>14}{'speedup':>10}   check"
+        f"{'workload':<34}{'pandas (s)':>12}{'Panelary (s)':>14}{'speedup':>10}   check"
     )
 
     # W1
@@ -191,7 +191,7 @@ def run(n_entities: int, n_time: int) -> None:
 
 
 if __name__ == "__main__":
-    print("PanelKit vs pandas — panel feature generation")
+    print("Panelary vs pandas — panel feature generation")
     print(f"polars {pl.__version__} | pandas {pd.__version__}")
     run(2_000, 260)  # ~0.5M rows  (2y daily on 2k names)
     run(5_000, 500)  # ~2.5M rows

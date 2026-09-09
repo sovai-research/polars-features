@@ -1,16 +1,16 @@
 # Feature Engineering
 
-**PanelKit** turns a long-format `(entity, time, *values)` panel into wide feature
+**Panelary** turns a long-format `(entity, time, *values)` panel into wide feature
 frames using pure, leak-safe [Polars](https://pola.rs/) expressions. Every feature is
 computed **per entity** (and, where relevant, per date), so no information ever leaks
 across entities or from the future.
 
 !!! info "Naming"
-    The project/brand is **PanelKit**; the current import/PyPI package is
-    `polars_features`. Import it as `import polars_features as pk`.
+    The project/brand is **Panelary**; the current import/PyPI package is
+    `panelary`. Import it as `import panelary as pk`.
 
 There are three families of feature operators, each exposed as a Polars expression
-namespace that is registered the moment you `import polars_features`:
+namespace that is registered the moment you `import panelary`:
 
 | Namespace | Scope | Combine with | Examples |
 | --------- | ----- | ------------ | -------- |
@@ -26,7 +26,7 @@ For batch time-series featurisation there is also a one-call
 
 ## The `.ts` scalar extractors
 
-Importing PanelKit registers a `ts` (time-series) namespace on every Polars expression.
+Importing Panelary registers a `ts` (time-series) namespace on every Polars expression.
 Each extractor consumes one series and reduces it to a scalar (or, for a handful, a
 list/struct). Because they are ordinary Polars expressions, they run eagerly on a
 `Series`, lazily on a `LazyFrame`, and — crucially — **per group** inside a `group_by`.
@@ -34,7 +34,7 @@ list/struct). Because they are ordinary Polars expressions, they run eagerly on 
 ```python
 import numpy as np
 import polars as pl
-import polars_features as pk  # registers the .ts / .panel / .xs namespaces
+import panelary as pk  # registers the .ts / .panel / .xs namespaces
 
 rng = np.random.default_rng(0)
 
@@ -131,12 +131,12 @@ detail = (
 
 ## Discovering features programmatically
 
-PanelKit ships a **feature registry** — the single source of truth for every registered
+Panelary ships a **feature registry** — the single source of truth for every registered
 operator, its namespace, its parameters, and its safety guarantees. Use it instead of
 hard-coding names.
 
 ```python
-from polars_features.registry import registry
+from panelary.registry import registry
 
 # What namespaces exist?
 print(registry.namespaces())
@@ -186,7 +186,7 @@ runs a single `group_by(entity).agg(...)` over the requested value column(s) and
 exactly one row per entity, one column per feature.
 
 ```python
-import polars_features as pk
+import panelary as pk
 
 wide = pk.extract_features(
     panel,
@@ -243,7 +243,7 @@ print(multi.columns)
 
 ## catch22
 
-PanelKit includes a **clean-room, Polars-native** implementation of the *catch22* feature
+Panelary includes a **clean-room, Polars-native** implementation of the *catch22* feature
 set (Lubba et al., 2019) — 22 canonical, low-redundancy time-series features. It is
 written from the published algorithm descriptions and does **not** vendor the
 GPL-licensed `pycatch22` / `hctsa` sources.
@@ -254,7 +254,7 @@ GPL-licensed `pycatch22` / `hctsa` sources.
 leak-safe by construction):
 
 ```python
-from polars_features import catch22
+from panelary import catch22
 
 c22 = catch22.catch22_features(
     panel,
@@ -302,7 +302,7 @@ c22_expr = (
 
 ## Per-entity vs. cross-sectional features
 
-Panel data has two axes, and PanelKit gives each its own namespace so you never
+Panel data has two axes, and Panelary gives each its own namespace so you never
 accidentally mix them.
 
 ### `.panel` — down the time axis (per entity)
@@ -342,14 +342,14 @@ date, which is exactly the cross-sectional comparison you want.
 ## Feature-name provenance and safety
 
 Every registered feature records where it came from and whether it is safe in a leak-free
-panel pipeline. This is how PanelKit proves it is an independent, permissively licensed
+panel pipeline. This is how Panelary proves it is an independent, permissively licensed
 implementation:
 
 ```python
 for spec in registry.by_namespace("ts")[:3]:
     print(spec.name, "|", spec.source, "|", spec.license,
           "| panel_safe:", spec.panel_safe, "| leakage_safe:", spec.leakage_safe)
-# absolute_energy | PanelKit | Apache-2.0 | panel_safe: True | leakage_safe: True
+# absolute_energy | Panelary | Apache-2.0 | panel_safe: True | leakage_safe: True
 # ...
 
 # Provenance / license guard — empty lists mean the catalogue is clean
@@ -373,8 +373,8 @@ catch22, producing one row per entity:
 ```python
 import numpy as np
 import polars as pl
-import polars_features as pk
-from polars_features import catch22
+import panelary as pk
+from panelary import catch22
 
 rng = np.random.default_rng(42)
 n_dates = 40

@@ -1,14 +1,14 @@
 """Dependency-drift guards for the light 0.4.0 core.
 
 Three invariants, all read *dynamically* from the two sources of truth
-(``pyproject.toml`` and :mod:`polars_features._deps`) so the tests keep working
+(``pyproject.toml`` and :mod:`panelary._deps`) so the tests keep working
 while either side legitimately grows:
 
 1. ``[project.dependencies]`` is exactly ``{numpy, polars}``.  Any new hard
    dependency has to be a deliberate, reviewed change to this test too.
 2. Every module in ``_deps._MODULE_TO_EXTRA`` points at an extra that actually
    exists in ``[project.optional-dependencies]`` -- otherwise the
-   ``pip install 'polars-features[<extra>]'`` hint that :func:`_deps.require`
+   ``pip install 'panelary[<extra>]'`` hint that :func:`_deps.require`
    raises would send users to a non-existent extra.
 3. Every ``require("...")`` call site in the package resolves to a declared
    extra, so a newly-added lazy dependency cannot ship without its extra.
@@ -23,7 +23,7 @@ import sys
 
 import pytest
 
-from polars_features import _deps
+from panelary import _deps
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -32,7 +32,7 @@ else:  # pragma: no cover - 3.10 fallback
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
-PACKAGE_ROOT = REPO_ROOT / "polars_features"
+PACKAGE_ROOT = REPO_ROOT / "panelary"
 
 #: The complete, intended mandatory footprint.  Changing this set is a product
 #: decision (it is the whole point of the 0.4.0 "light core"), so the test is
@@ -47,7 +47,7 @@ EXPECTED_HARD_DEPS = {"numpy", "polars"}
 #:
 #: Currently empty, and it should stay that way: ``narwhals`` -> ``interop``
 #: was quarantined here until the dangling row was deleted from
-#: ``polars_features/_deps.py`` (the ``interop`` extra went away in 0.4.0 and
+#: ``panelary/_deps.py`` (the ``interop`` extra went away in 0.4.0 and
 #: nothing imports narwhals).  Prefer deleting a stale row over adding it here.
 KNOWN_STALE_MODULES: set[str] = set()
 
@@ -86,7 +86,7 @@ def test_hard_dependencies_are_numpy_and_polars_only(pyproject):
         "[project.dependencies] must stay exactly {numpy, polars} -- the light "
         f"core is the product promise. Found {sorted(declared)}. Anything else "
         "belongs in an optional extra, imported lazily via "
-        "`polars_features._deps.require(...)`."
+        "`panelary._deps.require(...)`."
     )
 
 
@@ -110,7 +110,7 @@ def test_module_to_extra_targets_declared_extras(declared_extras):
         if extra not in declared_extras and module not in KNOWN_STALE_MODULES
     }
     assert not broken, (
-        "polars_features._deps._MODULE_TO_EXTRA maps modules to extras that are "
+        "panelary._deps._MODULE_TO_EXTRA maps modules to extras that are "
         f"not declared in [project.optional-dependencies]: {broken}. Declared "
         f"extras: {sorted(declared_extras)}. Either add the extra to "
         "pyproject.toml or fix the mapping -- otherwise `require()` tells users "
@@ -143,7 +143,7 @@ def test_known_stale_mappings_are_genuinely_unused(declared_extras):
         )
         assert not imported, (
             f"{module!r} is quarantined but is imported directly somewhere in "
-            "polars_features/; route it through require() and declare its extra."
+            "panelary/; route it through require() and declare its extra."
         )
 
 

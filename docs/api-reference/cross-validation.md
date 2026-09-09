@@ -1,1 +1,1 @@
-::: polars_features.cross_validation
+::: panelary.cross_validation

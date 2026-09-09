@@ -1,21 +1,21 @@
-# `polars_features/evolve/` — build contract
+# `panelary/evolve/` — build contract
 
 Evolutionary / genetic **alpha-factor mining** for panel data. Issued to the
 implementation agents 2026-09-09.
 
 Pure **numpy + polars**. No scipy, sklearn, statsmodels, numba, Rust in the
 import path. Optional accelerators (lightgbm) go behind
-`polars_features._deps.require` and must have a pure-numpy fallback that is the
+`panelary._deps.require` and must have a pure-numpy fallback that is the
 **default**.
 
 Reuse, do not reinvent:
-`polars_features.core.model_selection` (`PurgedKFold`, `CombinatorialPurgedCV`,
+`panelary.core.model_selection` (`PurgedKFold`, `CombinatorialPurgedCV`,
 `deflated_sharpe_ratio`, `probability_of_backtest_overfitting`, `_norm_cdf`,
-`_norm_ppf`), `polars_features.validation._selection_stats`
+`_norm_ppf`), `panelary.validation._selection_stats`
 (`expected_maximum_sharpe`, `holm_bonferroni`, `benjamini_hochberg`,
-`benjamini_yekutieli`, `romano_wolf`), `polars_features.factor`
+`benjamini_yekutieli`, `romano_wolf`), `panelary.factor`
 (`ic`, `ic_summary`, `forward_return`, `orthogonalize`, `portfolio_sort`),
-`polars_features.econ._common` (`ols`, `pinv_sym`, `norm_ppf`, `norm_cdf`).
+`panelary.econ._common` (`ols`, `pinv_sym`, `norm_ppf`, `norm_cdf`).
 
 ## Why this module exists
 
@@ -154,4 +154,4 @@ alpha-gfn, Alpha2, gpquant, AlphaSAGE (1-byte empty LICENSE), yli188/Alpha101
 — all have **no LICENSE file, i.e. all rights reserved**. Nor from GPL/AGPL:
 FEAT, Brush, EvoGP, SRBench, pypbo, techfactor. Nor `vectorbt` (Commons Clause).
 Record `source` and `license` on every `FeatureSpec`, per
-`polars_features/catch22.py`, which is the clean-room precedent.
+`panelary/catch22.py`, which is the clean-room precedent.

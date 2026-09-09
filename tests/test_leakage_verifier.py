@@ -1,6 +1,6 @@
-"""Tests for the future-perturbation leak verifier (``polars_features.testing``).
+"""Tests for the future-perturbation leak verifier (``panelary.testing``).
 
-The verifier is the keystone that makes PanelKit's leak-safety claim checkable:
+The verifier is the keystone that makes Panelary's leak-safety claim checkable:
 perturb the future, re-run the op, and assert the past is bit-identical. These
 tests (property-based where useful) confirm it *catches* an injected look-ahead
 (``shift(-1)``) and *passes* a genuinely walk-forward op (``shift(1).over``).
@@ -13,10 +13,10 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from polars_features.core.panel_frame import PanelFrame
-from polars_features.core.pipeline import Pipeline
-from polars_features.core.protocol import PanelTransformer
-from polars_features.testing import assert_no_lookahead, assert_no_train_test_leak
+from panelary.core.panel_frame import PanelFrame
+from panelary.core.pipeline import Pipeline
+from panelary.core.protocol import PanelTransformer
+from panelary.testing import assert_no_lookahead, assert_no_train_test_leak
 
 ENTITIES = ["A", "B", "C"]
 

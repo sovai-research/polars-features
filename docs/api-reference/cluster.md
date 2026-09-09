@@ -13,4 +13,4 @@ The k-Shape engine is a dependency-free NumPy port (no torch); `sbd` and `ncc`
 are exposed as public utilities, and `k_from_n_entities` is a simple heuristic
 for choosing the cluster count.
 
-::: polars_features.cluster
+::: panelary.cluster

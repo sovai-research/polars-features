@@ -1,15 +1,15 @@
-# PanelKit
+# Panelary
 
-> Leak-safe, Polars-native feature engineering and ML for panel data (many entities observed over time). PanelKit is a panel-first (entity x time) data-science toolkit with an sklearn-familiar API, lazy Polars execution, and correctness-by-construction: no lookahead, ever. Version 0.4.0 is pure Python (the Rust extension was dropped) and ships a single universal `py3-none-any` wheel with `py.typed`. Built on the foundations of functime (Apache-2.0) and licensed Apache-2.0.
+> Leak-safe, Polars-native feature engineering and ML for panel data (many entities observed over time). Panelary is a panel-first (entity x time) data-science toolkit with an sklearn-familiar API, lazy Polars execution, and correctness-by-construction: no lookahead, ever. Version 0.4.0 is pure Python (the Rust extension was dropped) and ships a single universal `py3-none-any` wheel with `py.typed`. Built on the foundations of functime (Apache-2.0) and licensed Apache-2.0.
 
 Pipeline philosophy: transform -> interact -> map -> extract -> select -> synthesize -> compare -> label -> signal_eval -> models -> model_selection, with no lookahead at any stage.
 
 ## Naming and install
 
-- Project/brand name: PanelKit. Python import and PyPI package: `polars_features`. The public rename to `panelkit` is planned but NOT effective — `import panelkit` does not work. Use `import polars_features as pk`.
+- Project/brand name: Panelary. Python import and PyPI package: `panelary`. The public rename to `panelary` is planned but NOT effective — `import panelary` does not work. Use `import panelary as pk`.
 - Requires Python >= 3.10. Mandatory dependencies are only `numpy` and `polars>=1.0.0`; everything heavier is an optional extra.
-- Install: `pip install polars_features`, or `pip install "polars_features[recommended]"` for the batteries-included set, or `[all]` for everything. 22 extras exist, including `ml`, `scipy`, `lightgbm`, `catboost`, `xgboost`, `forecasting`, `automl`, `seasonality`, `dimreduce`, `explain`, `llm`, `cafe`, `viz`, `signatures`, `fast`, `progress`, `ann`, `gpu`, `docs`, `dev`.
-- A missing optional dependency raises an actionable error naming the extra to install (via `polars_features._deps.require`), never a bare ImportError.
+- Install: `pip install panelary`, or `pip install "panelary[recommended]"` for the batteries-included set, or `[all]` for everything. 22 extras exist, including `ml`, `scipy`, `lightgbm`, `catboost`, `xgboost`, `forecasting`, `automl`, `seasonality`, `dimreduce`, `explain`, `llm`, `cafe`, `viz`, `signatures`, `fast`, `progress`, `ann`, `gpu`, `docs`, `dev`.
+- A missing optional dependency raises an actionable error naming the extra to install (via `panelary._deps.require`), never a bare ImportError.
 
 ## Core concepts
 
@@ -34,7 +34,7 @@ Pipeline philosophy: transform -> interact -> map -> extract -> select -> synthe
 - `pk.econ` — panel and time-series econometrics: HDFE, Fama-MacBeth, IVX, DML, connectedness, plus an econometric feature suite (EVT, HAR-RV, liquidity, long memory, Nelson-Siegel, unit roots).
 - `pk.explain` — leak-safe, panel-aware feature attribution (SHAP): tree and estimator backends, interactions, stability, aggregation.
 - `pk.validation` — honest validation and selection: bootstraps, CV, forecast tests, selection statistics.
-- `polars_features.detect` — causal detection of explosive regimes, bubbles and change points (GSADF/BSADF, CUSUM/FOCuS monitors, panel breadth). NOTE: shipped as a subpackage but not yet re-exported on the top-level `pk` namespace; import it as `import polars_features.detect as detect`.
+- `panelary.detect` — causal detection of explosive regimes, bubbles and change points (GSADF/BSADF, CUSUM/FOCuS monitors, panel breadth). NOTE: shipped as a subpackage but not yet re-exported on the top-level `pk` namespace; import it as `import panelary.detect as detect`.
 - `pk.forecasting` / `pk.models` — forecaster and panel/cross-sectional model wrappers (linear, kNN, LightGBM, XGBoost, CatBoost, AutoML, conformal, censored).
 - `pk.metrics`, `pk.evaluation`, `pk.backtesting` — point, probabilistic and multi-objective metrics; deflated Sharpe ratio; probability of backtest overfitting.
 - `pk.seasonality` — calendar and Fourier seasonal features.
@@ -49,7 +49,7 @@ Pipeline philosophy: transform -> interact -> map -> extract -> select -> synthe
 - [AGENTS.md](./AGENTS.md): the agent-facing contract — setup, build/lint/type-check/test commands, invariants, conventions, and what not to do.
 - [Quickstart](./docs/quickstart.md): getting started.
 - [Installation](./docs/installation.md): extras and optional dependencies.
-- [Leakage & correctness](./docs/leakage.md): what leakage is and how PanelKit prevents it by construction.
+- [Leakage & correctness](./docs/leakage.md): what leakage is and how Panelary prevents it by construction.
 - [Leak safety concept](./docs/concepts/leak-safety.md): the panel_safe / leakage_safe contracts in depth.
 - [Panel data concept](./docs/concepts/panel-data.md): the entity x time model.
 - [Two-tier API](./docs/concepts/two-tier-api.md): expression namespaces vs. estimator objects.
@@ -62,7 +62,7 @@ Pipeline philosophy: transform -> interact -> map -> extract -> select -> synthe
 ## Ecosystem positioning
 
 - Complements polars-ds and polars_ta (general Polars-native primitives); does not compete with them.
-- Nixtla (statsforecast/mlforecast) owns general forecasting; PanelKit centers on leak-safe feature engineering, labeling, selection, attribution and cross-sectional ML for panels.
+- Nixtla (statsforecast/mlforecast) owns general forecasting; Panelary centers on leak-safe feature engineering, labeling, selection, attribution and cross-sectional ML for panels.
 - catch22 features are clean-room reimplemented from Lubba et al. (2019), NOT vendored from the GPL `pycatch22`.
 
 ## Optional

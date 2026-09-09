@@ -1,15 +1,15 @@
-PanelKit
-Copyright 2024-2026 Sov.ai and the PanelKit contributors
+Panelary
+Copyright 2024-2026 Sov.ai and the Panelary contributors
 
 This product includes software developed at Sov.ai (https://sov.ai)
-and by the PanelKit open-source community.
+and by the Panelary open-source community.
 
 ------------------------------------------------------------------------
 Attribution
 ------------------------------------------------------------------------
 
-PanelKit is a derivative work of and is built on the foundations of
-functime, which is actively maintained (v1.0.0, May 2026). PanelKit reuses
+Panelary is a derivative work of and is built on the foundations of
+functime, which is actively maintained (v1.0.0, May 2026). Panelary reuses
 and credits functime's engine and interoperates with functime and Nixtla
 rather than replacing them.
 
@@ -24,8 +24,8 @@ validation splitters, and metrics) are derived from functime and remain
 licensed under the Apache License, Version 2.0. The original copyright
 notices and license terms are retained accordingly.
 
-The Python import package is currently named `polars_features`. The
-public rename to `panelkit` is planned but not yet effective; "PanelKit"
+The Python import package is currently named `panelary`. The
+public rename to `panelary` is planned but not yet effective; "Panelary"
 is the project/brand name.
 
 ------------------------------------------------------------------------
@@ -39,15 +39,15 @@ CAFE imputation (the optional `cafe_impute` / `CafeImputer` components) is
 powered by `cafe-impute`, developed at Sov.ai and licensed under the MIT
 License. It is an optional dependency installed via the `cafe` extra.
 
-The catch22 feature set, when implemented in PanelKit, is a clean-room
+The catch22 feature set, when implemented in Panelary, is a clean-room
 reimplementation from the published description in:
 
     Lubba, C.H., Sethi, S.S., Knaute, P., Schultz, S.R., Fulcher, B.D.,
     & Jones, N.S. (2019). "catch22: CAnonical Time-series CHaracteristics."
     Data Mining and Knowledge Discovery, 33, 1821-1852.
 
-PanelKit does NOT vendor, copy, or link the GPL-licensed `pycatch22`
-implementation. Any catch22 features shipped by PanelKit are
+Panelary does NOT vendor, copy, or link the GPL-licensed `pycatch22`
+implementation. Any catch22 features shipped by Panelary are
 independently implemented from the paper and licensed under Apache-2.0.
 
 ------------------------------------------------------------------------

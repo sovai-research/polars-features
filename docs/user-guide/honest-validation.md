@@ -6,11 +6,11 @@ report the best one's Sharpe ratio, that number is a maximum of two hundred
 draws — it says almost nothing about the strategy and almost everything about
 the search.
 
-`polars_features.validation` is the layer that closes the gap: it takes
+`panelary.validation` is the layer that closes the gap: it takes
 out-of-sample results and answers *how much of this is real?*
 
 ```python
-from polars_features.validation import (
+from panelary.validation import (
     cpcv_splits, cpcv_backtest_paths, walk_forward_splits,
     deflated_sharpe_ratio, expected_maximum_sharpe,
     probability_of_backtest_overfitting,
@@ -34,7 +34,7 @@ every combination of `k` of them — purged and embargoed exactly as
 
 ```python
 import numpy as np
-from polars_features.validation import cpcv_backtest_paths
+from panelary.validation import cpcv_backtest_paths
 
 def fit_predict(train_pos, test_pos):
     # Fit on train_pos only; return one per-period value per test position.
@@ -51,7 +51,7 @@ than a point estimate — and the matrix drops straight into the overfitting
 diagnostics below.
 
 `walk_forward_splits` and `walk_forward_backtest_path` provide the purged
-walk-forward comparison. (The splitters in `polars_features.cross_validation`
+walk-forward comparison. (The splitters in `panelary.cross_validation`
 are *not* purged; use these when labels overlap.)
 
 !!! note "Why CPCV lowers measured PBO"
@@ -77,7 +77,7 @@ DSR = \Phi\!\left(\frac{(\widehat{SR}-SR_0)\sqrt{T-1}}
 $$
 
 ```python
-from polars_features.validation import deflated_sharpe_ratio, expected_maximum_sharpe
+from panelary.validation import deflated_sharpe_ratio, expected_maximum_sharpe
 
 expected_maximum_sharpe(n_trials=100, sharpe_variance_across_trials=0.01)
 # 0.2530602894  <- a zero-skill search over 100 configurations produces this
@@ -173,7 +173,7 @@ model_confidence_set(losses, alpha=0.10, n_boot=1000, seed=0).included
 
 `diebold_mariano` uses a Newey-West/Bartlett HAC variance (default truncation
 `horizon - 1`) plus the Harvey-Leybourne-Newbold small-sample correction, and
-refers the statistic to `t_{T-1}`. SPA and the MCS run on PanelKit's own
+refers the statistic to `t_{T-1}`. SPA and the MCS run on Panelary's own
 stationary bootstrap, so they inherit the fold-boundary guarantee below.
 
 For probabilistic forecasts, use the proper scoring rules: `crps_ensemble`,
@@ -198,7 +198,7 @@ may not cross. Without it, a resample splices one fold's observations into
 another's — leakage reintroduced through the back door.
 
 ```python
-from polars_features.validation import fold_boundaries, stationary_bootstrap
+from panelary.validation import fold_boundaries, stationary_bootstrap
 
 splits = walk_forward_splits(n_times, n_splits=5, horizon=5, embargo=5)
 cuts = fold_boundaries(splits)
@@ -220,7 +220,7 @@ the usual starting point.
 
 Classical split conformal assumes **exchangeability**, which a time series does
 not have. Under a volatility ramp its coverage collapses. Three fixes live in
-`polars_features.conformal`:
+`panelary.conformal`:
 
 | Method | Idea | Use when |
 | --- | --- | --- |
@@ -230,7 +230,7 @@ not have. Under a volatility ramp its coverage collapses. Three fixes live in
 | `conformalized_quantile_regression` (CQR) | conformalise a quantile model | heteroskedasticity — width should vary |
 
 ```python
-from polars_features.conformal import (
+from panelary.conformal import (
     conformal_calibration_split, adaptive_conformal_intervals,
 )
 

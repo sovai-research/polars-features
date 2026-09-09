@@ -1,4 +1,4 @@
-"""Tests for the leak-safe panel clustering package (`polars_features.cluster`)."""
+"""Tests for the leak-safe panel clustering package (`panelary.cluster`)."""
 
 from __future__ import annotations
 
@@ -6,15 +6,15 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.cluster import (
+from panelary.cluster import (
     CrossSectionalClusterer,
     KShapeClusterer,
     k_from_n_entities,
     ncc,
     sbd,
 )
-from polars_features.cluster._kshape import KShapeCore
-from polars_features.core.panel_frame import PanelFrame
+from panelary.cluster._kshape import KShapeCore
+from panelary.core.panel_frame import PanelFrame
 
 
 # --------------------------------------------------------------------------- #
@@ -246,7 +246,7 @@ def test_k_from_n_entities_monotone_capped():
 
 
 def test_exports():
-    import polars_features.cluster as c
+    import panelary.cluster as c
 
     for name in (
         "KShapeClusterer",

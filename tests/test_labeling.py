@@ -8,7 +8,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.label import fixed_horizon, meta_label, triple_barrier
+from panelary.label import fixed_horizon, meta_label, triple_barrier
 
 
 def _price_frame(prices, entity="A", start=None):

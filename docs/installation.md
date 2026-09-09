@@ -1,29 +1,29 @@
 # Installation
 
-PanelKit is published to PyPI as the `polars_features` package (the public rename to
-`panelkit` is planned but not yet effective). To install the latest release, run:
+Panelary is published to PyPI as the `panelary` package (the public rename to
+`panelary` is planned but not yet effective). To install the latest release, run:
 
 ```bash
-pip install polars_features
+pip install panelary
 ```
 
 Prefer [uv](https://docs.astral.sh/uv/)? It installs the same wheel, just much faster:
 
 ```bash
-uv pip install polars_features       # into an existing environment
-uv add polars_features               # into a uv-managed project (pyproject.toml)
+uv pip install panelary       # into an existing environment
+uv add panelary               # into a uv-managed project (pyproject.toml)
 ```
 
 Then import it as:
 
 ```python
-import polars_features as pk   # PanelKit
+import panelary as pk   # Panelary
 ```
 
 ## Requirements
 
 - **Python 3.10+**.
-- **Polars** is a required dependency and is installed automatically. PanelKit is developed and
+- **Polars** is a required dependency and is installed automatically. Panelary is developed and
   tested against **Polars 1.x** (the `.panel` / `.xs` / `ts` namespaces register on
   `polars.Expr`, `polars.DataFrame`, and `polars.LazyFrame`).
 - **Pure Python** since 0.4.0: the distribution is a single universal `py3-none-any` wheel, so
@@ -32,11 +32,11 @@ import polars_features as pk   # PanelKit
 
 ## Extras
 
-`polars_features` ships optional feature sets as extras. For example, to install with the
+`panelary` ships optional feature sets as extras. For example, to install with the
 large-language-model (LLM) analysis and CAFE imputation features:
 
 ```bash
-pip install "polars_features[llm,cafe]"
+pip install "panelary[llm,cafe]"
 ```
 
 - `llm`: LLM-powered forecast analyst (OpenAI/Anthropic SDKs, tokenizers, retries).
@@ -46,7 +46,7 @@ pip install "polars_features[llm,cafe]"
 - `signatures`: **reserved / not yet implemented.** No module imports `iisignature` today;
   the extra name exists only so the `_deps` install hint stays resolvable. Installing it
   currently enables nothing.
-- `explain`: feature-attribution fallbacks for `polars_features.explain` --
+- `explain`: feature-attribution fallbacks for `panelary.explain` --
   [`shap`](https://shap.readthedocs.io/) for non-booster models and
   [`shapiq`](https://shapiq.readthedocs.io/) for any-order Shapley interactions.
   The `TreeAttributor` fast path needs neither: it calls the boosters' own
@@ -58,21 +58,21 @@ pip install "polars_features[llm,cafe]"
 Install everything at once with:
 
 ```bash
-pip install "polars_features[all]"
+pip install "panelary[all]"
 ```
 
 !!! note "CAFE imputation"
     The [Quickstart](./quickstart.md) imputation step uses `CafeImputer` / `cafe_impute`,
-    which require the `cafe` extra (`pip install "polars_features[cafe]"`). Everything else in
+    which require the `cafe` extra (`pip install "panelary[cafe]"`). Everything else in
     the quickstart works with the core install.
 
 ## Verify your install
 
 ```python
 import polars as pl
-import polars_features as pk
+import panelary as pk
 
-print("PanelKit", pk.__version__)
+print("Panelary", pk.__version__)
 
 df = pl.DataFrame(
     {"ticker": ["A", "A", "B", "B"], "day": [0, 1, 0, 1], "close": [1.0, 2.0, 3.0, 4.0]}
@@ -87,5 +87,5 @@ pk.assert_no_lookahead(
 print("OK:", panel.feature_cols)   # OK: ['close']
 ```
 
-If this prints the version and `OK: ['close']` with no errors, PanelKit is installed
+If this prints the version and `OK: ['close']` with no errors, Panelary is installed
 correctly. Continue with the [Quickstart](./quickstart.md).

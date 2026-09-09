@@ -1,4 +1,4 @@
-"""Behavioural tests for `polars_features.evolve`.
+"""Behavioural tests for `panelary.evolve`.
 
 The tests that matter here are not "does the search run" but "does it tell the
 truth". A feature miner that cannot distinguish a planted signal from noise --
@@ -11,7 +11,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-evolve = pytest.importorskip("polars_features.evolve")
+evolve = pytest.importorskip("panelary.evolve")
 
 
 def _panel(*, seed: int, planted: bool, n_entities: int = 60, n_times: int = 400):
@@ -77,7 +77,7 @@ class TestSignalVersusNoise:
         consistency, not generalisation, and reports "signal" on pure noise --
         this asserts we did not regress to that.
         """
-        from polars_features.evolve._search import _time_split
+        from panelary.evolve._search import _time_split
 
         df = _panel(seed=0, planted=True, n_entities=5, n_times=100)
         train, held = _time_split(df.lazy(), "date", 0.2)

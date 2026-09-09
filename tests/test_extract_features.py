@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from polars_features.feature_extractors import (
+from panelary.feature_extractors import (
     _TS_SCALAR_AGGS,
     benford_correlation,
     extract_features,
@@ -14,7 +14,7 @@ from polars_features.feature_extractors import (
     return_kurtosis,
     return_skew,
 )
-from polars_features.registry import registry
+from panelary.registry import registry
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +43,7 @@ def test_ts_features_are_registered():
         assert spec.namespace == "ts"
         assert spec.panel_safe is True
         assert spec.leakage_safe is True
-        assert spec.source == "PanelKit"
+        assert spec.source == "Panelary"
 
 
 def test_registered_ts_specs_pass_license_audit():

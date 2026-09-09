@@ -17,10 +17,10 @@ Add econometric capability along **three coherent workstreams**, in ROI order, p
 > **This is the fourth pillar of the library:** features → **factors** (`reduce/`) → **attribution** (`explain/`) → **honest validation** (this plan). The validation layer under-writes the leak-safety claims of the other three.
 
 ### The `tsecon` stance (settles "what to port")
-`tsecon` (https://github.com/cacoleman16/tsecon) is dual **MIT/Apache-2.0**, ships as a **single NumPy-only abi3 wheel**, and its **array-in/array-out boundary matches exactly how PanelKit already crosses into its estimator layer**.
+`tsecon` (https://github.com/cacoleman16/tsecon) is dual **MIT/Apache-2.0**, ships as a **single NumPy-only abi3 wheel**, and its **array-in/array-out boundary matches exactly how Panelary already crosses into its estimator layer**.
 
-- **Depend on the wheel first** (near-zero friction) to (a) benchmark against and (b) **validate PanelKit against tsecon's golden fixtures** — which directly fixes the two known bugs: **DSR N/V** and **frac-diff divergence** (see `panelkit-wave2-academic.md`; two independent agents flagged both).
-- **Vendor source** (license permits) only for pieces PanelKit needs **native + panel-partitioned**: the leak-safe CV/backtester, the panel trio (CCE/MG/PMG) + panel unit-root tests, fractional differencing (long-memory crate), and the shared **Philox-RNG / HAC / bootstrap / SSM** foundation crates that thicken PanelKit's currently ~218-LOC Rust core.
+- **Depend on the wheel first** (near-zero friction) to (a) benchmark against and (b) **validate Panelary against tsecon's golden fixtures** — which directly fixes the two known bugs: **DSR N/V** and **frac-diff divergence** (see `panelkit-wave2-academic.md`; two independent agents flagged both).
+- **Vendor source** (license permits) only for pieces Panelary needs **native + panel-partitioned**: the leak-safe CV/backtester, the panel trio (CCE/MG/PMG) + panel unit-root tests, fractional differencing (long-memory crate), and the shared **Philox-RNG / HAC / bootstrap / SSM** foundation crates that thicken Panelary's currently ~218-LOC Rust core.
 - **Elsewhere prefer lighter sources:** `polars-ds` as the Polars-plugin *template* (and a dependency for basic stat tests / entropy / PSI); `augurs` for MSTL/ETS/DTW/changepoint; `arch` (wrap, don't rebuild) for SPA/MCS/bootstrap.
 
 ---
@@ -29,7 +29,7 @@ Add econometric capability along **three coherent workstreams**, in ROI order, p
 
 | Capability | Decision | Why |
 |---|---|---|
-| Leak-safe CV / backtester contract | **vendor + reimplement native** (validate vs tsecon fixtures) | PanelKit's founding thesis; must be panel-partitioned in-house |
+| Leak-safe CV / backtester contract | **vendor + reimplement native** (validate vs tsecon fixtures) | Panelary's founding thesis; must be panel-partitioned in-house |
 | HAC / Newey-West | **vendor tsecon HAC crate** | shared primitive everything else calls |
 | TS bootstrap (block/stationary/wild/sieve) | **vendor tsecon** or wrap `arch` | engine under CV bands + SPA/MCS |
 | DM / SPA / Model Confidence Set | **wrap `arch`** | mature, don't rebuild |
@@ -42,7 +42,7 @@ Add econometric capability along **three coherent workstreams**, in ROI order, p
 | CCE / Mean-Group / PMG + panel unit roots | **vendor tsecon panel trio** | no mature Python equivalent — differentiator |
 | Diebold-Yilmaz connectedness (FEVD) | **port (R-only)** | cross-entity network features; differentiator |
 | IVX predictive regression | **port (R-only)** | valid predictability under persistence |
-| Double ML + cross-fitting + PDS-LASSO | **build native** (reuse splitter) | reuses PanelKit's own leak-safe splitting |
+| Double ML + cross-fitting + PDS-LASSO | **build native** (reuse splitter) | reuses Panelary's own leak-safe splitting |
 | TS conformal (ACI/PID, EnbPI, NexCP, CQR) | **build native** / vendor tsecon conformal | upgrades existing `conformal.py` to be temporally valid |
 | basic stat tests / entropy / PSI / AR-coef features | **depend on `polars-ds`** | already pure-Rust Polars, reusable |
 
@@ -53,7 +53,7 @@ Add econometric capability along **three coherent workstreams**, in ROI order, p
 Most of this lands in a new `validation/` package plus extensions to existing modules (not one monolith):
 
 ```
-polars_features/
+panelary/
     validation/                 # NEW — the honest validation & selection layer (workstream 1)
         __init__.py
         _cv.py                  # CPCV + purged/embargoed splitters (reconcile with cross_validation.py)
@@ -73,7 +73,7 @@ polars_features/
     conformal.py                # EXTEND — ACI/PID, EnbPI, NexCP, CQR
 ```
 
-**Reconcile, don't duplicate:** PanelKit already has `cross_validation.py`, `backtesting.py`, `conformal.py`, `evaluation.py`, `testing.py`. Audit each against the plan — extend where a home exists (conformal, CV), add `validation/`/`econ/` only for genuinely new surface. Import boundary: `validation/` and `econ/` are Tier-2 (estimator layer) — may import `core/`, NumPy, optional `tsecon`/`arch`/`polars-ds`; Tier-1 `namespaces/` must not import them.
+**Reconcile, don't duplicate:** Panelary already has `cross_validation.py`, `backtesting.py`, `conformal.py`, `evaluation.py`, `testing.py`. Audit each against the plan — extend where a home exists (conformal, CV), add `validation/`/`econ/` only for genuinely new surface. Import boundary: `validation/` and `econ/` are Tier-2 (estimator layer) — may import `core/`, NumPy, optional `tsecon`/`arch`/`polars-ds`; Tier-1 `namespaces/` must not import them.
 
 ---
 
@@ -150,7 +150,7 @@ Every estimator here that fits parameters subclasses `PanelTransformer` (or comp
 | M4 | **HDFE + SEs (the fast headline)** | `econ/_hdfe.py` | matches pyfixest coeffs/SEs; residual features leak-safe in CV |
 | M5 | **Panel trio + connectedness** | `econ/_panel.py` (vendor tsecon), `_connectedness.py` (port) | match plm / frequencyConnectedness references |
 | M6 | **Conformal upgrade + DML** | ACI/EnbPI/NexCP/CQR; `_dml.py` + PDS-LASSO | temporal coverage holds under drift; DML CI valid on sim |
-| M7 | tsecon golden-fixture harness | CI job validating PanelKit estimators vs tsecon | green, gating regressions |
+| M7 | tsecon golden-fixture harness | CI job validating Panelary estimators vs tsecon | green, gating regressions |
 
 **M1 is the must-ship, highest-ROI pillar.** M2 closes two known bugs. M3–M5 are the feature/moat build-out. M6 is the fast follow.
 
@@ -167,7 +167,7 @@ Every estimator here that fits parameters subclasses `PanelTransformer` (or comp
 - Full DCC-GARCH and vine copulas (heavy, scale poorly with N) — revisit on demand.
 - Bayesian VARs, FAVAR, threshold/STAR dynamics — tsecon's macro stack; depend on the wheel if ever needed, don't reimplement.
 - Full ARFIMA MLE — use `d`-estimation + the existing fast FFD instead.
-- Causal forests / modern DiD (Callaway-Sant'Anna, synthetic DiD) — a different (causal-inference) product; only if PanelKit deliberately moves there.
+- Causal forests / modern DiD (Callaway-Sant'Anna, synthetic DiD) — a different (causal-inference) product; only if Panelary deliberately moves there.
 
 ---
 

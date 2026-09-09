@@ -12,7 +12,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.explain import (
+from panelary.explain import (
     BASE_VALUE_COL,
     TimeAwareBackground,
     TreeAttributor,
@@ -34,7 +34,7 @@ class LinearStub:
     def predict(self, X):
         return np.asarray(X, dtype=float) @ self.w
 
-    def panelkit_shap_values(self, X, background):
+    def panelary_shap_values(self, X, background):
         X = np.asarray(X, dtype=float)
         mu = (
             np.zeros_like(self.w)
@@ -150,8 +150,8 @@ def test_efficiency_holds_for_the_stub(train, future):
 
 def test_efficiency_failure_is_reported_not_silent(train, future):
     class Broken(LinearStub):
-        def panelkit_shap_values(self, X, background):
-            phi, base = super().panelkit_shap_values(X, background)
+        def panelary_shap_values(self, X, background):
+            phi, base = super().panelary_shap_values(X, background)
             return phi * 0.5, base
 
     rep = check_efficiency(
@@ -232,9 +232,9 @@ def test_lightgbm_path_dependent_is_exact(train, future):
     np.testing.assert_allclose(total, raw, atol=1e-8)
 
 
-def test_lightgbm_through_the_panelkit_wrapper(train, future):
+def test_lightgbm_through_the_panelary_wrapper(train, future):
     pytest.importorskip("lightgbm")
-    from polars_features.models import PanelLGBMRegressor
+    from panelary.models import PanelLGBMRegressor
 
     model = PanelLGBMRegressor(
         target="y",
@@ -259,7 +259,7 @@ def test_lightgbm_through_the_panelkit_wrapper(train, future):
 
 def test_lightgbm_conditional_reports_a_past_only_reference(train, future):
     pytest.importorskip("lightgbm")
-    from polars_features.models import PanelLGBMRegressor
+    from panelary.models import PanelLGBMRegressor
 
     model = PanelLGBMRegressor(
         target="y",
@@ -326,7 +326,7 @@ def test_interventional_without_shap_is_an_actionable_error(train, future):
 
     est = lgb.LGBMRegressor(n_estimators=5, verbose=-1)
     est.fit(train.select(FEATURES).to_numpy(), train.get_column("y").to_numpy())
-    with pytest.raises(ImportError, match=r"polars-features\[explain\]"):
+    with pytest.raises(ImportError, match=r"panelary\[explain\]"):
         tree_attributions(
             est,
             future,
@@ -338,6 +338,6 @@ def test_interventional_without_shap_is_an_actionable_error(train, future):
 
 
 def _have(module):
-    from polars_features._deps import have
+    from panelary._deps import have
 
     return have(module)

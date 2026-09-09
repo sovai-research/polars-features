@@ -1,7 +1,7 @@
-# PanelKit continuous-improvement playbook
+# Panelary continuous-improvement playbook
 
 A sequenced set of **ready-to-paste prompts** for future improvement rounds on
-`polars-features` (PanelKit), plus **TODO experiments** and a **recheck loop** that
+`panelary` (Panelary), plus **TODO experiments** and a **recheck loop** that
 re-examines whatever was already improved to see if it can go further.
 
 How to use it: run the waves in order. Each wave is a single prompt you can paste
@@ -12,7 +12,7 @@ must keep exact output parity (assert against a baseline captured *before* the c
 and stay leak-safe (`assert_no_lookahead` / fit-on-train-only).
 
 Baselines to keep current (regenerate before each wave):
-- Import time: `python3 -c "import time,importlib,sys; t=time.perf_counter(); importlib.import_module('polars_features'); print(int((time.perf_counter()-t)*1000),'ms'); print(sorted({m.split('.')[0] for m in sys.modules} & {'scipy','sklearn','pandas','flaml','tqdm','numba','holidays','umap'}))"`
+- Import time: `python3 -c "import time,importlib,sys; t=time.perf_counter(); importlib.import_module('panelary'); print(int((time.perf_counter()-t)*1000),'ms'); print(sorted({m.split('.')[0] for m in sys.modules} & {'scipy','sklearn','pandas','flaml','tqdm','numba','holidays','umap'}))"`
 - Speed harness: `benchmarks/bench_vs_pandas.py` and the deps audit harness `scratchpad/deps/d7_speed.md`.
 - Test floor: `pytest tests/ --ignore=tests/test_forecasting.py --ignore=tests/test_benchmarks.py -q` (expected all green).
 - Install weight: build the wheel (`python3 -m build`) and record wheel size + `pip install` cold time in a fresh venv for `[]`, `[recommended]`, `[all]`.
@@ -22,9 +22,9 @@ Baselines to keep current (regenerate before each wave):
 ## Wave 0 — Recheck & measure (run after EVERY wave; repeatable)
 
 > Spawn 3 parallel read-only investigator agents to VERIFY and QUANTIFY the current
-> state of PanelKit (`polars-features`) after the latest changes — do not modify code.
+> state of Panelary (`panelary`) after the latest changes — do not modify code.
 > (1) **No-regression**: run the full test suite (minus the 40-min forecasting suite)
-> and report pass/fail; run `ruff check .`; confirm `import polars_features` still
+> and report pass/fail; run `ruff check .`; confirm `import panelary` still
 > pulls only numpy+polars (no scipy/sklearn/pandas/flaml/tqdm/numba/holidays in
 > sys.modules) and report the import time in ms. (2) **Headroom**: re-run the speed
 > harness (`benchmarks/bench_vs_pandas.py` + a synthetic 0.5M/2.5M-row panel over
@@ -40,7 +40,7 @@ Baselines to keep current (regenerate before each wave):
 ## Wave 1 — Dependency structure, deepened
 
 > Spawn 6 parallel investigator agents (read-only; measure with synthetic data) to
-> push PanelKit's dependency structure further toward a minimal, predictable core.
+> push Panelary's dependency structure further toward a minimal, predictable core.
 > Dimensions: (1) **numpy-only reducers/selectors** — audit `reduce/` and `select/`
 > for the class-B sklearn uses that were left in the `ml` extra (StandardScaler, PCA,
 > TruncatedSVD, GaussianRandomProjection, LinearRegression, Ridge) and design exact
@@ -96,7 +96,7 @@ Baselines to keep current (regenerate before each wave):
 ## Wave 4 — Packaging, CI, and guardrails  **[DONE — 2026-09-08]**
 
 > Spawn agents to harden the light-package gains so they can't silently regress.
-> (1) Add a pytest **import-hygiene guard**: a test asserting `import polars_features`
+> (1) Add a pytest **import-hygiene guard**: a test asserting `import panelary`
 > loads none of {scipy, sklearn, pandas, flaml, tqdm, numba, holidays, umap} and that
 > import time is under a threshold (e.g. 150ms) — fails CI on regression. (2) Add a
 > **wheel-is-universal** check (built wheel tag is `py3-none-any`, contains no `.so`).
@@ -154,20 +154,20 @@ Every numeric change was captured as a golden baseline **before** the change
 ### Wave 4 — shipped in full
 
 - [x] **Import-hygiene guard** — `tests/test_import_hygiene.py`. Fresh-subprocess
-      probes assert `import polars_features` (and each feature module
+      probes assert `import panelary` (and each feature module
       individually) pulls none of {scipy, sklearn, pandas, flaml, tqdm, numba,
       holidays, umap}, that `_deps.py` loaded straight off disk stays
       third-party free, and that cold import stays under a budget
       (**measured 85 ms**; budget 300 ms, override
-      `PANELKIT_IMPORT_BUDGET_MS`) plus a machine-independent
+      `PANELARY_IMPORT_BUDGET_MS`) plus a machine-independent
       "overhead over bare polars <= 150 ms" check.
 - [x] **Wheel-is-universal check** — `tests/test_wheel_guardrails.py`
       (`slow`-marked, skipped without `build`/`hatchling`). Asserts the tag is
       `py3-none-any`, `Root-Is-Purelib: true`, no `.so`/`.pyd`/`.dylib`/`.dll`,
-      no nested distributions, and only `polars_features/` + `.dist-info` at
+      no nested distributions, and only `panelary/` + `.dist-info` at
       top level.
 - [x] **Wheel-size budget** — same file. **Measured 0.46 MB**; budget 1.5 MB
-      (`PANELKIT_WHEEL_BUDGET_MB`).
+      (`PANELARY_WHEEL_BUDGET_MB`).
 - [x] **Dependency-drift test** — `tests/test_dependency_drift.py`. Reads
       `pyproject.toml` with `tomllib` and `_deps._MODULE_TO_EXTRA` dynamically:
       hard deps are exactly `{numpy, polars}`; every mapping entry and every

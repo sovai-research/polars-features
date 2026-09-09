@@ -12,9 +12,9 @@ from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression
 from sklearn.pipeline import Pipeline
 
-from polars_features.forecasting import linear_model
-from polars_features.metrics import mae, mase, mse, rmse, rmsse, smape
-from polars_features.preprocessing import scale
+from panelary.forecasting import linear_model
+from panelary.metrics import mae, mase, mse, rmse, rmsse, smape
+from panelary.preprocessing import scale
 
 METRICS_TO_TEST = [smape, rmse, rmsse, mae, mase, mse]
 TTEST_SIG_LEVEL = 0.20  # Two tailed

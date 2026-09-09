@@ -3,7 +3,7 @@
 Acceptance: the cross-fitted DML confidence interval must be **valid on a
 simulation** -- roughly nominal coverage of the true effect in a partially linear
 model with a high-dimensional, sparse confounder. The tests also pin down the
-leak-safety contract: folds come from PanelKit's purged/embargoed splitter, and
+leak-safety contract: folds come from Panelary's purged/embargoed splitter, and
 the fitted transformer freezes its nuisance models.
 """
 
@@ -13,7 +13,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.econ import (
+from panelary.econ import (
     DoubleMLTransformer,
     dml_partial_linear,
     lasso_penalty,

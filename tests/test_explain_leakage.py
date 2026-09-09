@@ -3,8 +3,8 @@
 These tests are **unconditional** -- they must run in a bare
 ``numpy + polars + pytest`` environment. Attribution is therefore driven through
 a tiny deterministic stub model that implements the documented
-``panelkit_shap_values(X, background)`` hook with *exact* closed-form Shapley
-values, so the assertions are about PanelKit's leak-safety contract and nothing
+``panelary_shap_values(X, background)`` hook with *exact* closed-form Shapley
+values, so the assertions are about Panelary's leak-safety contract and nothing
 else. Booster-specific behaviour lives in ``test_explain_tree.py``.
 """
 
@@ -14,10 +14,10 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.core.model_selection import PurgedKFold
-from polars_features.core.panel_frame import PanelFrame
-from polars_features.core.protocol import PanelTransformer
-from polars_features.explain import (
+from panelary.core.model_selection import PurgedKFold
+from panelary.core.panel_frame import PanelFrame
+from panelary.core.protocol import PanelTransformer
+from panelary.explain import (
     BASE_VALUE_COL,
     TimeAwareBackground,
     TreeAttributor,
@@ -48,7 +48,7 @@ class LinearStub:
     def predict(self, X):
         return np.asarray(X, dtype=float) @ self.w
 
-    def panelkit_shap_values(self, X, background):
+    def panelary_shap_values(self, X, background):
         X = np.asarray(X, dtype=float)
         mu = (
             self.baked_reference

@@ -5,7 +5,7 @@ from datetime import datetime
 import polars as pl
 from polars.testing import assert_frame_equal
 
-from polars_features.seasonality.calendar import (
+from panelary.seasonality.calendar import (
     add_calendar_effects,
     add_holiday_effects,
 )

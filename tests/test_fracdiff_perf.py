@@ -1,7 +1,7 @@
 """Performance + correctness regression tests for fractional differencing.
 
 These tests guard the convolution rewrite of the shared frac-diff kernel
-(:func:`polars_features._ffd.frac_diff_expr`). The builder no longer expands a
+(:func:`panelary._ffd.frac_diff_expr`). The builder no longer expands a
 ``pl.sum_horizontal`` of ``width`` lagged ``.shift()`` terms (an ``O(n * width)``
 expression tree, ~1458 nodes for ``d=0.4`` at the old ``1e-5`` default); it now
 applies a causal FIR convolution (``numpy.convolve``) per entity inside a
@@ -27,8 +27,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-import polars_features.namespaces  # noqa: F401  (registers the .panel namespace)
-from polars_features._ffd import DEFAULT_THRESHOLD, ffd_weights, frac_diff_expr
+import panelary.namespaces  # noqa: F401  (registers the .panel namespace)
+from panelary._ffd import DEFAULT_THRESHOLD, ffd_weights, frac_diff_expr
 
 
 # --------------------------------------------------------------------------- #

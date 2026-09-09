@@ -21,8 +21,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.reduce import RobustPCAFactors, robust_pca_factors
-from polars_features.reduce._estimators import pca_factors
+from panelary.reduce import RobustPCAFactors, robust_pca_factors
+from panelary.reduce._estimators import pca_factors
 
 
 def _subspace_score(A: np.ndarray, B: np.ndarray) -> float:
@@ -172,7 +172,7 @@ def test_robust_path_needs_no_optional_dependency():
     code = (
         "import sys; "
         "import numpy as np; "
-        "from polars_features.reduce import robust_pca_factors; "
+        "from panelary.reduce import robust_pca_factors; "
         "rng = np.random.default_rng(0); "
         "robust_pca_factors(rng.standard_normal((300, 10)), 2); "
         "assert 'sklearn' not in sys.modules, 'sklearn imported'; "

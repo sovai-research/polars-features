@@ -1,10 +1,10 @@
 # `validation` — honest validation & selection
 
-::: polars_features.validation
+::: panelary.validation
 
 ## Splitters & backtest paths
 
-::: polars_features.validation._cv
+::: panelary.validation._cv
     options:
       members:
         - IndexSplit
@@ -17,7 +17,7 @@
 
 ## Selection statistics
 
-::: polars_features.validation._selection_stats
+::: panelary.validation._selection_stats
     options:
       members:
         - MultipleTestResult
@@ -34,7 +34,7 @@
 
 ## Forecast comparison & scoring rules
 
-::: polars_features.validation._forecast_tests
+::: panelary.validation._forecast_tests
     options:
       members:
         - DieboldMarianoResult
@@ -56,7 +56,7 @@
 
 ## Bootstrap resampling
 
-::: polars_features.validation._bootstrap
+::: panelary.validation._bootstrap
     options:
       members:
         - resolve_segments
@@ -69,7 +69,7 @@
 
 ## Conformal prediction for time series
 
-::: polars_features.conformal
+::: panelary.conformal
     options:
       members:
         - conformal_calibration_split

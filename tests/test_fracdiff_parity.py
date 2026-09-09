@@ -1,14 +1,14 @@
 """Parity + causality tests for the consolidated fractional-differencing surfaces.
 
 After consolidation there is exactly ONE weight recursion
-(:func:`polars_features._ffd.ffd_weights`) and ONE causal expression builder
-(:func:`polars_features._ffd.frac_diff_expr`). Every public frac-diff surface
+(:func:`panelary._ffd.ffd_weights`) and ONE causal expression builder
+(:func:`panelary._ffd.frac_diff_expr`). Every public frac-diff surface
 
 * the ``.panel.frac_diff`` expression namespace,
 * the frame-level ``.panel.frac_diff`` namespace,
 * the ``.ts.frac_diff`` expression (feature_extractors shim),
-* :class:`polars_features.transform.frac_diff.FracDiff`, and
-* :func:`polars_features.preprocessing.fractional_diff`
+* :class:`panelary.transform.frac_diff.FracDiff`, and
+* :func:`panelary.preprocessing.fractional_diff`
 
 must therefore produce numerically identical output on the same panel, with
 nulls in identical positions, and must be strictly causal per entity.
@@ -20,12 +20,12 @@ import numpy as np
 import polars as pl
 import pytest
 
-import polars_features.feature_extractors  # noqa: F401  (registers .ts namespace)
-import polars_features.namespaces  # noqa: F401  (registers .panel namespace)
-from polars_features._ffd import ffd_weights, frac_diff_expr
-from polars_features.core import PanelFrame
-from polars_features.preprocessing import fractional_diff
-from polars_features.transform.frac_diff import FracDiff
+import panelary.feature_extractors  # noqa: F401  (registers .ts namespace)
+import panelary.namespaces  # noqa: F401  (registers .panel namespace)
+from panelary._ffd import ffd_weights, frac_diff_expr
+from panelary.core import PanelFrame
+from panelary.preprocessing import fractional_diff
+from panelary.transform.frac_diff import FracDiff
 
 # (d, threshold) combos whose kernel width fits inside the panel below so each
 # surface produces a non-trivial (non-all-null) tail to compare.

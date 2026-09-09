@@ -2,7 +2,7 @@
 
 Feature selection is a place leakage sneaks in quietly: rank your features on the
 whole dataset, keep the top-k, and every fold's "test" rows have already voted on
-which columns survive. PanelKit's selectors in `polars_features.select` are built
+which columns survive. Panelary's selectors in `panelary.select` are built
 to be run **inside a fold / on a training set only**, so the choice of features
 never benefits from data you are about to score on.
 
@@ -66,7 +66,7 @@ first). Everything is computed only from the rows in `X`, so there is no global
 fit to leak.
 
 ```python
-from polars_features.select import mrmr
+from panelary.select import mrmr
 
 selected = mrmr(
     train, "ret_fwd", k=2,
@@ -93,8 +93,8 @@ leak-free.
 
 ```python
 from sklearn.ensemble import RandomForestRegressor
-from polars_features.core.model_selection import PurgedKFold
-from polars_features.select import mda
+from panelary.core.model_selection import PurgedKFold
+from panelary.select import mda
 
 cv = PurgedKFold(n_splits=4, embargo=1)
 importance = mda(
@@ -140,7 +140,7 @@ name. It is fast but **in-sample** — not leak-free the way `mda` is. Use it fo
 quick exploration; prefer `mda` when leak-safety matters.
 
 ```python
-from polars_features.select import mdi
+from panelary.select import mdi
 
 features = ["mom", "vol", "mom_lag", "noise"]
 rf = RandomForestRegressor(n_estimators=100, random_state=0)
@@ -177,7 +177,7 @@ remembering the chosen names; it transforms by projecting any panel onto
 so a downstream estimator can still see it).
 
 ```python
-from polars_features.select import MRMRSelector
+from panelary.select import MRMRSelector
 
 selector = MRMRSelector(
     k=2,

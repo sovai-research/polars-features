@@ -15,8 +15,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features._deps import have
-from polars_features.feature_extractors import _cusum_events, _cusum_events_py
+from panelary._deps import have
+from panelary.feature_extractors import _cusum_events, _cusum_events_py
 
 # Directory holding the Rust-captured parity baselines.
 #
@@ -145,7 +145,7 @@ def test_zero_sigma_no_guard_does_not_raise() -> None:
 
 @pytest.mark.skipif(not have("numba"), reason="numba (fast extra) not installed")
 def test_numba_matches_python() -> None:
-    from polars_features.feature_extractors import _get_cusum_numba
+    from panelary.feature_extractors import _get_cusum_numba
 
     kernel = _get_cusum_numba()
     assert kernel is not None

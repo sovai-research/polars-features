@@ -1,1 +1,1 @@
-:::polars_features.seasonality
+:::panelary.seasonality

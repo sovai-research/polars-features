@@ -1,4 +1,4 @@
-"""Leak-safety tests: the brand-defining guarantees of the PanelKit core.
+"""Leak-safety tests: the brand-defining guarantees of the Panelary core.
 
 Covers purge+embargo (PurgedKFold), CPCV split counts / paths, walk-forward
 no-lookahead, and the end-to-end Pipeline + CV leakage guarantee. Pure-Python
@@ -15,15 +15,15 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from polars_features.core.model_selection import (
+from panelary.core.model_selection import (
     CombinatorialPurgedCV,
     PurgedKFold,
     expanding_window_split,
     sliding_window_split,
 )
-from polars_features.core.panel_frame import PanelFrame
-from polars_features.core.pipeline import Pipeline
-from polars_features.core.protocol import PanelTransformer
+from panelary.core.panel_frame import PanelFrame
+from panelary.core.pipeline import Pipeline
+from panelary.core.protocol import PanelTransformer
 
 ENTITIES = ["A", "B", "C"]
 

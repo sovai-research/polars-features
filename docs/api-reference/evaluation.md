@@ -1,1 +1,1 @@
-::: polars_features.evaluation
+::: panelary.evaluation

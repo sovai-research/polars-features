@@ -1,1 +1,1 @@
-:::polars_features.feature_extractors
+:::panelary.feature_extractors

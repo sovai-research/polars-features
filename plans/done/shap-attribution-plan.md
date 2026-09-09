@@ -15,9 +15,9 @@
 
 ## 0. TL;DR — the decision
 
-Do **not** reimplement SHAP. The pragmatic, defensible move for PanelKit is a new **`explain/`** subpackage whose moat is **leak-safety and panel-awareness**, not the SHAP math:
+Do **not** reimplement SHAP. The pragmatic, defensible move for Panelary is a new **`explain/`** subpackage whose moat is **leak-safety and panel-awareness**, not the SHAP math:
 
-> **Nobody ships leak-safe, panel-aware feature attribution.** Every SHAP library treats the background/reference set casually — which is precisely the dominant leakage surface. PanelKit already has the leak-safe `PanelTransformer` contract; wrapping *exact, native* TreeSHAP inside it — with the background set as a fold-bound, time-respecting object — is a capability no other library has.
+> **Nobody ships leak-safe, panel-aware feature attribution.** Every SHAP library treats the background/reference set casually — which is precisely the dominant leakage surface. Panelary already has the leak-safe `PanelTransformer` contract; wrapping *exact, native* TreeSHAP inside it — with the background set as a fold-bound, time-respecting object — is a capability no other library has.
 
 Three layers, shippable independently:
 
@@ -39,9 +39,9 @@ Three layers, shippable independently:
 
 ## 2. Design principles (inherit the moat)
 
-1. **Leak-safety is the contract.** `TreeAttributor` subclasses [`PanelTransformer`](../polars_features/core/protocol.py). `_fit(train)` binds the explainer to **this fold's model + this fold's background**; `_transform(X)` emits attributions with no re-fitting and no future/other-fold information. Declare `panel_safe` / `leakage_safe`.
+1. **Leak-safety is the contract.** `TreeAttributor` subclasses [`PanelTransformer`](../panelary/core/protocol.py). `_fit(train)` binds the explainer to **this fold's model + this fold's background**; `_transform(X)` emits attributions with no re-fitting and no future/other-fold information. Declare `panel_safe` / `leakage_safe`.
 2. **Background set is a first-class, time-aware object** (see §4). This is the single most important design element.
-3. **Reuse the models already wrapped.** `models.py` already adapts XGBoost/LightGBM/CatBoost/sklearn. The attributor consumes a *fitted* PanelKit model and calls its native SHAP — it does not train anything.
+3. **Reuse the models already wrapped.** `models.py` already adapts XGBoost/LightGBM/CatBoost/sklearn. The attributor consumes a *fitted* Panelary model and calls its native SHAP — it does not train anything.
 4. **Polars-native output.** Attributions come back as columns (`shap_<feature>`), keyed by `(entity, time)`, ready for `group_by`. Exploit SHAP additivity so group/window SHAP is a cheap post-aggregation, not a recompute.
 5. **No new hard deps for v1.** Native SHAP lives in the model libraries. `shapiq` is an *optional* extra for v3 interactions. Rust/`pyo3-polars` is v3 only.
 6. **Interop over reimplementation.** Bridge to `shapiq` for interactions; port C++ reference algorithms only in the v3 Rust effort.
@@ -50,10 +50,10 @@ Three layers, shippable independently:
 
 ## 3. Module layout
 
-New subpackage `polars_features/explain/`, mirroring `select/` / the planned `reduce/`:
+New subpackage `panelary/explain/`, mirroring `select/` / the planned `reduce/`:
 
 ```
-polars_features/explain/
+panelary/explain/
     __init__.py          # public API + docstring
     _background.py        # TimeAwareBackground: fold-bound, past-only reference sets
     _tree.py              # tree_attributions() core: dispatch to native TreeSHAP per model type
@@ -64,7 +64,7 @@ polars_features/explain/
     _common.py            # shared helpers (reuse feature_matrix etc. from reduce/_common)
 ```
 
-Register in `polars_features/__init__.py`; add docs nav (see §9). Import boundary: `explain/` is **Tier-2 (estimator layer)** — may import `core/`, model libs, NumPy; must not be imported by Tier-1 `namespaces/`.
+Register in `panelary/__init__.py`; add docs nav (see §9). Import boundary: `explain/` is **Tier-2 (estimator layer)** — may import `core/`, model libs, NumPy; must not be imported by Tier-1 `namespaces/`.
 
 ---
 
@@ -73,7 +73,7 @@ Register in `polars_features/__init__.py`; add docs nav (see §9). Import bounda
 `TimeAwareBackground` is the object that makes this library different:
 
 - **Fold-bound:** constructed from the training panel only; carries no rows from val/test/other folds.
-- **Past-only (per entity):** for an observation at `(e, t)`, admissible background rows are `{(e', t') : t' < t}` (optionally `t' ≤ t − embargo` to honor the same purge/embargo used elsewhere in PanelKit's CV). This forbids future distribution leaking into the explanation.
+- **Past-only (per entity):** for an observation at `(e, t)`, admissible background rows are `{(e', t') : t' < t}` (optionally `t' ≤ t − embargo` to honor the same purge/embargo used elsewhere in Panelary's CV). This forbids future distribution leaking into the explanation.
 - **Sampling:** capped sample (default 100–1000) drawn from the admissible set; deterministic with a seed.
 - **Modes:**
   - `interventional` (marginal) → requires a background; "true to the model," breaks correlations. **Default** for actionability/sparse models. Guard against off-manifold background rows.
@@ -96,13 +96,13 @@ Dispatch by wrapped-model type to the **native, exact** implementation (no reimp
 - **sklearn / other:** fall back to `shap.TreeExplainer` if available, else a model-agnostic sampler (defer; see §7).
 
 `TreeAttributor(PanelTransformer)`:
-- ctor: `model` (a fitted PanelKit estimator), `features`, `mode="interventional"`, `background="past"` (policy) / a `TimeAwareBackground`, `keep="all"`, `output="long"|"wide"`, `entity`, `time`.
+- ctor: `model` (a fitted Panelary estimator), `features`, `mode="interventional"`, `background="past"` (policy) / a `TimeAwareBackground`, `keep="all"`, `output="long"|"wide"`, `entity`, `time`.
 - `_fit(panel)`: resolve features; build `TimeAwareBackground` from the training panel per the policy; bind to `model`. Store nothing that depends on transform-time data.
 - `_transform(panel)`: compute native SHAP for each row against the frozen background; attach `shap_<feature>` columns preserving `(entity, time)`; optionally return a tidy long frame `(entity, time, feature, shap_value)`.
 - `panel_safe = True`, `leakage_safe = True`.
 - Sanity check available: SHAP row-sum + expected value ≈ model output (efficiency), surfaced as a `.check_efficiency()` helper.
 
-**Deliverable value:** exact SHAP for the tree models users already train in PanelKit, leak-safe inside the existing purged-CV, output ready for Polars aggregation — immediately useful, zero new math.
+**Deliverable value:** exact SHAP for the tree models users already train in Panelary, leak-safe inside the existing purged-CV, output ready for Polars aggregation — immediately useful, zero new math.
 
 ---
 
@@ -120,7 +120,7 @@ This is the layer that makes it *panel* attribution rather than "SHAP with a `.o
 
 1. **Any-order interactions via `shapiq` interop (`_interactions.py`):** optional dependency; wrap `shapiq.TreeExplainer` (TreeSHAP-IQ) to emit k-SII / Faith-Shap interaction values for the wrapped tree model, returned in the same leak-safe, panel-keyed, Polars-native shape. **This is the bridge to the factor/HFA "interactions" theme** — the library gains a coherent story: latent factor *interactions* (HFA) + feature *interactions* (Shapley). Mirror shapiq's imputer knob (Marginal/Conditional/Gaussian) onto our `mode`.
 2. **Model-agnostic estimator** for non-tree models: prefer interop with `shapiq` (SVARM-IQ / KernelSHAP-IQ — current SOTA) over rolling our own; only consider Leverage SHAP if a native path is needed.
-3. **Native Arrow/Polars TreeSHAP kernel (the novel long game):** a `pyo3-polars` `#[polars_expr]` (with `is_elementwise=False`, whole feature matrix as multiple `&[Series]`, model as serialized-bytes/path kwarg) that ports FastTreeSHAP v2 (offer the v1 memory-lean variant) over a **Treelite or ONNX TreeEnsemble** parse (one schema; honor explicit NaN branches; CatBoost oblivious trees need bespoke parsing). Reuse `gbdt-rs`/`perpetual`'s Arrow/Polars zero-copy loaders. Free WASM target falls out of pure Rust. **This is the thing that would make PanelKit the only Arrow-native SHAP in existence** — but it's a large effort; gate it behind v1/v2 adoption.
+3. **Native Arrow/Polars TreeSHAP kernel (the novel long game):** a `pyo3-polars` `#[polars_expr]` (with `is_elementwise=False`, whole feature matrix as multiple `&[Series]`, model as serialized-bytes/path kwarg) that ports FastTreeSHAP v2 (offer the v1 memory-lean variant) over a **Treelite or ONNX TreeEnsemble** parse (one schema; honor explicit NaN branches; CatBoost oblivious trees need bespoke parsing). Reuse `gbdt-rs`/`perpetual`'s Arrow/Polars zero-copy loaders. Free WASM target falls out of pure Rust. **This is the thing that would make Panelary the only Arrow-native SHAP in existence** — but it's a large effort; gate it behind v1/v2 adoption.
 4. **Sparse Möbius/Fourier (SPEX) engine, native:** the ambitious ceiling — Rust `fwht`/`rustfft` + a SPRIGHT-style sparse peeling decoder to recover interactions at scale. Track SPEX/ProxySPEX; do not commit until v3.3 lands.
 
 ---
@@ -174,7 +174,7 @@ This is the layer that makes it *panel* attribution rather than "SHAP with a `.o
 - Reimplementing KernelSHAP / TreeSHAP in Python (native versions exist and are exact).
 - Causal / Asymmetric SHAP (needs a causal graph users won't have) — revisit only on demand.
 - Glassbox models (EBM/GA2M, NAM) — a "compete, don't explain" paradigm; different product.
-- Deep-net gradient attribution (Integrated Gradients/Hessians, Captum) — not PanelKit's model class.
+- Deep-net gradient attribution (Integrated Gradients/Hessians, Captum) — not Panelary's model class.
 - Data-valuation Shapley (pyDVL/OpenDataVal) — different use case.
 
 ---

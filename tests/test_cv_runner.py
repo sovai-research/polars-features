@@ -14,14 +14,14 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.core.model_selection import (
+from panelary.core.model_selection import (
     CombinatorialPurgedCV,
     CVReport,
     PurgedKFold,
     cross_validate,
     validate,
 )
-from polars_features.core.panel_frame import PanelFrame
+from panelary.core.panel_frame import PanelFrame
 
 ENTITIES = ["A", "B", "C"]
 

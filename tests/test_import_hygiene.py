@@ -1,11 +1,11 @@
 """Import-hygiene guard for the light 0.4.0 core.
 
-PanelKit's mandatory footprint is ``numpy + polars``.  Everything heavier is an
+Panelary's mandatory footprint is ``numpy + polars``.  Everything heavier is an
 optional extra that must be imported *lazily inside the function that uses it*
-(via :func:`polars_features._deps.require`).  These tests are the CI ratchet
+(via :func:`panelary._deps.require`).  These tests are the CI ratchet
 that makes a regression loud:
 
-* ``import polars_features`` must not pull any heavy optional dependency into
+* ``import panelary`` must not pull any heavy optional dependency into
   ``sys.modules``;
 * neither may the eagerly-imported feature modules (``feature_extractors``,
   ``catch22``, ``reduce``, ``cluster``, ``select``);
@@ -26,7 +26,7 @@ import sys
 import pytest
 
 #: Heavy third-party packages that must never be imported as a side effect of
-#: ``import polars_features``.  Keep in sync with the playbook's Wave-0 probe.
+#: ``import panelary``.  Keep in sync with the playbook's Wave-0 probe.
 FORBIDDEN_MODULES = (
     "scipy",
     "sklearn",
@@ -42,8 +42,8 @@ FORBIDDEN_MODULES = (
 #: CPython 3.13 (polars itself is ~70 ms of that), so 300 ms leaves ~4x headroom
 #: for slower/cold CI runners while still catching a real regression (e.g. an
 #: accidental eager ``import sklearn``, which costs >500 ms on its own).
-#: Override with ``PANELKIT_IMPORT_BUDGET_MS`` for unusually slow machines.
-IMPORT_BUDGET_MS = float(os.environ.get("PANELKIT_IMPORT_BUDGET_MS", "300"))
+#: Override with ``PANELARY_IMPORT_BUDGET_MS`` for unusually slow machines.
+IMPORT_BUDGET_MS = float(os.environ.get("PANELARY_IMPORT_BUDGET_MS", "300"))
 
 #: Number of fresh subprocesses to time; the *minimum* is used so a single
 #: scheduler hiccup on a shared CI runner cannot fail the build.
@@ -83,27 +83,27 @@ def _probe(module: str) -> dict:
 # --------------------------------------------------------------------------- #
 # 1. No heavy dependency is imported as a side effect
 # --------------------------------------------------------------------------- #
-def test_import_polars_features_is_clean():
-    """``import polars_features`` loads no heavy optional dependency."""
-    result = _probe("polars_features")
+def test_import_panelary_is_clean():
+    """``import panelary`` loads no heavy optional dependency."""
+    result = _probe("panelary")
     leaked = sorted(set(result["tops"]) & set(FORBIDDEN_MODULES))
     assert not leaked, (
-        f"`import polars_features` eagerly imported {leaked}. Optional deps must "
+        f"`import panelary` eagerly imported {leaked}. Optional deps must "
         "be imported lazily inside the function that uses them, via "
-        "`polars_features._deps.require(...)`."
+        "`panelary._deps.require(...)`."
     )
 
 
 @pytest.mark.parametrize(
     "module",
     [
-        "polars_features.feature_extractors",
-        "polars_features.catch22",
-        "polars_features.reduce",
-        "polars_features.cluster",
-        "polars_features.select",
-        "polars_features._numpy_stats",
-        "polars_features._deps",
+        "panelary.feature_extractors",
+        "panelary.catch22",
+        "panelary.reduce",
+        "panelary.cluster",
+        "panelary.select",
+        "panelary._numpy_stats",
+        "panelary._deps",
     ],
 )
 def test_feature_modules_are_clean(module):
@@ -112,7 +112,7 @@ def test_feature_modules_are_clean(module):
     leaked = sorted(set(result["tops"]) & set(FORBIDDEN_MODULES))
     assert not leaked, (
         f"`import {module}` eagerly imported {leaked}; route it through "
-        "`polars_features._deps.require(...)` inside the using function."
+        "`panelary._deps.require(...)` inside the using function."
     )
 
 
@@ -132,11 +132,11 @@ print(json.dumps(sorted(tops)))
 def test_deps_module_is_stdlib_only():
     """``_deps`` must not pull anything third-party -- it is the bootstrap gate.
 
-    Loaded straight off disk (not as ``polars_features._deps``) so the parent
+    Loaded straight off disk (not as ``panelary._deps``) so the parent
     package's own numpy/polars imports do not mask a regression here.
     """
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    deps_path = os.path.join(repo, "polars_features", "_deps.py")
+    deps_path = os.path.join(repo, "panelary", "_deps.py")
     proc = subprocess.run(
         [sys.executable, "-c", _DEPS_STANDALONE_PROBE, deps_path],
         capture_output=True,
@@ -148,7 +148,7 @@ def test_deps_module_is_stdlib_only():
     tops = set(json.loads(proc.stdout.strip().splitlines()[-1]))
     third_party = tops & ({"numpy", "polars"} | set(FORBIDDEN_MODULES))
     assert not third_party, (
-        "polars_features/_deps.py must have no third-party imports (it is the "
+        "panelary/_deps.py must have no third-party imports (it is the "
         f"lazy-import gate itself); found {sorted(third_party)}."
     )
 
@@ -157,32 +157,32 @@ def test_deps_module_is_stdlib_only():
 # 2. Cold-import time budget
 # --------------------------------------------------------------------------- #
 def test_import_time_within_budget():
-    """Cold ``import polars_features`` stays under the wall-clock budget."""
-    timings = [_probe("polars_features")["elapsed_ms"] for _ in range(_TIMING_REPEATS)]
+    """Cold ``import panelary`` stays under the wall-clock budget."""
+    timings = [_probe("panelary")["elapsed_ms"] for _ in range(_TIMING_REPEATS)]
     best = min(timings)
     assert best <= IMPORT_BUDGET_MS, (
-        f"`import polars_features` took {best:.0f} ms (best of {_TIMING_REPEATS}), "
+        f"`import panelary` took {best:.0f} ms (best of {_TIMING_REPEATS}), "
         f"over the {IMPORT_BUDGET_MS:.0f} ms budget. Timings: "
         f"{[round(t) for t in timings]}. Either an eager heavy import crept in or "
-        "module-level work needs deferring; raise PANELKIT_IMPORT_BUDGET_MS only "
+        "module-level work needs deferring; raise PANELARY_IMPORT_BUDGET_MS only "
         "if the machine itself is slow."
     )
 
 
 def test_import_overhead_over_polars_is_small():
-    """PanelKit's own import cost, net of polars, stays modest.
+    """Panelary's own import cost, net of polars, stays modest.
 
     A machine-independent companion to the absolute budget: polars alone
-    dominates the import, so the *delta* is the part PanelKit controls.
+    dominates the import, so the *delta* is the part Panelary controls.
     """
     polars_ms = min(_probe("polars")["elapsed_ms"] for _ in range(_TIMING_REPEATS))
-    panelkit_ms = min(
-        _probe("polars_features")["elapsed_ms"] for _ in range(_TIMING_REPEATS)
+    panelary_ms = min(
+        _probe("panelary")["elapsed_ms"] for _ in range(_TIMING_REPEATS)
     )
-    overhead = panelkit_ms - polars_ms
+    overhead = panelary_ms - polars_ms
     # Locally ~8 ms; 150 ms is a generous ratchet that still catches an eager
     # sklearn/scipy import or an expensive module-level registry build.
     assert overhead <= 150.0, (
-        f"PanelKit adds {overhead:.0f} ms on top of polars "
-        f"({panelkit_ms:.0f} ms vs {polars_ms:.0f} ms) -- too much module-level work."
+        f"Panelary adds {overhead:.0f} ms on top of polars "
+        f"({panelary_ms:.0f} ms vs {polars_ms:.0f} ms) -- too much module-level work."
     )

@@ -5,7 +5,7 @@
 The single most common reason a model that looks brilliant in research dies in
 production is **leakage** — information from the future, or from the test set,
 sneaking into features or fitting decisions that are supposed to know only the
-past. This is the practical guide: how PanelKit's shipped tools purge and embargo
+past. This is the practical guide: how Panelary's shipped tools purge and embargo
 folds, run finance-grade cross-validation, drive purging from label spans, and
 tell you whether a good-looking backtest is real.
 
@@ -16,7 +16,7 @@ the future-perturbation verifier — start with
 !!! tip "Everything on this page ships today"
     `PurgedKFold`, `CombinatorialPurgedCV`, the `t1` label-driven purge,
     `deflated_sharpe_ratio`, `probability_of_backtest_overfitting`, and the
-    `validate` runner are all importable from `polars_features` right now. Every
+    `validate` runner are all importable from `panelary` right now. Every
     snippet below is executed as-is against the current build.
 
 ## Why ordinary k-fold is wrong for panels
@@ -83,7 +83,7 @@ integer position arrays with `return_indices=True`).
 ```python
 import numpy as np
 import polars as pl
-from polars_features import PanelFrame, PurgedKFold
+from panelary import PanelFrame, PurgedKFold
 
 rng = np.random.default_rng(0)
 prices = pl.DataFrame({
@@ -118,7 +118,7 @@ steps on both sides, while the edge folds only lose them on one side.
 ## `t1`: label-driven purge
 
 A fixed scalar `horizon` is a blunt instrument — real labels resolve at *different*
-times per observation. PanelKit's labelers emit an explicit **`t1`** column (the
+times per observation. Panelary's labelers emit an explicit **`t1`** column (the
 event-end timestamp, same dtype as the time axis), and every splitter accepts
 `t1=` to purge on the true, per-observation `[t, t1]` spans instead of a scalar.
 
@@ -126,7 +126,7 @@ Generate labels with the triple-barrier method, then hand the `t1` column straig
 to the splitter:
 
 ```python
-from polars_features import triple_barrier, PurgedKFold
+from panelary import triple_barrier, PurgedKFold
 
 labeled = triple_barrier(
     prices, entity="ticker", time="date", price="close",
@@ -172,7 +172,7 @@ distinct **backtest paths**, giving a *distribution* of out-of-sample performanc
 instead of a point estimate.
 
 ```python
-from polars_features import CombinatorialPurgedCV
+from panelary import CombinatorialPurgedCV
 
 cpcv = CombinatorialPurgedCV(n_groups=6, n_test_groups=2, embargo=1)
 print("n_splits:", cpcv.n_splits, "n_paths:", cpcv.n_paths)
@@ -192,12 +192,12 @@ and `backtest_paths()` (the split/group assignment for each reconstructed path).
 `validate.cpcv` (and `validate.purged_kfold`) fit an estimator across every fold
 and, for CPCV, reconstruct the backtest paths and compute the overfitting
 statistics for you, returning a [`CVReport`](api-reference/cross-validation.md).
-The estimator can be a PanelKit `Pipeline`/estimator or any sklearn-shaped object
+The estimator can be a Panelary `Pipeline`/estimator or any sklearn-shaped object
 (`fit(X, y)` / `predict(X)` over numpy arrays); it is deep-copied per fold.
 
 ```python
 from sklearn.linear_model import Ridge
-from polars_features import validate
+from panelary import validate
 
 feat = labeled.with_columns(
     mom=pl.col("close").pct_change().over("ticker").fill_null(0.0)
@@ -238,7 +238,7 @@ deflates the observed Sharpe by the *expected maximum* Sharpe you'd see from tha
 many trials under the null.
 
 ```python
-from polars_features import deflated_sharpe_ratio
+from panelary import deflated_sharpe_ratio
 
 dsr = deflated_sharpe_ratio(
     observed_sharpe=0.08,   # per-observation, NOT annualised
@@ -270,7 +270,7 @@ bottom half out-of-sample**.
 
 ```python
 import numpy as np
-from polars_features import probability_of_backtest_overfitting
+from panelary import probability_of_backtest_overfitting
 
 rng = np.random.default_rng(0)
 M = rng.normal(0, 1, size=(120, 8))   # 120 periods, 8 candidate strategies
@@ -308,7 +308,7 @@ a pure correctness check, no model required:
 
 ```python
 import polars as pl
-from polars_features import assert_no_lookahead
+from panelary import assert_no_lookahead
 
 # raises AssertionError naming the first (column, entity, time) if the op leaks
 assert_no_lookahead(

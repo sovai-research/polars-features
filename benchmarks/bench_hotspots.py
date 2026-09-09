@@ -1,4 +1,4 @@
-"""Hotspot profiler for PanelKit's public operations on a synthetic panel.
+"""Hotspot profiler for Panelary's public operations on a synthetic panel.
 
 Where ``bench_vs_pandas.py`` answers "are we faster than pandas?", this script
 answers "where does *our own* time go?" -- the measurement the improvement
@@ -26,8 +26,8 @@ from collections.abc import Callable
 import numpy as np
 import polars as pl
 
-import polars_features  # noqa: F401  (registers the .panel/.xs/.ts namespaces)
-from polars_features._deps import have
+import panelary  # noqa: F401  (registers the .panel/.xs/.ts namespaces)
+from panelary._deps import have
 
 RNG = np.random.default_rng(7)
 
@@ -94,7 +94,7 @@ def _ts_features(panel: pl.DataFrame):
 
 
 def _catch22_per_entity(panel: pl.DataFrame, n_entities: int):
-    from polars_features.catch22 import catch22_all
+    from panelary.catch22 import catch22_all
 
     # catch22 is O(entities) Python calls by construction; profile a capped
     # sample so the whole harness stays interactive at 2.5M rows.
@@ -109,7 +109,7 @@ def _catch22_per_entity(panel: pl.DataFrame, n_entities: int):
 
 
 def _entropy_features(panel: pl.DataFrame):
-    from polars_features import feature_extractors as fe
+    from panelary import feature_extractors as fe
 
     series = panel.filter(pl.col("entity") < 20).group_by("entity").agg(pl.col("value"))
     out = []
@@ -120,7 +120,7 @@ def _entropy_features(panel: pl.DataFrame):
 
 
 def _cross_sectional_pca(panel: pl.DataFrame):
-    from polars_features.reduce.xs import CrossSectionalPCA
+    from panelary.reduce.xs import CrossSectionalPCA
 
     cols = [c for c in panel.columns if c.startswith("f")]
     reducer = CrossSectionalPCA(
@@ -130,7 +130,7 @@ def _cross_sectional_pca(panel: pl.DataFrame):
 
 
 def _cross_sectional_cluster(panel: pl.DataFrame):
-    from polars_features.cluster import CrossSectionalClusterer
+    from panelary.cluster import CrossSectionalClusterer
 
     cols = [c for c in panel.columns if c.startswith("f")]
     model = CrossSectionalClusterer(cols, n_clusters=6, entity="entity", time="time")
@@ -138,7 +138,7 @@ def _cross_sectional_cluster(panel: pl.DataFrame):
 
 
 def _kshape(panel: pl.DataFrame, n_entities: int):
-    from polars_features.cluster._kshape import KShapeCore
+    from panelary.cluster._kshape import KShapeCore
 
     sample = min(n_entities, 300)
     width = int(panel.get_column("time").max()) + 1
@@ -217,7 +217,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    print("PanelKit hotspot profile")
+    print("Panelary hotspot profile")
     print(f"polars {pl.__version__} | numpy {np.__version__}")
 
     if args.rows is not None:

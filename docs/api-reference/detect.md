@@ -128,4 +128,4 @@ and episode peak / end / duration, which are knowable only once an episode has
 ended. The leak-safe substitute for the latter is the backward-looking
 consecutive-exceedance run length emitted by `panel_features`.
 
-::: polars_features.detect
+::: panelary.detect

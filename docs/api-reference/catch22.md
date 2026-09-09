@@ -12,4 +12,4 @@ variant), and the Polars entry point `catch22_features` runs a **per-entity**
 `group_by`, so the computation is leak-safe by construction: each feature only
 ever sees the values of its own series.
 
-::: polars_features.catch22
+::: panelary.catch22

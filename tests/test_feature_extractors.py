@@ -4,7 +4,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.feature_extractors import cwt_coefficients
+from panelary.feature_extractors import cwt_coefficients
 
 
 @pytest.mark.parametrize("length", np.random.randint(low=1, high=101, size=5))

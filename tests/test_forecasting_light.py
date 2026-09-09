@@ -1,6 +1,6 @@
 """Lightweight import-hygiene tests for the forecasting subpackage.
 
-These verify that ``import polars_features.forecasting`` does not force the
+These verify that ``import panelary.forecasting`` does not force the
 optional ``flaml`` / ``tqdm`` dependencies, that the progress shim iterates
 identically with or without ``tqdm``, and that an ``auto_*`` forecaster can
 still build its FLAML search space when ``flaml`` is installed.
@@ -20,7 +20,7 @@ import pytest
 def test_forecasting_import_does_not_pull_flaml_or_tqdm():
     """A fresh interpreter importing the subpackage must not load flaml/tqdm."""
     code = (
-        "import polars_features.forecasting, sys; "
+        "import panelary.forecasting, sys; "
         "bad = [m for m in sys.modules if m.split('.')[0] in {'flaml', 'tqdm'}]; "
         "assert not bad, bad; "
         "print('forecasting import clean')"
@@ -36,7 +36,7 @@ def test_forecasting_import_does_not_pull_flaml_or_tqdm():
 
 
 def test_progress_shim_iterates_transparently():
-    from polars_features._progress import progress, trange
+    from panelary._progress import progress, trange
 
     assert list(progress([1, 2, 3])) == [1, 2, 3]
     assert list(progress(iter("ab"), desc="anything", total=2)) == ["a", "b"]
@@ -50,7 +50,7 @@ def test_progress_shim_iterates_transparently():
 def test_auto_forecaster_builds_search_space_when_flaml_present():
     pytest.importorskip("flaml")
 
-    from polars_features.forecasting.automl import (
+    from panelary.forecasting.automl import (
         auto_elastic_net,
         auto_knn,
         auto_lasso,

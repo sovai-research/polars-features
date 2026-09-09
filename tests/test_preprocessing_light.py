@@ -1,4 +1,4 @@
-"""Light-import regression guards for ``polars_features.preprocessing``.
+"""Light-import regression guards for ``panelary.preprocessing``.
 
 These tests protect the work that removed scikit-learn, scipy and cloudpickle
 from this module's *import-time* cost. They assert that:
@@ -25,8 +25,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-import polars_features.preprocessing as pp
-from polars_features.preprocessing import boxcox, detrend, yeojohnson
+import panelary.preprocessing as pp
+from panelary.preprocessing import boxcox, detrend, yeojohnson
 
 _MODULE_PATH = Path(pp.__file__)
 _HEAVY = {"sklearn", "scipy", "cloudpickle"}
@@ -59,7 +59,7 @@ def test_no_module_top_heavy_imports() -> None:
 def test_import_does_not_pull_cloudpickle() -> None:
     """Importing the module must not eagerly import cloudpickle."""
     code = (
-        "import sys, polars_features.preprocessing; "
+        "import sys, panelary.preprocessing; "
         "assert 'cloudpickle' not in sys.modules, 'cloudpickle eagerly imported'; "
         "print('ok')"
     )

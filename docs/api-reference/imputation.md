@@ -10,4 +10,4 @@ walk-forward / purged cross-validation.
 The heavy dependency (`cafe`) is optional and imported lazily, so importing this
 module never requires it.
 
-::: polars_features.imputation
+::: panelary.imputation

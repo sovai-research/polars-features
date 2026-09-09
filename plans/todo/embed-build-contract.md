@@ -1,4 +1,4 @@
-# `polars_features/embed/` — build contract
+# `panelary/embed/` — build contract
 
 Fast, CPU-only, **leak-safe numerical embeddings** for panel data — the numerical
 analogue of model2vec static text embeddings. Issued to the implementation
@@ -6,16 +6,16 @@ agents 2026-09-09.
 
 Pure **numpy + polars**. No scipy, sklearn, statsmodels, numba, torch or Rust in
 the import path. Optional accelerators (numba) go behind
-`polars_features._deps.require` under the existing `fast` extra and must have a
+`panelary._deps.require` under the existing `fast` extra and must have a
 pure-numpy fallback that is the **default**.
 
 Reuse, do not reinvent:
-`polars_features.core.protocol.PanelTransformer` (the `panel_safe` /
-`leakage_safe` contract), `polars_features.core.model_selection`
-(`PurgedKFold`, `CombinatorialPurgedCV`), `polars_features.validation`
-(`_selection_stats`, `_bootstrap`), `polars_features.reduce`
-(`PanelPCA`, `PanelRandomProjection`, `n_factors`), `polars_features.catch22`
-(the 22 feature functions), `polars_features.reduce.xs.CrossSectionalPCA`.
+`panelary.core.protocol.PanelTransformer` (the `panel_safe` /
+`leakage_safe` contract), `panelary.core.model_selection`
+(`PurgedKFold`, `CombinatorialPurgedCV`), `panelary.validation`
+(`_selection_stats`, `_bootstrap`), `panelary.reduce`
+(`PanelPCA`, `PanelRandomProjection`, `n_factors`), `panelary.catch22`
+(the 22 feature functions), `panelary.reduce.xs.CrossSectionalPCA`.
 
 ---
 
@@ -103,7 +103,7 @@ The PDF is a good survey and §9 (`compress=`), §10 (API surface) and §12
    approximation does not directly translate to lower generalization errors."*
    Deferred to the watchlist.
 
-The PDF's largest omission is that **it treats PanelKit as a time-series
+The PDF's largest omission is that **it treats Panelary as a time-series
 library**. Its entire API is trailing windows per entity; the cross-sectional
 axis never appears. §4 fixes that.
 
@@ -125,7 +125,7 @@ axis never appears. §4 fixes that.
 ## 2. Module layout
 
 ```
-polars_features/
+panelary/
     embed/
         __init__.py           # public API + the Embedder protocol
         _contract.py          # EmbeddingState: serialise/deserialise, seeds, schema
@@ -395,7 +395,7 @@ one.
   §1 comes from UCR/UEA sensor and ECG data with high SNR and phase-aligned
   shapes — financial panels have neither. **Treat all of it as priors, not
   predictions, and benchmark on our own panels before claiming anything.** This
-  gap is also the opportunity: it is the most differentiating thing PanelKit
+  gap is also the opportunity: it is the most differentiating thing Panelary
   could publish.
 - QUANT under a *linear* head is unmeasured; every published result uses
   ExtraTrees.

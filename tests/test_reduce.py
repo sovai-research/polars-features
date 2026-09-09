@@ -21,14 +21,14 @@ import pytest
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-from polars_features.core import PanelFrame
-from polars_features.reduce import (
+from panelary.core import PanelFrame
+from panelary.reduce import (
     CrossSectionalPCA,
     PanelPCA,
     StatisticalFactors,
     reduce_features,
 )
-from polars_features.reduce._base import _sign_of_max_abs
+from panelary.reduce._base import _sign_of_max_abs
 
 
 def _panel(n_entities: int = 10, n_periods: int = 24, n_feat: int = 5, seed: int = 0):

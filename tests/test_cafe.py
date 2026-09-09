@@ -16,8 +16,8 @@ import pytest
 
 pytest.importorskip("cafe")
 
-from polars_features.imputation import CafeImputer  # noqa: E402
-from polars_features.preprocessing import cafe_impute, impute  # noqa: E402
+from panelary.imputation import CafeImputer  # noqa: E402
+from panelary.preprocessing import cafe_impute, impute  # noqa: E402
 
 
 def _panel() -> pl.DataFrame:

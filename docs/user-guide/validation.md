@@ -2,7 +2,7 @@
 
 Backtesting a model on panel data is where most leakage creeps in: overlapping
 labels, serial correlation across the time axis, and selection bias from trying
-many configurations. PanelKit implements the finance-grade cross-validation
+many configurations. Panelary implements the finance-grade cross-validation
 machinery from López de Prado, *Advances in Financial Machine Learning* (AFML,
 Ch. 7 & 12), adapted to long-format Polars panels.
 
@@ -14,7 +14,7 @@ Ch. 7 & 12), adapted to long-format Polars panels.
 | [`deflated_sharpe_ratio`](#backtest-overfitting-diagnostics) / [`probability_of_backtest_overfitting`](#backtest-overfitting-diagnostics) | Correct for multiple testing and selection bias. |
 
 ```python
-from polars_features import (
+from panelary import (
     cross_validate, validate, PurgedKFold, CombinatorialPurgedCV,
     deflated_sharpe_ratio, probability_of_backtest_overfitting,
 )
@@ -46,9 +46,9 @@ report**. Reusing the price panel from the [Labeling guide](labeling.md):
 ```python
 import numpy as np
 import polars as pl
-from polars_features import cross_validate, PurgedKFold
-from polars_features.label import fixed_horizon
-from polars_features.models import PanelSklearnRegressor
+from panelary import cross_validate, PurgedKFold
+from panelary.label import fixed_horizon
+from panelary.models import PanelSklearnRegressor
 from sklearn.linear_model import Ridge
 
 def make_prices(n_per=120, seed=0):
@@ -104,7 +104,7 @@ report.summary()
 
 `cross_validate` fits the estimator on each training fold and predicts the test
 fold; the estimator is deep-copied per fold so folds are independent. The
-`estimator` may be either a PanelKit estimator (`fit(panel)` / `predict(panel)`)
+`estimator` may be either a Panelary estimator (`fit(panel)` / `predict(panel)`)
 or any sklearn-shaped object over numpy arrays. `y=` is a target **column name**
 in `X`, or an array aligned to the panel rows.
 
@@ -205,7 +205,7 @@ splitter by hand. Both accept the same purge/embargo/`t1` knobs and return a
 `CVReport`:
 
 ```python
-from polars_features import validate
+from panelary import validate
 
 # Purged K-Fold in one call
 rep = validate.purged_kfold(
@@ -283,9 +283,9 @@ chance (as expected here for pure noise).
 
 ## API reference
 
-::: polars_features.core.model_selection.cross_validate
-::: polars_features.core.model_selection.CVReport
-::: polars_features.core.model_selection.PurgedKFold
-::: polars_features.core.model_selection.CombinatorialPurgedCV
-::: polars_features.core.model_selection.deflated_sharpe_ratio
-::: polars_features.core.model_selection.probability_of_backtest_overfitting
+::: panelary.core.model_selection.cross_validate
+::: panelary.core.model_selection.CVReport
+::: panelary.core.model_selection.PurgedKFold
+::: panelary.core.model_selection.CombinatorialPurgedCV
+::: panelary.core.model_selection.deflated_sharpe_ratio
+::: panelary.core.model_selection.probability_of_backtest_overfitting

@@ -1,21 +1,21 @@
 # AGENTS.md
 
-Instructions for AI coding agents working on **PanelKit** (import/PyPI package
-`polars_features`, version 0.4.0). Human-facing docs live in `README.md`,
+Instructions for AI coding agents working on **Panelary** (import/PyPI package
+`panelary`, version 0.4.0). Human-facing docs live in `README.md`,
 `CONTRIBUTING.md` and `docs/`; this file is the agent-facing contract.
 
 ## Project overview
 
-PanelKit is a leak-safe, Polars-native feature-engineering and ML toolkit for
+Panelary is a leak-safe, Polars-native feature-engineering and ML toolkit for
 **panel data** (many entities observed over time). It is pure Python (the Rust
 extension was dropped in 0.4.0 — the distribution is a single universal
 `py3-none-any` wheel). It is derived from [functime](https://github.com/functime-org/functime)
 (Apache-2.0) and retains that license; see `NOTICE`.
 
-- **Brand name:** PanelKit. **Import name:** `polars_features`. These differ on
-  purpose. The public rename to `panelkit` is **deferred** — do not rename the
+- **Brand name:** Panelary. **Import name:** `panelary`. These differ on
+  purpose. The public rename to `panelary` is **deferred** — do not rename the
   package, modules, or public APIs.
-- Import convention used throughout the codebase and docs: `import polars_features as pk`.
+- Import convention used throughout the codebase and docs: `import panelary as pk`.
 - Requires Python **>=3.10**. Mandatory runtime deps are only `numpy` and
   `polars>=1.0.0`; everything heavier is an optional extra.
 
@@ -46,7 +46,7 @@ currently **no single aggregate `make check`** — run them in sequence.
 
 ```bash
 make lint        # ruff check . && ruff format --check .   (~0.1s)
-make typecheck   # mypy over polars_features (config in pyproject.toml)
+make typecheck   # mypy over panelary (config in pyproject.toml)
 make test        # pytest -q --ignore=tests/test_forecasting.py
 ```
 
@@ -87,7 +87,7 @@ are `make docs` / `make docs-serve`.
 
 ## The correctness contract (the thing that matters most)
 
-PanelKit's value proposition is correctness-by-construction. Every operation
+Panelary's value proposition is correctness-by-construction. Every operation
 must respect two contracts (see `docs/leakage.md`, `CONTRIBUTING.md`):
 
 - **`panel_safe`** — within-entity operations stay inside their entity and run
@@ -97,7 +97,7 @@ must respect two contracts (see `docs/leakage.md`, `CONTRIBUTING.md`):
   and anything with a `fit` step is fit **per fold on training data only** —
   never globally, never on the test fold.
 
-Public transformers subclass `polars_features.core.protocol.PanelTransformer`
+Public transformers subclass `panelary.core.protocol.PanelTransformer`
 and **must set `panel_safe` / `leakage_safe` class attributes**.
 
 Additional hard invariants observed by the newer subpackages (see
@@ -128,23 +128,23 @@ leakage regression suites to model on: `tests/test_leakage.py`,
 - **Expression namespaces.** Operators are exposed as
   `pl.col(...).<namespace>.<name>(...)` in the `panel`, `xs`, `ts` and `factor`
   namespaces. `.panel` implies `.over(entity)`; `.xs` implies `.over(time)`.
-  Typed stubs live in `polars_features/namespaces/*.pyi` and ship in the wheel.
+  Typed stubs live in `panelary/namespaces/*.pyi` and ship in the wheel.
 - **Operator registry.** New operators should register a `FeatureSpec` via
-  `polars_features.registry.register_feature` (56 specs registered today:
+  `panelary.registry.register_feature` (56 specs registered today:
   `ts`=42, `xs`=7, `factor`=4, `panel`=3). The spec carries the safety contract
   *and* provenance/license, and `registry.audit()` enforces permissive
   licensing. This is the machine-readable catalogue of the library — keep it
   populated.
 - **Optional dependencies.** Import them **lazily, inside the function that
-  needs them**, and route the import through `polars_features._deps.require`:
+  needs them**, and route the import through `panelary._deps.require`:
 
   ```python
-  from polars_features._deps import require
+  from panelary._deps import require
   sklearn = require("sklearn", feature="mrmr selection")
   ```
 
   `require()` turns a missing dep into an actionable
-  `pip install 'polars-features[ml]'` message. `_deps.py` must keep its
+  `pip install 'panelary[ml]'` message. `_deps.py` must keep its
   zero-third-party-import property. Do **not** add a top-level
   `import sklearn` / `import scipy` to any module.
 - **Typing.** The package ships `py.typed`. Annotate all public signatures;
@@ -176,7 +176,7 @@ touch the files it assigns to you.
 
 ## What NOT to do
 
-- Do **not** rename `polars_features` to `panelkit`, or rename public APIs.
+- Do **not** rename `panelary` to `panelary`, or rename public APIs.
 - Do **not** add a mandatory dependency. `numpy` + `polars` is the entire
   required footprint; anything else goes behind an extra and `require()`.
 - Do **not** import optional deps at module top level — it breaks the bare-core

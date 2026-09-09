@@ -7,7 +7,7 @@
     [API Reference](api-reference/feature-extractors.md). Names, signatures, and
     priorities below are design sketches and will change.
 
-PanelKit already owns the hard, leak-safe primitives — a clean-room
+Panelary already owns the hard, leak-safe primitives — a clean-room
 catch22/catch24, ~120 tsfresh-style extractors, a one-pass leak-safe
 `extract_features`, purged / combinatorial-purged cross-validation, a
 provenance-carrying feature registry, per-cross-section OLS neutralization, and
@@ -100,7 +100,7 @@ disagree.
 
 ## Validation & Leak-Audit
 
-This is PanelKit's moat. Fix the numerics first, then build the one-call panel CV
+This is Panelary's moat. Fix the numerics first, then build the one-call panel CV
 runner and the panel leak auditor — the biggest white space no competitor
 occupies.
 
@@ -250,7 +250,7 @@ companion.
 
 !!! note "First-party, leak-safe by construction"
     The SovAI methods are first-party code. The value of the port is not
-    transcription — it is re-homing each method onto PanelKit's fit-on-train
+    transcription — it is re-homing each method onto Panelary's fit-on-train
     contract and point-in-time discipline, so what was a descriptive research
     tool becomes a backtest-safe feature generator.
 
@@ -259,7 +259,7 @@ companion.
 ## Known correctness fixes in flight
 
 These are confirmed defects with fixes designed and queued — the highest-priority
-work because they affect the honesty of the numbers PanelKit reports.
+work because they affect the honesty of the numbers Panelary reports.
 
 - **Deflated Sharpe `N` and `V`.** In the CPCV path reconstruction the Deflated
   Sharpe is deflated against `n_trials = n_paths` (a CV-geometry constant, not the

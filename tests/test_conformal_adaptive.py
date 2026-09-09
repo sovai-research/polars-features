@@ -1,4 +1,4 @@
-"""Tests for the time-series conformal extensions in ``polars_features.conformal``.
+"""Tests for the time-series conformal extensions in ``panelary.conformal``.
 
 The headline requirement: **temporal coverage must hold under drift where naive
 (exchangeability-assuming) split conformal fails.** The calibration split used to
@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from polars_features.conformal import (
+from panelary.conformal import (
     adaptive_conformal_intervals,
     conformal_calibration_split,
     conformal_pid_intervals,
@@ -286,7 +286,7 @@ def test_conformal_calibration_split_is_purged_and_embargoed():
 
 
 def test_conformal_calibration_split_delegates_to_validation():
-    from polars_features.validation import purged_calibration_split
+    from panelary.validation import purged_calibration_split
 
     a = conformal_calibration_split(120, calibration_size=30, horizon=2, embargo=1)
     b = purged_calibration_split(120, calibration_size=30, horizon=2, embargo=1)

@@ -5,14 +5,14 @@ features — persistence, long memory, realized volatility, curve shape, liquidi
 tail risk — and almost all of them are computed, in the textbooks, on the *whole
 sample*. That is exactly what you must not do inside a backtest.
 
-`polars_features.econ.features` reworks the useful ones so that every value is
+`panelary.econ.features` reworks the useful ones so that every value is
 either **trailing** (row `t` uses only rows `≤ t` of its own entity) or
 **contemporaneous within a date** (a cross-section fitted at one date only), with
 the handful of genuinely fitted parameters pushed into `PanelTransformer`s that
 learn on train and freeze.
 
 ```python
-from polars_features.econ.features import (
+from panelary.econ.features import (
     har_features, liquidity_features, evt_features,
     rolling_unit_root_features, decompose_features,
     StationarityDifferencer, AutoFracDiff, HARModel, NelsonSiegel,
@@ -76,12 +76,12 @@ res.stat, res.pvalue, res.break_index, res.break_fraction
 
 ## Long memory: making frac-diff data driven
 
-The fixed-width fractional-differencing filter (`polars_features._ffd`) needs an
+The fixed-width fractional-differencing filter (`panelary._ffd`) needs an
 order `d`. Picking one number for a whole panel is arbitrary; tuning it by eye on
 the full sample is a leak. Estimate it instead:
 
 ```python
-from polars_features.econ.features import local_whittle, gph
+from panelary.econ.features import local_whittle, gph
 
 local_whittle(x).d     # Robinson (1995): lower variance, the default
 gph(x).d               # Geweke-Porter-Hudak log-periodogram regression

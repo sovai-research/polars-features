@@ -1,7 +1,7 @@
 """Ergonomics tests for the two-tier API.
 
 Tier 1 (Polars-native extension): the ``.panel`` / ``.xs`` namespaces work on
-bare ``pl.LazyFrame`` / ``pl.DataFrame`` with no PanelKit objects involved.
+bare ``pl.LazyFrame`` / ``pl.DataFrame`` with no Panelary objects involved.
 
 Tier 2 (estimator layer): transformers and Pipelines accept bare frames with
 ``entity`` / ``time`` supplied, so ``PanelFrame`` is optional sugar — while the
@@ -13,9 +13,9 @@ from __future__ import annotations
 import polars as pl
 import pytest
 
-import polars_features.namespaces  # noqa: F401  (registers the namespaces)
-from polars_features.core import PanelFrame
-from polars_features.transform import (
+import panelary.namespaces  # noqa: F401  (registers the namespaces)
+from panelary.core import PanelFrame
+from panelary.transform import (
     CrossSectionalRank,
     TimeSeriesScaler,
 )

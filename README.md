@@ -1,6 +1,6 @@
 <div align="center">
 
-# PanelKit
+# Panelary
 
 **Leak-safe, fast feature engineering and ML for panel data, built on Polars.**
 
@@ -14,39 +14,39 @@
 
 ---
 
-> **Your backtest is lying to you.** Most panel-data feature engineering leaks the future into the past — a single careless `.shift`, a global `StandardScaler`, a cross-sectional rank computed over the whole sample — and your beautiful Sharpe ratio evaporates in production. PanelKit makes leakage-proof feature engineering the *default*, not an afterthought.
+> **Your backtest is lying to you.** Most panel-data feature engineering leaks the future into the past — a single careless `.shift`, a global `StandardScaler`, a cross-sectional rank computed over the whole sample — and your beautiful Sharpe ratio evaporates in production. Panelary makes leakage-proof feature engineering the *default*, not an afterthought.
 
-## What is PanelKit?
+## What is Panelary?
 
-PanelKit is a feature-engineering and machine-learning toolkit for **panel data** (many entities observed over time — stocks, customers, sensors, regions). It is:
+Panelary is a feature-engineering and machine-learning toolkit for **panel data** (many entities observed over time — stocks, customers, sensors, regions). It is:
 
 - **sklearn-familiar** — `fit` / `transform` / `Pipeline`, the API you already know.
 - **Polars-native & lazy** — every transform is a Polars expression; nothing computes until you `.collect()`.
 - **Panel/cross-section as a first-class object** — the panel (entity × time) is the unit of work, not a bag of rows.
 - **Correct by construction** — operations are panel-aware and leak-safe. No lookahead, ever.
 
-> **Heritage.** PanelKit is built on the foundations of [**functime**](https://github.com/functime-org/functime), an excellent Polars-native time-series library (Apache-2.0). functime is actively maintained (v1.0.0, May 2026); PanelKit reuses and credits its feature-extraction and forecasting engine, retains its license, and adds a panel-first, leak-safe feature-engineering / labeling / validation layer on top. See [`NOTICE`](./NOTICE).
+> **Heritage.** Panelary is built on the foundations of [**functime**](https://github.com/functime-org/functime), an excellent Polars-native time-series library (Apache-2.0). functime is actively maintained (v1.0.0, May 2026); Panelary reuses and credits its feature-extraction and forecasting engine, retains its license, and adds a panel-first, leak-safe feature-engineering / labeling / validation layer on top. See [`NOTICE`](./NOTICE).
 
 ## Installation
 
 ```bash
-pip install polars_features
+pip install panelary
 
 # or, with uv (https://docs.astral.sh/uv/) -- same package, much faster:
-uv pip install polars_features       # into an existing environment
-uv add polars_features               # into a uv-managed project
+uv pip install panelary       # into an existing environment
+uv add panelary               # into a uv-managed project
 ```
 
-> **Note on names.** The project/brand is **PanelKit**. The current PyPI/import package is `polars_features` (the public rename to `panelkit` is planned but not yet effective). Import it as:
+> **Note on names.** The project/brand is **Panelary**. The current PyPI/import package is `panelary` (the public rename to `panelary` is planned but not yet effective). Import it as:
 >
 > ```python
-> import polars_features  # PanelKit
+> import panelary  # Panelary
 > ```
 
 Optional extras (LLM analysis, CAFE imputation, GPU, plotting, path signatures):
 
 ```bash
-pip install "polars_features[llm,cafe]"   # or [all] for everything
+pip install "panelary[llm,cafe]"   # or [all] for everything
 ```
 
 ## 60-second quickstart
@@ -55,7 +55,7 @@ pip install "polars_features[llm,cafe]"   # or [all] for everything
 
 ```python
 import polars as pl
-import polars_features as pk  # panel core shipped (experimental)
+import panelary as pk  # panel core shipped (experimental)
 
 # A panel: many entities (e.g. tickers) observed over time.
 prices = pl.read_parquet("prices.parquet")  # columns: ticker, date, close, volume, ...
@@ -99,14 +99,14 @@ Every step above respects two contracts: **`panel_safe`** (within-entity ops sta
 
 ## What's shipped today
 
-The functime-derived engine is **available now** under the `polars_features` import. You can use it for production forecasting and feature extraction over large panels:
+The functime-derived engine is **available now** under the `panelary` import. You can use it for production forecasting and feature extraction over large panels:
 
 ```python
 import polars as pl
-from polars_features.feature_extractors import binned_entropy
-from polars_features.forecasting import linear_model
-from polars_features.cross_validation import train_test_split
-from polars_features.metrics import mase
+from panelary.feature_extractors import binned_entropy
+from panelary.forecasting import linear_model
+from panelary.cross_validation import train_test_split
+from panelary.metrics import mase
 
 y = pl.read_parquet(
     "https://github.com/functime-org/functime/raw/main/data/commodities.parquet"
@@ -147,14 +147,14 @@ scores = mase(y_true=y_test, y_pred=y_pred, y_train=y_train)
 
 See [`CHANGELOG.md`](./CHANGELOG.md) and the docs for the full roadmap.
 
-## How PanelKit fits in the ecosystem
+## How Panelary fits in the ecosystem
 
-PanelKit is opinionated about **panel-native correctness and ML workflow**, and deliberately *depends on* the ecosystem rather than competing with it:
+Panelary is opinionated about **panel-native correctness and ML workflow**, and deliberately *depends on* the ecosystem rather than competing with it:
 
-- **`functime`** — PanelKit is built on functime's Polars-native feature-extraction and forecasting engine, and functime is actively maintained (v1.0.0, May 2026). We reuse and credit it under Apache-2.0 and add the panel object, leakage safety, labeling, and validation on top — we interoperate with functime, we don't replace it.
-- **`polars-ds` / `polars_ta`** — we build on and recommend these for general Polars-native data-science and technical-analysis primitives; PanelKit focuses on the panel object, leakage safety, labeling, and validation that sit *above* them.
-- **Nixtla (`statsforecast`, `mlforecast`, ...)** — Nixtla owns forecasting; PanelKit's center of gravity is leak-safe **feature engineering, labeling, selection, and cross-sectional ML** for panels. We interoperate, we don't reinvent forecasting.
-- **`tsfresh` / `pycatch22`** — PanelKit's extractors are Polars-native and far faster; catch22 features are being clean-room reimplemented from the paper (not vendored from GPL `pycatch22`).
+- **`functime`** — Panelary is built on functime's Polars-native feature-extraction and forecasting engine, and functime is actively maintained (v1.0.0, May 2026). We reuse and credit it under Apache-2.0 and add the panel object, leakage safety, labeling, and validation on top — we interoperate with functime, we don't replace it.
+- **`polars-ds` / `polars_ta`** — we build on and recommend these for general Polars-native data-science and technical-analysis primitives; Panelary focuses on the panel object, leakage safety, labeling, and validation that sit *above* them.
+- **Nixtla (`statsforecast`, `mlforecast`, ...)** — Nixtla owns forecasting; Panelary's center of gravity is leak-safe **feature engineering, labeling, selection, and cross-sectional ML** for panels. We interoperate, we don't reinvent forecasting.
+- **`tsfresh` / `pycatch22`** — Panelary's extractors are Polars-native and far faster; catch22 features are being clean-room reimplemented from the paper (not vendored from GPL `pycatch22`).
 
 ## Documentation
 
@@ -166,6 +166,6 @@ PanelKit is opinionated about **panel-native correctness and ML workflow**, and 
 
 ## License
 
-PanelKit is distributed under the **Apache License 2.0**, retained from functime. functime is credited as the upstream this work is derived from — see [`NOTICE`](./NOTICE) and [`LICENSE`](./LICENSE).
+Panelary is distributed under the **Apache License 2.0**, retained from functime. functime is credited as the upstream this work is derived from — see [`NOTICE`](./NOTICE) and [`LICENSE`](./LICENSE).
 
 CAFE imputation (`cafe_impute` / `CafeImputer`) is powered by [`cafe-impute`](https://pypi.org/project/cafe-impute/) (MIT, Sov.ai), an optional dependency installed via the `cafe` extra.

@@ -16,9 +16,9 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features._ffd import SAFETY_MAX_WIDTH, estimate_ffd_order, ffd_weights
-from polars_features.core import PanelFrame
-from polars_features.econ.features import (
+from panelary._ffd import SAFETY_MAX_WIDTH, estimate_ffd_order, ffd_weights
+from panelary.core import PanelFrame
+from panelary.econ.features import (
     AutoFracDiff,
     estimate_fractional_order,
     gph,

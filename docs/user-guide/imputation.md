@@ -2,7 +2,7 @@
 
 Missing values are the norm in panel data: entities enter and leave, sensors
 drop out, a vendor stops reporting a field for a quarter. How you fill those
-gaps quietly decides whether your features are honest. PanelKit ships a
+gaps quietly decides whether your features are honest. Panelary ships a
 leak-safe, model-based imputer built on **CAFE** (Causal Adaptive Factor
 Estimation) that is *strictly point-in-time*: every filled cell uses only past
 and contemporaneous information within its own entity.
@@ -27,7 +27,7 @@ from the validation window. Metrics look great in the notebook and collapse in
 production. On a panel it is worse than on a single series, because a careless
 imputer can also borrow *across entities* and blur entity boundaries.
 
-CAFE is designed around the same leak-safe moat as the rest of PanelKit. Each
+CAFE is designed around the same leak-safe moat as the rest of Panelary. Each
 filled cell is reconstructed from information available *up to and including*
 that `(entity, time)` — never after it — and imputation respects entity
 boundaries. That is why both guarantees on the transformer are honestly `True`:
@@ -41,7 +41,7 @@ imputer safe to run inside cross-validation.
 
 !!! note "Optional dependency"
     The imputer wraps the optional `cafe` package. Install it with
-    `pip install polars_features[cafe]`. The rest of PanelKit imports fine
+    `pip install panelary[cafe]`. The rest of Panelary imports fine
     without it; you only need it when you actually impute with CAFE.
 
 ## `cafe_impute` — the functional transformer
@@ -53,7 +53,7 @@ untouched, in their original order.
 
 ```python
 import polars as pl
-from polars_features.preprocessing import cafe_impute
+from panelary.preprocessing import cafe_impute
 
 # Long panel: entity, time, then numeric features (with gaps).
 X = pl.DataFrame({
@@ -135,7 +135,7 @@ as the fill itself.
 Ask for the fill *and* the confidence and provenance columns in one call:
 
 ```python
-from polars_features.preprocessing import cafe_impute
+from panelary.preprocessing import cafe_impute
 
 out = X.pipe(
     cafe_impute(
@@ -194,13 +194,13 @@ subset = X.pipe(cafe_impute(engine="per_entity", columns=["sales"])).collect()
 
 ## `CafeImputer` — the pipeline transformer
 
-For an sklearn-shaped `fit` / `transform` workflow (and to slot into PanelKit's
+For an sklearn-shaped `fit` / `transform` workflow (and to slot into Panelary's
 estimator layer), use `CafeImputer`. It is a `PanelTransformer`, so it accepts a
 bare `pl.DataFrame` / `pl.LazyFrame` plus `entity=` / `time=` keys (or a
 `PanelFrame`), and returns a `PanelFrame`.
 
 ```python
-from polars_features.imputation import CafeImputer
+from panelary.imputation import CafeImputer
 
 imputer = CafeImputer(engine="joint", entity="entity", time="time")
 imputer.fit(X)                      # records the feature columns; learns no fold state
@@ -233,7 +233,7 @@ If you already route imputation through the generic `impute` transformer, the
 two produce identical frames:
 
 ```python
-from polars_features.preprocessing import impute, cafe_impute
+from panelary.preprocessing import impute, cafe_impute
 
 a = X.pipe(impute(method="cafe")).collect()
 b = X.pipe(cafe_impute()).collect()
@@ -254,7 +254,7 @@ on the training fold and transform each fold** without leaking the validation
 window back into training features:
 
 ```python
-from polars_features.imputation import CafeImputer
+from panelary.imputation import CafeImputer
 
 # One walk-forward split: train on the past, validate on the future.
 cutoff = 3
@@ -275,6 +275,6 @@ matter of remembering to be careful.
 
 - [Preprocessing](preprocessing.md) — the other panel transformers
   (`diff`, `detrend`, `scale`, `roll`, …) that compose with imputation.
-- API reference: `polars_features.preprocessing.cafe_impute`,
-  `polars_features.preprocessing.impute`, and
-  `polars_features.imputation.CafeImputer`.
+- API reference: `panelary.preprocessing.cafe_impute`,
+  `panelary.preprocessing.impute`, and
+  `panelary.imputation.CafeImputer`.

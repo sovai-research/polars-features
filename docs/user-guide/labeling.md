@@ -1,6 +1,6 @@
 # Labeling
 
-Supervised learning on panels starts with a **target**. PanelKit ships the
+Supervised learning on panels starts with a **target**. Panelary ships the
 leak-safe labeling primitives from López de Prado, *Advances in Financial
 Machine Learning* (AFML, Ch. 3), rewritten Polars-native for long-format panel
 data:
@@ -19,7 +19,7 @@ in the *same dtype* as your time column so a training row whose span overlaps a
 test set can be purged.
 
 ```python
-from polars_features.label import triple_barrier, fixed_horizon, meta_label
+from panelary.label import triple_barrier, fixed_horizon, meta_label
 ```
 
 ## A worked panel
@@ -221,7 +221,7 @@ Because every labeler emits `t1` in the same dtype as `time`, you can hand the
 column name straight to the purged cross-validators:
 
 ```python
-from polars_features import PurgedKFold, cross_validate
+from panelary import PurgedKFold, cross_validate
 
 cv = PurgedKFold(n_splits=5, embargo=2, t1="t1")   # label-driven purge
 ```
@@ -234,6 +234,6 @@ per unique time (the most conservative purge). See the
 
 ## API reference
 
-::: polars_features.label.triple_barrier
-::: polars_features.label.fixed_horizon
-::: polars_features.label.meta_label
+::: panelary.label.triple_barrier
+::: panelary.label.fixed_horizon
+::: panelary.label.meta_label

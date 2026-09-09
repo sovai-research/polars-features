@@ -11,7 +11,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.econ.features import (
+from panelary.econ.features import (
     amihud_illiquidity,
     amivest_liquidity,
     liquidity_features,

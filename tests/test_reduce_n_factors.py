@@ -15,8 +15,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from polars_features.reduce import bai_ng, eigenvalue_ratio, n_factors
-from polars_features.reduce._n_factors import DEFAULT_MAX_FACTORS
+from panelary.reduce import bai_ng, eigenvalue_ratio, n_factors
+from panelary.reduce._n_factors import DEFAULT_MAX_FACTORS
 
 
 def _rank_k_matrix(n=500, p=30, k=3, noise=1.0, seed=0):
@@ -115,7 +115,7 @@ def test_selectors_are_pure_numpy():
     code = (
         "import sys; "
         "import numpy as np; "
-        "from polars_features.reduce import n_factors; "
+        "from panelary.reduce import n_factors; "
         "rng = np.random.default_rng(0); "
         "X = rng.standard_normal((200, 20)); "
         "n_factors(X); n_factors(X, method='eigenratio'); "

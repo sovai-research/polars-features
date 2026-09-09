@@ -1,6 +1,6 @@
 name: CI
 
-# Continuous integration for PanelKit (polars_features).
+# Continuous integration for Panelary (panelary).
 #
 # 0.4.0 dropped the Rust extension: the distribution is pure Python and ships a
 # single universal `py3-none-any` wheel, so there is no toolchain to install and
@@ -65,7 +65,7 @@ jobs:
         run: uvx ruff@0.15.10 format --check .
 
   # ---------------------------------------------------------------------------
-  # Type-check (mypy). Blocking. mypy config (files = ["polars_features"])
+  # Type-check (mypy). Blocking. mypy config (files = ["panelary"])
   # lives in pyproject.toml.
   # ---------------------------------------------------------------------------
   typecheck:
@@ -107,7 +107,7 @@ jobs:
           MYPY_BASELINE: "1040"
         run: |
           set +e
-          uv run mypy polars_features > mypy.log 2>&1
+          uv run mypy panelary > mypy.log 2>&1
           set -e
           COUNT=$(grep -cE '^[^ ]+\.py:[0-9]+: error:' mypy.log || true)
           tail -n 30 mypy.log
@@ -333,7 +333,7 @@ jobs:
           uv venv
           uv pip install -e ".[recommended]" pandas pyarrow
 
-      - name: PanelKit vs pandas
+      - name: Panelary vs pandas
         run: uv run python benchmarks/bench_vs_pandas.py
 
       - name: Hotspot profile (small sizes)

@@ -18,7 +18,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.econ import (
+from panelary.econ import (
     ConnectednessFeatures,
     connectedness,
     generalized_fevd,
@@ -26,7 +26,7 @@ from polars_features.econ import (
     rolling_connectedness,
     var_ols,
 )
-from polars_features.econ._connectedness import connectedness_from_var
+from panelary.econ._connectedness import connectedness_from_var
 
 # --------------------------------------------------------------------------- #
 # Simulation helpers

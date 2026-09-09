@@ -1,13 +1,13 @@
 # Feature Extraction
 
 !!! info "This page has moved"
-    Feature engineering in PanelKit now lives in the **[Feature Engineering
+    Feature engineering in Panelary now lives in the **[Feature Engineering
     guide](features.md)**. That page covers the `.ts` extractors, the bulk
     `extract_features` API, catch22, per-entity vs. cross-sectional features, and how to
     discover operators through the registry. This page is a short pointer kept for
     backwards-compatible links.
 
-PanelKit exposes dozens of time-series feature extractors through a custom `ts`
+Panelary exposes dozens of time-series feature extractors through a custom `ts`
 (time-series) Polars namespace. Every extractor is an ordinary Polars expression, so it
 works on a `Series`, a `LazyFrame`, and — most importantly for panel data — **per entity**
 inside a `group_by`. Because each series is featurised independently, the results are
@@ -18,7 +18,7 @@ The `ts` namespace is registered automatically when you import the package:
 ```python
 import numpy as np
 import polars as pl
-import polars_features as pk  # registers the .ts / .panel / .xs namespaces
+import panelary as pk  # registers the .ts / .panel / .xs namespaces
 ```
 
 ## A quick taste
@@ -80,7 +80,7 @@ Enumerate the registered extractors (and their parameters and safety flags) thro
 registry rather than hard-coding names:
 
 ```python
-from polars_features.registry import registry
+from panelary.registry import registry
 
 ts_features = [spec.name for spec in registry.by_namespace("ts")]
 print(len(ts_features), ts_features[:5])

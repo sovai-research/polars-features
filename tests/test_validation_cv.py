@@ -1,4 +1,4 @@
-"""Tests for ``polars_features.validation._cv``.
+"""Tests for ``panelary.validation._cv``.
 
 Covers the positional splitters (purge/embargo actually removes the right
 positions), the purged conformal calibration split, CPCV path reconstruction,
@@ -15,8 +15,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.core.panel_frame import PanelFrame
-from polars_features.validation import (
+from panelary.core.panel_frame import PanelFrame
+from panelary.validation import (
     CombinatorialPurgedCV,
     IndexSplit,
     cpcv_backtest_paths,

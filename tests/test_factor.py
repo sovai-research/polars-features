@@ -12,9 +12,9 @@ import numpy as np
 import polars as pl
 import pytest
 
-import polars_features.namespaces  # noqa: F401  (registers .xs / .panel)
-from polars_features import factor as fc
-from polars_features.registry import registry
+import panelary.namespaces  # noqa: F401  (registers .xs / .panel)
+from panelary import factor as fc
+from panelary.registry import registry
 
 
 # --------------------------------------------------------------------------- #

@@ -1,7 +1,7 @@
 import numpy as np
 import polars as pl
 
-from polars_features.feature_extractors import binned_entropy
+from panelary.feature_extractors import binned_entropy
 
 # Load commodities price data
 y = pl.read_parquet(

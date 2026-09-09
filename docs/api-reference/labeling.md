@@ -9,4 +9,4 @@ the input time column. This shared span contract is the single leakage currency
 consumed by purged cross-validation, so labels, sample weights, and CV purge all
 derive from the same intervals and cannot desync.
 
-::: polars_features.label
+::: panelary.label

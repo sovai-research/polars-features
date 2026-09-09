@@ -1,4 +1,4 @@
-"""Tests for ``polars_features.validation._selection_stats``.
+"""Tests for ``panelary.validation._selection_stats``.
 
 Includes the two §3 acceptance criteria that live here:
 
@@ -18,7 +18,7 @@ import math
 import numpy as np
 import pytest
 
-from polars_features.validation import (
+from panelary.validation import (
     benjamini_hochberg,
     benjamini_yekutieli,
     deflated_sharpe_ratio,
@@ -30,7 +30,7 @@ from polars_features.validation import (
     romano_wolf,
     romano_wolf_mean_test,
 )
-from polars_features.validation._forecast_tests import _t_sf
+from panelary.validation._forecast_tests import _t_sf
 
 # --------------------------------------------------------------------------- #
 # Golden values (independent high-precision evaluation of the published
@@ -323,7 +323,7 @@ class _EchoRegressor:
 def _signal_panel(n_times: int = 48, seed: int = 0):
     import polars as pl
 
-    from polars_features.core.panel_frame import PanelFrame
+    from panelary.core.panel_frame import PanelFrame
 
     rng = np.random.default_rng(seed)
     rows_e, rows_t, x1, y = [], [], [], []
@@ -348,7 +348,7 @@ def test_cross_validate_uses_trial_sharpes_for_a_matched_n_and_v():
     strategy's CPCV paths, which is a proxy for trial dispersion rather than the
     quantity Bailey & de Prado define.
     """
-    from polars_features.core.model_selection import (
+    from panelary.core.model_selection import (
         CombinatorialPurgedCV,
         cross_validate,
     )
@@ -374,7 +374,7 @@ def test_cross_validate_uses_trial_sharpes_for_a_matched_n_and_v():
 
 
 def test_explicit_n_trials_overrides_the_trial_sample_size():
-    from polars_features.core.model_selection import (
+    from panelary.core.model_selection import (
         CombinatorialPurgedCV,
         cross_validate,
     )

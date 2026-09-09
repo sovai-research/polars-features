@@ -11,4 +11,4 @@ look-ahead when driven through a purged CV splitter.
 - `MRMRSelector` — a `PanelTransformer` wrapping `mrmr` for use as a `"select"`
   step in a `Pipeline`.
 
-::: polars_features.select
+::: panelary.select

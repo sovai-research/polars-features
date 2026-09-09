@@ -14,4 +14,4 @@ Two families live here: `PanelSklearnRegressor` / `PanelSklearnClassifier` wrap
 convenience constructors that lazily import LightGBM with a graceful sklearn
 fallback.
 
-::: polars_features.models
+::: panelary.models

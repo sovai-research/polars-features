@@ -17,7 +17,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features.econ import IVXSelector, ivx, ivx_instrument, ivx_screen
+from panelary.econ import IVXSelector, ivx, ivx_instrument, ivx_screen
 
 
 # --------------------------------------------------------------------------- #

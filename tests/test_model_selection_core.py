@@ -11,7 +11,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from polars_features.core.model_selection import (
+from panelary.core.model_selection import (
     deflated_sharpe_ratio,
     probability_of_backtest_overfitting,
 )

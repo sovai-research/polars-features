@@ -1,7 +1,7 @@
 """``shapiq`` interop (v3): any-order Shapley interactions, panel-keyed.
 
 ``shapiq`` is an **optional** dependency (``pip install
-'polars-features[explain]'``). The interop tests are guarded with
+'panelary[explain]'``). The interop tests are guarded with
 ``pytest.importorskip``; the argument contract, the missing-dependency message
 and the pure-Polars matrix helper are tested unconditionally.
 """
@@ -12,8 +12,8 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_features._deps import have
-from polars_features.explain import (
+from panelary._deps import have
+from panelary.explain import (
     TimeAwareBackground,
     interaction_matrix,
     interaction_values,
@@ -31,7 +31,7 @@ class LinearStub:
         X = np.asarray(X, dtype=float)
         return X @ self.w + self.c * X[:, 0] * X[:, 1]
 
-    def panelkit_shap_values(self, X, background):
+    def panelary_shap_values(self, X, background):
         X = np.asarray(X, dtype=float)
         mu = (
             np.zeros_like(self.w)
@@ -111,7 +111,7 @@ def test_background_must_be_fitted(train, future):
 
 @pytest.mark.skipif(have("shapiq"), reason="`shapiq` is installed")
 def test_missing_shapiq_is_an_actionable_error(train, future):
-    with pytest.raises(ImportError, match=r"polars-features\[explain\]"):
+    with pytest.raises(ImportError, match=r"panelary\[explain\]"):
         interaction_values(
             LinearStub([1.0, 1.0, 1.0]),
             future,
