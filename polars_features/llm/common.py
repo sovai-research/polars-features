@@ -5,22 +5,35 @@ import os
 from collections.abc import Mapping
 from typing import Literal
 
-try:
-    import tiktoken
-    from openai import OpenAI
-    from tenacity import retry, stop_after_attempt, wait_random_exponential
-except ModuleNotFoundError as e:
-    raise ImportError(
-        "The `llm` feature requires the `openai`, `tenacity`, and `tiktoken` packages. Run `pip install polars_features[llm]` to install."
-    ) from e
+from polars_features import _deps
+
+# Routed through `_deps.require` rather than a bare `raise ImportError`, so the
+# message matches every other optional dependency in the package and the pip
+# hint is correct: the installable distribution is `polars-features`, not
+# `polars_features`, so the old hint could not be pasted into a shell.
+tiktoken = _deps.require("tiktoken", extra="llm", feature="The `llm` feature")
+OpenAI = _deps.require("openai", extra="llm", feature="The `llm` feature").OpenAI
+_tenacity = _deps.require("tenacity", extra="llm", feature="The `llm` feature")
+retry = _tenacity.retry
+stop_after_attempt = _tenacity.stop_after_attempt
+wait_random_exponential = _tenacity.wait_random_exponential
 
 
-openai_key = os.getenv("OPENAI_API_KEY")
-if openai_key is None:
-    raise ValueError(
-        "OPENAI_API_KEY environment variable must be set to use the `llm` feature."
-    )
-client = OpenAI(api_key=openai_key)
+def _get_client() -> OpenAI:
+    """Build the OpenAI client on first use.
+
+    Previously this module constructed the client at import time and raised
+    ``ValueError`` when ``OPENAI_API_KEY`` was unset -- so merely *importing*
+    ``polars_features.llm`` required a live API key, and the failure was a
+    ValueError during import rather than an actionable error at the call site.
+    """
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key is None:
+        raise ValueError(
+            "OPENAI_API_KEY environment variable must be set to use the `llm` feature."
+        )
+    return OpenAI(api_key=openai_key)
+
 
 MODEL_T = Literal["gpt-3.5-turbo", "gpt-4", "gpt-3.5-turbo-16k", "gpt-4-32k"]
 
@@ -77,7 +90,7 @@ def openai_call(
             f"Prompt exceeds token limit for model {model}. Checking with larger model..."
         )
         model = next_model
-    response = client.chat.completions.create(
+    response = _get_client().chat.completions.create(
         model=model, messages=messages, temperature=temperature, **kwargs
     )
     return response.choices[0].message.content.strip()

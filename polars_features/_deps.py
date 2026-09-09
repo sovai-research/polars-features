@@ -34,6 +34,7 @@ _MODULE_TO_EXTRA: dict[str, str] = {
     "openai": "llm",
     "anthropic": "llm",
     "tiktoken": "llm",
+    "tenacity": "llm",
     "iisignature": "signatures",
     "numba": "fast",
     "shapiq": "explain",
