@@ -73,9 +73,10 @@ from __future__ import annotations
 
 import math
 import warnings
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Callable, Literal, Sequence
+from typing import Any, Literal
 
 import numpy as np
 import polars as pl
@@ -93,9 +94,6 @@ from polars_features.evolve._types import (
     FitnessResult,
     Genome,
 )
-
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    from numpy.typing import NDArray
 
 __all__ = [
     "rank_ic",
@@ -250,7 +248,7 @@ def _transform_columns(
         out[~np.isfinite(out)] = np.nan
         return out
     out = np.empty(values.shape, dtype=np.float64)
-    for lo, hi in zip(starts[:-1], starts[1:]):
+    for lo, hi in zip(starts[:-1], starts[1:], strict=True):
         block = np.asarray(values[lo:hi], dtype=np.float64)
         ranks = _rank_block(block)
         if kind == "numerai":
@@ -270,7 +268,7 @@ def _transform_target(y: np.ndarray, starts: np.ndarray, kind: Metric) -> np.nda
     col = np.asarray(y, dtype=np.float64).reshape(-1, 1)
     if kind == "numerai":
         out = np.empty_like(col)
-        for lo, hi in zip(starts[:-1], starts[1:]):
+        for lo, hi in zip(starts[:-1], starts[1:], strict=True):
             block = col[lo:hi]
             finite = np.isfinite(block)
             mean = block[finite].mean() if finite.any() else 0.0
@@ -626,10 +624,7 @@ def _mean_lag_autocorr(dense: np.ndarray) -> np.ndarray | float:
     if dense.shape[0] < 2:
         return float("nan")
     per_pair = np.stack(
-        [
-            _masked_corr_axis0(dense[t], dense[t + 1])
-            for t in range(dense.shape[0] - 1)
-        ]
+        [_masked_corr_axis0(dense[t], dense[t + 1]) for t in range(dense.shape[0] - 1)]
     )
     out = _nanmean(per_pair, axis=0)
     return float(out[0]) if out.shape == (1,) else out
@@ -714,7 +709,7 @@ class AlphaPool:
         Tikhonov term added to ``M``'s diagonal before solving. Necessary, not
         cosmetic: near-duplicate alphas make ``M`` numerically singular, which
         is exactly the regime the 0.9746 example lives in.
-    cond_max : float, default 1e8
+    cond_max : float, default 1e6
         Conditioning guard. When the ridge solve returns a weight vector larger
         than ``cond_max * ||c||`` the pool falls back to the truncated
         pseudo-inverse, dropping the unidentifiable directions instead of
@@ -738,7 +733,7 @@ class AlphaPool:
         objective: PoolObjective = "ic",
         lcb_beta: float = 1.0,
         ridge: float = 1e-8,
-        cond_max: float = 1e8,
+        cond_max: float = 1e6,
     ) -> None:
         if max_size < 1:
             raise ValueError(f"`max_size` must be >= 1, got {max_size}.")
@@ -781,13 +776,14 @@ class AlphaPool:
             return np.zeros((0,), dtype=np.float64)
         a = m + self.ridge * np.eye(k, dtype=np.float64)
         if self.l1 <= 0.0:
+            w: np.ndarray | None
             try:
                 # NumPy 2.0 silently mis-solves ``solve(A, b)`` when the length
                 # of ``b`` equals the batch dimension. The trailing-axis form is
                 # the only safe spelling. See AGENTS.md invariant 4.
                 w = np.linalg.solve(a, c[..., None])[..., 0]
             except np.linalg.LinAlgError:
-                w = None  # type: ignore[assignment]
+                w = None
             # Near-duplicate alphas make `M` rank-deficient, and estimation
             # noise can leave `c` with mass in the numerically null space. The
             # ridge would then *amplify* that mass into an enormous `w` and an
@@ -964,6 +960,7 @@ class AlphaPool:
         m_new[k, :k] = cross
         m_new[k, k] = 1.0
         c_new = np.concatenate([self._c, [mean_ic]])
+        ct_new: np.ndarray | None
         if self._ct is not None and vec.shape[0] == self._ct.shape[1]:
             ct_new = np.vstack([self._ct, vec[None, :]])
         elif k == 0 and vec.shape[0] > 1:
@@ -1085,12 +1082,12 @@ def noise_matrix(
         starts = _group_starts(np.asarray(time_code, dtype=np.int64), n_times)
         for j in range(n_shuffled):
             src = base[:, j % base.shape[1]].copy()
-            for lo, hi in zip(starts[:-1], starts[1:]):
+            for lo, hi in zip(starts[:-1], starts[1:], strict=True):
                 if hi > lo:
                     src[lo:hi] = rng.permutation(src[lo:hi])
             cols.append(src)
     for _ in range(n_gaussian):
-        cols.append(rng.standard_normal(n_rows))
+        cols.append(np.asarray(rng.standard_normal(n_rows), dtype=np.float64))
     if not cols:
         return np.empty((n_rows, 0), dtype=np.float64)
     return np.column_stack(cols)
@@ -1178,7 +1175,9 @@ def descriptors(
         lib = np.asarray(library, dtype=np.float64)
         if lib.ndim == 1:
             lib = lib[:, None]
-        z_lib, _ = _standardize_by_date(_transform_columns(lib, starts, "rank_ic"), starts)
+        z_lib, _ = _standardize_by_date(
+            _transform_columns(lib, starts, "rank_ic"), starts
+        )
         n_ok = np.maximum((counts > 0).sum(axis=0), 1)
         cross = np.abs((z_lib.T @ z_self) / n_ok[None, :])
         max_corr = np.clip(cross.max(axis=0), 0.0, 1.0)
@@ -1278,6 +1277,13 @@ class PanelEvaluator:
     ablation found the mutual-information and correlation shortcuts strictly
     worse than evaluating the model, so no such shortcut is offered here.)
 
+    It is off by default in ``mode="ic"`` and that is a measurement, not an
+    oversight: with a fixed target the per-date IC matrix does not depend on the
+    fold, so it is computed once per column chunk and the rungs would only
+    re-rank the same rows (0.84 s with halving against 0.58 s without, on 64
+    columns x 90k rows). In ``mode="residual"`` every fold refits a baseline, so
+    eliminating candidates early removes real work and halving is on.
+
     Parameters
     ----------
     panel : polars.DataFrame | polars.LazyFrame | PanelFrame
@@ -1320,7 +1326,14 @@ class PanelEvaluator:
     n_time_buckets : int | None, keyword-only, default None
         Time buckets per fold for the :class:`CaseMatrix`. ``None`` targets
         roughly 120 cases in total (inside the 50-500 band the type documents).
-    halving : bool, keyword-only, default True
+    halving : bool | None, keyword-only, default None
+        ``None`` picks the setting that actually helps: **on** for
+        ``mode="residual"``, **off** for ``mode="ic"``. Measured on 64 columns x
+        90k rows: halving cost 0.84 s against 0.58 s without it in ``"ic"``
+        mode, because there the per-date IC matrix is fold-independent and
+        already computed once, so the rungs re-rank rows for nothing. In
+        ``"residual"`` mode each fold refits a baseline, so dropping candidates
+        early removes real work. Pass an explicit bool to override.
     halving_rate : float, keyword-only, default 0.5
     min_survivors : int, keyword-only, default 8
     chunk_size : int, keyword-only, default 64
@@ -1351,7 +1364,7 @@ class PanelEvaluator:
         library: np.ndarray | Sequence[str] | None = None,
         orient_sign: bool = True,
         n_time_buckets: int | None = None,
-        halving: bool = True,
+        halving: bool | None = None,
         halving_rate: float = 0.5,
         min_survivors: int = 8,
         chunk_size: int = 64,
@@ -1396,7 +1409,7 @@ class PanelEvaluator:
         self.ridge_alpha = float(ridge_alpha)
         self.pool = pool
         self.orient_sign = bool(orient_sign)
-        self.halving = bool(halving)
+        self.halving = (mode == "residual") if halving is None else bool(halving)
         self.halving_rate = float(halving_rate)
         self.min_survivors = int(min_survivors)
         self.chunk_size = int(chunk_size)
@@ -1436,7 +1449,9 @@ class PanelEvaluator:
         # contiguous slices (the whole reduceat design), *and* every entity's
         # rows stay in time order, which is what `.over(entity)` rolling
         # operators require of the compiler.
-        return lf.drop_nulls(subset=[self.target]).sort([self.ctx.time, self.ctx.entity])
+        return lf.drop_nulls(subset=[self.target]).sort(
+            [self.ctx.time, self.ctx.entity]
+        )
 
     def _materialise_keys(self) -> None:
         keys = self._lf.select(
@@ -1660,9 +1675,9 @@ class PanelEvaluator:
         )
         return z
 
-    def _ic_matrix(self, values: np.ndarray, y: np.ndarray) -> tuple[
-        np.ndarray, np.ndarray, np.ndarray
-    ]:
+    def _ic_matrix(
+        self, values: np.ndarray, y: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Per-date ICs of a column block.
 
         Returns ``(ic (T, k), z (n_rows, k), counts (T, k))``. The per-date IC is
@@ -1809,9 +1824,7 @@ class PanelEvaluator:
         if vals.ndim == 1:
             vals = vals[:, None]
         if vals.shape[0] != self.n_rows:
-            raise ValueError(
-                f"expected {self.n_rows} rows, got {vals.shape[0]}."
-            )
+            raise ValueError(f"expected {self.n_rows} rows, got {vals.shape[0]}.")
         k = vals.shape[1]
         comp = [0] * k if complexity is None else [int(c) for c in complexity]
         if len(comp) != k:
@@ -1899,9 +1912,7 @@ class PanelEvaluator:
         Feed the result to :func:`null_threshold` together with the real scores.
         """
         base = (
-            self._lf.select(
-                [pl.col(c).cast(pl.Float64) for c in self.ctx.base_columns]
-            )
+            self._lf.select([pl.col(c).cast(pl.Float64) for c in self.ctx.base_columns])
             .collect()
             .to_numpy()
             .astype(np.float64, copy=False)

@@ -87,7 +87,8 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from typing import cast
 
 import numpy as np
 
@@ -219,26 +220,28 @@ def _resolve_out_unit(op: Op, arg_units: Sequence[str]) -> Unit:
         return op.out_unit
     wild = _wildcards(op)
     if wild and len(arg_units) > wild[0]:
-        return arg_units[wild[0]]  # type: ignore[return-value]
+        return cast("Unit", arg_units[wild[0]])
     if arg_units:
-        return arg_units[0]  # type: ignore[return-value]
+        return cast("Unit", arg_units[0])
     return "score"
 
 
 _SAME_UNIT_CACHE: frozenset[str] | None = None
 
 
-_EXTERNAL_ACCEPTS: object = ...
+_EXTERNAL_ACCEPTS: Callable[[Op, Sequence[str]], bool] | None = None
+_EXTERNAL_LOOKED_UP = False
 
 
-def _external_accepts():  # type: ignore[no-untyped-def]
+def _external_accepts() -> Callable[[Op, Sequence[str]], bool] | None:
     """``._ops.accepts`` if importable, else ``None``."""
-    global _EXTERNAL_ACCEPTS
-    if _EXTERNAL_ACCEPTS is ...:
+    global _EXTERNAL_ACCEPTS, _EXTERNAL_LOOKED_UP
+    if not _EXTERNAL_LOOKED_UP:
+        _EXTERNAL_LOOKED_UP = True
         try:
-            from ._ops import accepts  # noqa: PLC0415
+            from . import _ops  # noqa: PLC0415
 
-            _EXTERNAL_ACCEPTS = accepts
+            _EXTERNAL_ACCEPTS = getattr(_ops, "accepts", None)
         except Exception:
             _EXTERNAL_ACCEPTS = None
     return _EXTERNAL_ACCEPTS
@@ -256,9 +259,9 @@ def _same_unit_ops() -> frozenset[str]:
     global _SAME_UNIT_CACHE
     if _SAME_UNIT_CACHE is None:
         try:
-            from ._ops import SAME_UNIT_OPS  # noqa: PLC0415
+            from . import _ops  # noqa: PLC0415
 
-            _SAME_UNIT_CACHE = frozenset(SAME_UNIT_OPS)
+            _SAME_UNIT_CACHE = frozenset(getattr(_ops, "SAME_UNIT_OPS", ()))
         except Exception:
             _SAME_UNIT_CACHE = frozenset()
     return _SAME_UNIT_CACHE
@@ -1001,25 +1004,25 @@ def ramped_population(
         cap = min_depth + rung
         span = max_genes - min_genes
         n_genes = min_genes + (int(rng.integers(span + 1)) if span else 0)
-        genome: Genome | None = None
-        for _ in range(max_tries):
-            cand = _random_genome(
+
+        def draw(n: int = n_genes, cap: int = cap) -> Genome:
+            return _random_genome(
                 ctx,
                 grammar,
-                n_genes=n_genes,
+                n_genes=n,
                 max_depth=cap,
                 rng=rng,
                 nested=nested_constraints,
                 out_unit=out_unit,
                 p_reuse=0.7,
             )
-            key = structural_key(cand, grammar=grammar)
-            if not dedup or key not in seen:
-                seen.add(key)
-                genome = cand
+
+        genome = draw()
+        for _ in range(max_tries - 1):
+            if not dedup or structural_key(genome, grammar=grammar) not in seen:
                 break
-            genome = cand
-        assert genome is not None  # noqa: S101 - loop runs at least once
+            genome = draw()
+        seen.add(structural_key(genome, grammar=grammar))
         out.append(genome)
     return out
 

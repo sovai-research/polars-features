@@ -91,6 +91,12 @@ class EvolveConfig:
         candidate must beat the best *decoy*, not merely beat zero.
     max_library : int
         Cap on the returned decorrelated pool.
+    holdout_frac : float
+        Fraction of the *latest* dates withheld from the search entirely and
+        used only to score the finished pool. Set to 0.0 to disable, but note
+        that the search diagnostic is meaningless without it: correlating two
+        halves of the same cross-validated score measures consistency, not
+        generalisation, and will report "signal" on pure noise.
     seed : int
         Explicit seed; the whole search is reproducible from it.
     """
@@ -106,6 +112,7 @@ class EvolveConfig:
     reset_every: int | None = None
     noise_features: int = 20
     max_library: int = 25
+    holdout_frac: float = 0.2
     crossover_rate: float = 0.5
     mutation_rate: float = 0.4
     elite_frac: float = 0.05
@@ -166,12 +173,14 @@ class EvolveResult:
             "PanelKit evolutionary feature search",
             "=" * 44,
             f"candidates evaluated (M) : {led.get('n_trials', 'n/a')}",
-            f"implied independent (N)  : {led.get('implied_independent_trials', 'n/a')}",
-            f"mean pairwise corr (rho) : {led.get('rho_bar', 'n/a')}",
+            f"implied independent (N)  : {led.get('n_independent_trials', 'n/a')}",
+            f"mean pairwise corr (rho) : {led.get('mean_pairwise_correlation', 'n/a')}",
             f"best raw score           : {led.get('best_score', 'n/a')}",
             f"deflated Sharpe (DSR)    : {led.get('deflated_sharpe', 'n/a')}",
+            f"E[max] under the null    : {led.get('expected_max_under_null', 'n/a')}",
             f"P(backtest overfit)      : {led.get('pbo', 'n/a')}",
             f"verdict                  : {led.get('verdict', 'n/a')}",
+            f"reason                   : {led.get('reason', '')}",
             "",
             f"features returned        : {len(self.library)}",
         ]
@@ -278,7 +287,7 @@ def evolve_features(
         subgraph_crossover,
         to_infix,
     )
-    from ._honest import TrialLedger, search_diagnostics
+    from ._honest import TrialLedger
     from ._ops import default_grammar
     from ._select import Archive, eps_lexicase
 
@@ -286,6 +295,7 @@ def evolve_features(
     rng = np.random.default_rng(cfg.seed)
 
     lf, entity_col, time_col = _resolve_panel(panel, entity, time)
+    search_lf, holdout_lf = _time_split(lf, time_col, cfg.holdout_frac)
     cols = (
         list(base_columns)
         if base_columns
@@ -301,9 +311,34 @@ def evolve_features(
         time=time_col,
     )
     grammar = default_grammar(units)
-    evaluator = PanelEvaluator(lf, ctx=ctx, target=target, seed=cfg.seed)
+    evaluator = PanelEvaluator(search_lf, ctx=ctx, target=target, seed=cfg.seed)
     ledger = TrialLedger(seed=cfg.seed)
-    archive = Archive(seed=cfg.seed)  # CVT binning, annealed thresholds
+    # Bin on the three axes that actually vary during a search. `horizon` is
+    # not separately reported by the evaluator, and `max_corr` is identically
+    # zero until a library is seeded -- including degenerate axes does not add
+    # diversity, it destroys it, by collapsing every candidate into a handful
+    # of cells (measured: 43 elites -> 3 when two of five axes are constant).
+    # Grid binning, not CVT, and one bin on the axes that cannot vary during a
+    # search: `horizon` is not separately reported by the evaluator and
+    # `max_corr` is identically zero until a library is seeded. CVT samples
+    # centroids uniformly through the full box, so constant axes push every
+    # candidate onto a handful of centroids -- measured here, that collapsed a
+    # 480-candidate archive to 4 elites. A grid with `bins=1` on those axes
+    # simply ignores them, leaving turnover x complexity x coverage to do the
+    # binning: 6 x 5 x 4 = 120 reachable cells.
+    archive = Archive(
+        binning="grid",
+        n_dims=5,
+        bins=(6, 1, 1, 5, 4),
+        bounds=(
+            (0.0, 2.0),  # turnover = 1 - cross-sectional rank autocorrelation
+            (0.0, 1.0),  # horizon  (unused: 1 bin)
+            (0.0, 1.0),  # max_corr (unused: 1 bin)
+            (0.0, float(cfg.n_genes)),  # active complexity
+            (0.0, 1.0),  # coverage
+        ),
+        seed=cfg.seed,
+    )
 
     islands = [
         ramped_population(
@@ -341,9 +376,17 @@ def evolve_features(
                 if not np.isfinite(score):
                     score = 0.0
                     n_failed += 1
+                # Pass the per-case vector as the candidate's series. Without
+                # it the ledger cannot estimate the cross-candidate
+                # correlation, and therefore cannot tell 4,000 near-duplicate
+                # trials from 4,000 independent ones -- which is the whole
+                # point of the implied-independent-trials correction.
+                series = np.asarray(res.per_case, dtype=np.float64)
+                series = series if np.isfinite(series).any() else None
                 ledger.record(
                     structural_key(genome),
                     score,
+                    series=series,
                     held_out=oos if np.isfinite(oos) else 0.0,
                     complexity=res.complexity,
                     generation=gen,
@@ -377,10 +420,16 @@ def evolve_features(
             islands = _migrate(islands, rng)
 
     library = _select_library(archive, ctx, cfg, to_infix, complexity)
-    diagnostics = search_diagnostics(
-        np.asarray(is_scores, dtype=np.float64),
-        np.asarray(oos_scores, dtype=np.float64),
+
+    # The only honest generalisation check: score the archive's elites on dates
+    # the search never saw. Correlating two halves of the same cross-validated
+    # score would measure consistency, not generalisation -- it reports
+    # "signal" on pure noise, which is precisely the self-deception this module
+    # exists to prevent.
+    diagnostics = _holdout_diagnostics(
+        archive, holdout_lf, ctx, target=target, seed=cfg.seed
     )
+    diagnostics.setdefault("n_search_candidates", len(is_scores))
     summary = ledger.summary()
     summary["n_failed_evaluations"] = n_failed
     return EvolveResult(
@@ -511,13 +560,14 @@ def _select_library(
     ranked = sorted(elites, key=lambda e: -float(e[1]))[: cfg.max_library]
     out: list[tuple[Genome, FitnessResult, str]] = []
     for genome, score, desc in ranked:
+        turnover, cplx, coverage = _unpack_descriptor(desc, genome, complexity)
         res = FitnessResult(
             score=float(score),
             per_case=np.asarray([], dtype=np.float64),
-            complexity=int(getattr(desc, "complexity", complexity(genome))),
-            turnover=float(getattr(desc, "turnover", float("nan"))),
-            max_corr_to_library=float(getattr(desc, "max_corr", float("nan"))),
-            coverage=float(getattr(desc, "coverage", float("nan"))),
+            complexity=cplx,
+            turnover=turnover,
+            max_corr_to_library=float("nan"),
+            coverage=coverage,
         )
         out.append((genome, res, to_infix(genome, ctx)))
     return out
@@ -544,13 +594,21 @@ def _split_cases(res: FitnessResult) -> tuple[float, float]:
 
 
 def _descriptors_of(res: FitnessResult) -> Descriptors:
-    """Build archive descriptors from an already-computed fitness result.
+    """Behavioural coordinates for the quality-diversity archive.
 
-    :class:`~._types.FitnessResult` already carries every behavioural axis the
-    archive bins on, computed on training folds only, so there is nothing to
-    recompute here. ``horizon`` is not separately reported by the evaluator; we
-    use turnover as its proxy, since a fast-turning feature is by construction
-    a short-horizon one.
+    Only three of the five axes carry information during a search, and the
+    archive is configured with a single bin on the other two (see
+    :func:`evolve_features`). Each of the three is economically meaningful:
+
+    ``turnover``
+        Separates slow, value-like signals from fast reversal ones, and
+        proxies tradability directly.
+    ``complexity``
+        Reserves cells for simple expressions -- a better-behaved parsimony
+        pressure than a scalarised size penalty, since it needs no weight.
+    ``coverage``
+        Keeps sparse, event-driven features alive; they would otherwise always
+        be dominated by dense ones.
     """
 
     def _finite(x: float, default: float = 0.0) -> float:
@@ -559,8 +617,123 @@ def _descriptors_of(res: FitnessResult) -> Descriptors:
 
     return Descriptors(
         turnover=_finite(res.turnover),
-        horizon=_finite(res.turnover),
+        horizon=0.0,
         max_corr=_finite(res.max_corr_to_library),
         complexity=int(res.complexity),
         coverage=_finite(res.coverage),
     )
+
+
+def _time_split(
+    lf: pl.LazyFrame, time_col: str, frac: float
+) -> tuple[pl.LazyFrame, pl.LazyFrame | None]:
+    """Withhold the latest ``frac`` of distinct dates from the search entirely.
+
+    Split on *distinct dates*, not rows, so every entity is cut at the same
+    calendar point -- a row-quantile split would leak, because entities with
+    more observations would contribute later dates to the training side.
+    """
+    if frac <= 0.0:
+        return lf, None
+    times = lf.select(pl.col(time_col).unique().sort()).collect().to_series().to_list()
+    if len(times) < 10:
+        return lf, None
+    cut = times[max(1, int(round(len(times) * (1.0 - frac)))) - 1]
+    return lf.filter(pl.col(time_col) <= cut), lf.filter(pl.col(time_col) > cut)
+
+
+def _holdout_diagnostics(
+    archive: Any,
+    holdout_lf: pl.LazyFrame | None,
+    ctx: EvalContext,
+    *,
+    target: str,
+    seed: int,
+    max_candidates: int = 200,
+) -> dict[str, Any]:
+    """Score archive elites on unseen dates and correlate against search score.
+
+    This is the Numerai "Signal Miner" diagnostic: plot every candidate's
+    in-search score against its held-out score, not just the winners'. If the
+    cloud is round, the search found nothing.
+
+    No cross-validation is used here, deliberately. The holdout dates were
+    withheld from the search entirely, so a plain per-date rank IC on them is
+    already an honest out-of-sample number -- and running purged CV inside a
+    short holdout window mostly produces NaNs.
+    """
+    if holdout_lf is None:
+        return {
+            "verdict": (
+                "NO HOLDOUT: holdout_frac=0, so no generalisation check was "
+                "performed. Treat the reported scores as in-sample only."
+            )
+        }
+    elites = archive.elites()
+    if len(elites) < 5:
+        return {"verdict": f"INSUFFICIENT: only {len(elites)} archive elites to score."}
+    elites = sorted(elites, key=lambda e: -float(e[1]))[:max_candidates]
+    genomes = [g for g, _s, _d in elites]
+    search_scores = np.asarray([float(s) for _g, s, _d in elites], dtype=np.float64)
+
+    from ._compile import compile_population
+    from ._fitness import rank_ic
+    from ._honest import search_diagnostics
+
+    try:
+        out_lf, cols = compile_population(
+            genomes, ctx, holdout_lf, keep=(target,), drop_intermediates=True
+        )
+        uniq = list(dict.fromkeys(cols))
+        frame = out_lf.select(
+            [pl.col(ctx.time), pl.col(target), *[pl.col(c) for c in uniq]]
+        ).collect()
+        pos = {c: i for i, c in enumerate(uniq)}
+        held = np.asarray(
+            [
+                rank_ic(
+                    frame[uniq[pos[c]]].to_numpy(),
+                    frame[target].to_numpy(),
+                    by_time=frame[ctx.time].to_numpy(),
+                )
+                for c in cols
+            ],
+            dtype=np.float64,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        return {"verdict": f"HOLDOUT FAILED: {type(exc).__name__}: {exc}"}
+
+    ok = np.isfinite(search_scores) & np.isfinite(held)
+    if int(ok.sum()) < 5:
+        return {
+            "verdict": (
+                f"INSUFFICIENT: only {int(ok.sum())} of {ok.size} elites scored "
+                "finitely on the holdout."
+            )
+        }
+    out = dict(search_diagnostics(search_scores[ok], held[ok]))
+    out["n_holdout_candidates"] = int(ok.sum())
+    out["holdout_mean_ic"] = float(np.mean(held[ok]))
+    return out
+
+
+def _unpack_descriptor(
+    desc: Any, genome: Genome, complexity: Any
+) -> tuple[float, int, float]:
+    """Read (turnover, complexity, coverage) back out of an archive record.
+
+    The archive stores whatever it was given, which for this search is the
+    3-vector from :func:`_descriptor_vector`. Accept a :class:`~._types.Descriptors`
+    too, so a caller driving the archive directly still gets sensible output.
+    """
+    if isinstance(desc, Descriptors):
+        return (
+            float(desc.turnover),
+            int(desc.complexity),
+            float(desc.coverage),
+        )
+    try:
+        turnover, cplx, coverage = (float(x) for x in tuple(desc)[:3])
+        return turnover, int(cplx), coverage
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return float("nan"), int(complexity(genome)), float("nan")
