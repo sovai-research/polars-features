@@ -12,8 +12,10 @@ repos:
     rev: 0.7.1
     hooks:
       - id: nbstripout
+  # Keep this rev in sync with the pinned `uvx ruff@<version>` in
+  # .github/workflows/ci.yml, so local hooks and CI never disagree.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.15.10
     hooks:
       - id: ruff
         types_or: [python, pyi, jupyter]

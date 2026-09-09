@@ -44,15 +44,18 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install ruff
-        # ruff lives in the `dev` extra; install just the tooling we need.
-        run: uv pip install --system "ruff>=0.8.0"
-
+      # `uv pip install --system` cannot be used here: the hosted runner's
+      # system interpreter is PEP 668 externally-managed, so it fails with
+      # "The interpreter at /usr is externally managed". `uvx` runs ruff from
+      # an ephemeral, cached environment instead -- no venv, no system writes.
+      #
+      # The version is pinned and MUST match `.pre-commit-config.yaml`'s
+      # ruff-pre-commit rev, so a contributor's hooks and CI never disagree.
       - name: ruff check
-        run: ruff check .
+        run: uvx ruff@0.15.10 check .
 
       - name: ruff format --check
-        run: ruff format --check .
+        run: uvx ruff@0.15.10 format --check .
 
   # ---------------------------------------------------------------------------
   # Type-check (mypy). Blocking. mypy config (files = ["polars_features"])

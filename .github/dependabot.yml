@@ -9,14 +9,9 @@ updates:
       - dependencies
       - github-actions
 
-  # Rust crate dependencies (Cargo.toml / Cargo.lock).
-  - package-ecosystem: cargo
-    directory: "/"
-    schedule:
-      interval: weekly
-    labels:
-      - dependencies
-      - rust
+  # NOTE: the `cargo` ecosystem was removed in 0.4.0 along with the Rust
+  # extension. There is no Cargo.toml in the tree any more, so every scheduled
+  # cargo run failed ("Dependabot Updates" / cargo, see the Actions tab).
 
   # Python dependencies (pyproject.toml).
   - package-ecosystem: pip
