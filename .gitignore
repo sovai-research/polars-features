@@ -9,6 +9,11 @@ catboost_info
 bin/
 .data
 
+# Datasets (never commit data; the repo already carries a large tracked data/
+# tree from before this rule -- these patterns stop it growing any further).
+data/
+*.parquet
+
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,pycharm,macos,windows,python,rust,linux,asdf
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,pycharm,macos,windows,python,rust,linux,asdf
 
