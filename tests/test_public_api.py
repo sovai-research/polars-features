@@ -113,11 +113,15 @@ def test_backtesting_imports_at_all() -> None:
 
 def test_public_modules_are_reachable() -> None:
     """Top-level public .py modules resolve too (excluding internal plumbing)."""
+    # Skip the lazy ones: `hasattr` propagates ImportError, so probing
+    # e.g. `plotting` without the `viz` extra raises instead of returning
+    # False. test_subpackage_is_reachable already covers those by name.
     unreachable = [
         p.stem
         for p in _ROOT.glob("*.py")
         if not p.stem.startswith("_")
         and p.stem not in _INTERNAL_MODULES
+        and p.stem not in pk._LAZY_SUBMODULES
         and not hasattr(pk, p.stem)
     ]
     assert not unreachable, f"unreachable public modules: {unreachable}"

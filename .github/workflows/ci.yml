@@ -44,6 +44,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # No lockfile is committed, so the default glob (**/uv.lock,
+          # **/requirements*.txt) matches nothing and the cache is never
+          # invalidated -- setup-uv warns about exactly this. Key it on the
+          # file that actually declares our dependencies.
+          cache-dependency-glob: "pyproject.toml"
 
       # `uv pip install --system` cannot be used here: the hosted runner's
       # system interpreter is PEP 668 externally-managed, so it fails with
@@ -73,6 +78,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # No lockfile is committed, so the default glob (**/uv.lock,
+          # **/requirements*.txt) matches nothing and the cache is never
+          # invalidated -- setup-uv warns about exactly this. Key it on the
+          # file that actually declares our dependencies.
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
         run: uv python install 3.10
@@ -127,17 +137,24 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # No lockfile is committed, so the default glob (**/uv.lock,
+          # **/requirements*.txt) matches nothing and the cache is never
+          # invalidated -- setup-uv warns about exactly this. Key it on the
+          # file that actually declares our dependencies.
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
       - name: Create venv & install (dev + recommended + test-only deps)
-        # pandas is a *test-only* dependency (tests/conftest.py builds pandas
-        # fixtures and benchmarks compare against it). It must never become a
-        # runtime dependency -- tests/test_import_hygiene.py enforces that.
+        # pandas and pyarrow are *test-only* dependencies: tests/conftest.py
+        # builds pandas fixtures and calls `pl.from_pandas(...)` (line 49),
+        # which needs pyarrow for anything but simple numpy-backed columns.
+        # Neither may ever become a runtime dependency --
+        # tests/test_import_hygiene.py enforces that.
         run: |
           uv venv
-          uv pip install -e ".[dev,recommended]" pandas build
+          uv pip install -e ".[dev,recommended]" pandas pyarrow build
 
       - name: Run tests
         # The 40-minute forecasting suite runs nightly, not per-PR.
@@ -184,6 +201,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # No lockfile is committed, so the default glob (**/uv.lock,
+          # **/requirements*.txt) matches nothing and the cache is never
+          # invalidated -- setup-uv warns about exactly this. Key it on the
+          # file that actually declares our dependencies.
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
         run: uv python install 3.12
@@ -193,7 +215,7 @@ jobs:
         # variant; it is deliberately NOT part of the package's dependencies.
         run: |
           uv venv
-          uv pip install "${{ matrix.variant.spec }}" pytest pytest-xdist hypothesis pandas build
+          uv pip install "${{ matrix.variant.spec }}" pytest pytest-xdist pytest-benchmark hypothesis pandas pyarrow build
 
       - name: Guardrails (import hygiene, dependency drift, wheel shape)
         run: |
@@ -247,6 +269,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # No lockfile is committed, so the default glob (**/uv.lock,
+          # **/requirements*.txt) matches nothing and the cache is never
+          # invalidated -- setup-uv warns about exactly this. Key it on the
+          # file that actually declares our dependencies.
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
         run: uv python install 3.12
@@ -286,6 +313,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # No lockfile is committed, so the default glob (**/uv.lock,
+          # **/requirements*.txt) matches nothing and the cache is never
+          # invalidated -- setup-uv warns about exactly this. Key it on the
+          # file that actually declares our dependencies.
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
         run: uv python install 3.12

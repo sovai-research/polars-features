@@ -57,6 +57,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # No lockfile is committed, so the default glob (**/uv.lock,
+          # **/requirements*.txt) matches nothing and the cache is never
+          # invalidated -- setup-uv warns about exactly this. Key it on the
+          # file that actually declares our dependencies.
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Set up Python
         run: uv python install 3.12

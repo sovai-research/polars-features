@@ -19,10 +19,19 @@ from polars_features._deps import have
 from polars_features.feature_extractors import _cusum_events, _cusum_events_py
 
 # Directory holding the Rust-captured parity baselines.
-_BASELINE_DIR = Path(
-    "/private/tmp/claude-501/-Users-dereksnow-Sovai-Github-polars-features/"
-    "d8bf7da3-ddf1-495a-b145-7426c3d61887/scratchpad"
-)
+#
+# These were captured from the Rust plugin that 0.4.0 removed, so they cannot be
+# regenerated -- and the path they were read from was an ephemeral per-session
+# scratchpad that no longer exists, which meant these six tests had been failing
+# with FileNotFoundError on every machine and in every CI run.
+#
+# The files belong next to the repo's other golden fixture
+# (tests/data/perf_parity_golden.json). Drop
+# `cusum_baseline_<threshold>_<drift>.json` in there and the tests light up
+# again; until then they skip loudly rather than fail silently or, worse, get
+# "fixed" by regenerating the expectations from the implementation they are
+# supposed to be checking.
+_BASELINE_DIR = Path(__file__).parent / "data"
 
 _WARMUP = 10
 _CASES = [(1.0, 0.0), (2.0, 0.5), (5.0, 0.0)]
@@ -34,6 +43,21 @@ def _make_signal() -> np.ndarray:
     return np.concatenate([rng.standard_normal(60), rng.standard_normal(60) + 3.0])
 
 
+_HAVE_BASELINES = all(
+    (_BASELINE_DIR / f"cusum_baseline_{thr}_{drift}.json").exists()
+    for thr, drift in _CASES
+)
+_NEEDS_BASELINES = pytest.mark.skipif(
+    not _HAVE_BASELINES,
+    reason=(
+        "Rust parity baselines missing from tests/data/. They were captured "
+        "from the Rust plugin removed in 0.4.0 and cannot be regenerated; see "
+        "the note on _BASELINE_DIR."
+    ),
+)
+
+
+@_NEEDS_BASELINES
 @pytest.mark.parametrize(("threshold", "drift"), _CASES)
 def test_matches_rust_baseline(threshold: float, drift: float) -> None:
     baseline = json.loads(
@@ -45,6 +69,7 @@ def test_matches_rust_baseline(threshold: float, drift: float) -> None:
     assert got.tolist() == baseline
 
 
+@_NEEDS_BASELINES
 @pytest.mark.parametrize(("threshold", "drift"), _CASES)
 def test_expr_matches_rust_baseline(threshold: float, drift: float) -> None:
     """The ``.ts.cusum`` expression reproduces the baseline exactly."""
