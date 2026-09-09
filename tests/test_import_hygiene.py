@@ -9,7 +9,8 @@ that makes a regression loud:
   ``sys.modules``;
 * neither may the eagerly-imported feature modules (``feature_extractors``,
   ``catch22``, ``reduce``, ``cluster``, ``select``);
-* the cold import must stay inside a wall-clock budget.
+* the cold import must stay inside a wall-clock budget, scaled by the
+  machine's own speed so the guard measures Panelary and not the runner.
 
 Every check runs in a **fresh subprocess** so the answer is not polluted by
 whatever the pytest session itself has already imported (pytest's own conftest
@@ -38,12 +39,19 @@ FORBIDDEN_MODULES = (
     "umap",
 )
 
-#: Cold-import wall-clock budget in milliseconds.  Measured locally at ~78 ms on
-#: CPython 3.13 (polars itself is ~70 ms of that), so 300 ms leaves ~4x headroom
-#: for slower/cold CI runners while still catching a real regression (e.g. an
+#: Cold-import wall-clock budget in milliseconds, *on a reference-speed machine*.
+#: Measured locally at ~78 ms on CPython 3.13 (polars itself is ~70 ms of that),
+#: so 300 ms leaves ~4x headroom while still catching a real regression (e.g. an
 #: accidental eager ``import sklearn``, which costs >500 ms on its own).
 #: Override with ``PANELARY_IMPORT_BUDGET_MS`` for unusually slow machines.
 IMPORT_BUDGET_MS = float(os.environ.get("PANELARY_IMPORT_BUDGET_MS", "300"))
+
+#: What ``import polars`` costs on the machine ``IMPORT_BUDGET_MS`` was
+#: calibrated against.  ``test_import_time_within_budget`` measures polars in the
+#: same run and scales the budget by how much slower this machine is, so the
+#: assertion stays about *Panelary's module-level work* rather than about the
+#: runner's disk and CPU contention.  See that test for why this keeps its teeth.
+POLARS_REFERENCE_MS = 70.0
 
 #: Number of fresh subprocesses to time; the *minimum* is used so a single
 #: scheduler hiccup on a shared CI runner cannot fail the build.
@@ -156,16 +164,55 @@ def test_deps_module_is_stdlib_only():
 # --------------------------------------------------------------------------- #
 # 2. Cold-import time budget
 # --------------------------------------------------------------------------- #
+def _best_import_ms(module: str, repeats: int = _TIMING_REPEATS) -> float:
+    """Best-of-``repeats`` import time for ``module``, after a warm-up run.
+
+    Two things are deliberately excluded from the number this returns, because
+    neither is the module-level work the budget exists to police:
+
+    * **Bytecode compilation.**  On a fresh CI runner the first import of a
+      package compiles every ``.py`` to ``.pyc``; that showed up as a 13.5 s
+      outlier in one run.  The discarded warm-up run pays that cost (and warms
+      the page cache for polars' large shared object) before timing starts.
+    * **Scheduler noise.**  Taking the minimum, not the mean, means one stalled
+      run cannot fail the build.
+    """
+    _probe(module)  # warm-up: compile bytecode, populate the page cache
+    return min(_probe(module)["elapsed_ms"] for _ in range(repeats))
+
+
 def test_import_time_within_budget():
-    """Cold ``import panelary`` stays under the wall-clock budget."""
-    timings = [_probe("panelary")["elapsed_ms"] for _ in range(_TIMING_REPEATS)]
-    best = min(timings)
-    assert best <= IMPORT_BUDGET_MS, (
-        f"`import panelary` took {best:.0f} ms (best of {_TIMING_REPEATS}), "
-        f"over the {IMPORT_BUDGET_MS:.0f} ms budget. Timings: "
-        f"{[round(t) for t in timings]}. Either an eager heavy import crept in or "
-        "module-level work needs deferring; raise PANELARY_IMPORT_BUDGET_MS only "
-        "if the machine itself is slow."
+    """Cold ``import panelary`` stays under the wall-clock budget.
+
+    The budget is scaled by how slow *this machine* is, measured in the same run
+    by importing polars -- a fixed external package Panelary cannot influence.
+    Without that, the test measures the runner as much as the library: shared CI
+    runners have been seen taking 5x the local time for the identical import,
+    which is a fact about the runner, not a regression.
+
+    This keeps the guard's teeth because the two failure modes it exists to
+    catch do **not** move the polars yardstick:
+
+    * an eager ``import sklearn``/``scipy`` adds its several hundred ms to
+      Panelary only, so the ratio to polars blows out and the assertion fires;
+    * expensive module-level work (a registry built at import, a table
+      materialised) likewise lands entirely on the Panelary side.
+
+    Only a uniformly slow *machine* moves both numbers together, and that is
+    precisely the case the scaling is meant to forgive.
+    """
+    polars_ms = _best_import_ms("polars")
+    panelary_ms = _best_import_ms("panelary")
+    slowdown = max(1.0, polars_ms / POLARS_REFERENCE_MS)
+    budget = IMPORT_BUDGET_MS * slowdown
+    assert panelary_ms <= budget, (
+        f"`import panelary` took {panelary_ms:.0f} ms (best of "
+        f"{_TIMING_REPEATS}, after a warm-up), over the {budget:.0f} ms budget "
+        f"({IMPORT_BUDGET_MS:.0f} ms x {slowdown:.1f} for a machine on which "
+        f"`import polars` alone takes {polars_ms:.0f} ms vs the "
+        f"{POLARS_REFERENCE_MS:.0f} ms reference). Either an eager heavy import "
+        "crept in or module-level work needs deferring; raise "
+        "PANELARY_IMPORT_BUDGET_MS only if the machine itself is slow."
     )
 
 
@@ -175,10 +222,8 @@ def test_import_overhead_over_polars_is_small():
     A machine-independent companion to the absolute budget: polars alone
     dominates the import, so the *delta* is the part Panelary controls.
     """
-    polars_ms = min(_probe("polars")["elapsed_ms"] for _ in range(_TIMING_REPEATS))
-    panelary_ms = min(
-        _probe("panelary")["elapsed_ms"] for _ in range(_TIMING_REPEATS)
-    )
+    polars_ms = _best_import_ms("polars")
+    panelary_ms = _best_import_ms("panelary")
     overhead = panelary_ms - polars_ms
     # Locally ~8 ms; 150 ms is a generous ratchet that still catches an eager
     # sklearn/scipy import or an expensive module-level registry build.

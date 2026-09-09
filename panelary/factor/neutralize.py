@@ -6,10 +6,17 @@ de-correlates a *whole feature set against itself* — it turns a block of
 collinear characteristics into a set of mutually orthogonal (hence per-date
 uncorrelated) columns, via Gram-Schmidt or a QR decomposition.
 
-The decomposition needs a matrix, so it runs per date via ``map_groups`` +
-numpy, **never** a global scaler: each date's cross-section is centered and
-orthogonalized on its own, so no cross-date information leaks. Columns are
-centered before decomposition, so orthogonal columns are also uncorrelated.
+The decomposition needs a matrix, so it runs per date in numpy, **never** with
+a global scaler: each date's cross-section is centered and orthogonalized on
+its own, so no cross-date information leaks. Columns are centered before
+decomposition, so orthogonal columns are also uncorrelated.
+
+Groups are materialised as row-index lists (``group_by(...).agg(row_index)``)
+and the matrix is gathered with numpy fancy-indexing from a single whole-frame
+``to_numpy()``. That avoids ``GroupBy.map_groups`` -- which builds a DataFrame
+per group, concatenates them and needs a join to get back to row order, and
+which modern Polars refuses outright whenever the group keys are anything but
+plain column-name strings.
 """
 
 from __future__ import annotations
@@ -112,16 +119,29 @@ def orthogonalize(
     out_names = [f"{c}{suffix}" for c in cols]
 
     was_lazy = isinstance(frame, pl.LazyFrame)
-    eager = frame.collect() if was_lazy else frame
-    eager = eager.with_row_index("__orth_row__")
+    eager: pl.DataFrame = frame.collect() if isinstance(frame, pl.LazyFrame) else frame
 
-    def _fn(group: pl.DataFrame) -> pl.DataFrame:
-        mat = group.select(cols).to_numpy().astype(np.float64)
-        ortho = _orthogonalize_matrix(mat, method=method)
-        return group.select("__orth_row__").with_columns(
-            [pl.Series(out_names[j], ortho[:, j]) for j in range(len(cols))]
-        )
+    # One whole-frame conversion; every group is a numpy gather out of it. The
+    # per-group index lists come straight from Polars, so the grouping stays in
+    # Rust and only the linear algebra happens in Python.
+    values = eager.select(cols).to_numpy().astype(np.float64)
+    out = np.empty_like(values)
 
-    ortho_frame = eager.group_by(keys, maintain_order=True).map_groups(_fn)
-    merged = eager.join(ortho_frame, on="__orth_row__", how="left").drop("__orth_row__")
+    row_idx = "__orth_row__"
+    groups = (
+        eager.with_row_index(row_idx)
+        .group_by(keys, maintain_order=True)
+        .agg(pl.col(row_idx))
+        .get_column(row_idx)
+    )
+    for rows in groups:
+        take = rows.to_numpy()
+        # `take` holds one date's row positions (optionally x `by`), so the
+        # basis this block is decomposed against is built from that date's
+        # cross-section alone -- no other date's rows are ever gathered.
+        out[take] = _orthogonalize_matrix(values[take], method=method)
+
+    merged = eager.with_columns(
+        [pl.Series(out_names[j], out[:, j]) for j in range(len(cols))]
+    )
     return merged.lazy() if was_lazy else merged

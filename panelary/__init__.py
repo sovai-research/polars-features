@@ -9,8 +9,8 @@ frame namespaces, finance-grade cross-validation (:class:`PurgedKFold`,
 
 Panelary is built on the foundations of `functime <https://github.com/functime-org/functime>`_
 (Apache-2.0, actively maintained) and interoperates with functime and Nixtla rather
-than replacing them. The import/PyPI package is currently ``panelary``; the
-public rename to ``panelary`` is planned but not yet effective.
+than replacing them. The project is Panelary, the distribution is ``panelary``,
+and the import convention is ``import panelary as pn``.
 
 Public symbols are imported lazily and guarded: an optional component that fails to
 import emits a warning but never breaks the rest of the package. Whatever is actually
@@ -22,7 +22,9 @@ from __future__ import annotations
 import importlib as _importlib
 import warnings
 
-__version__ = "0.4.0"
+#: Kept in step with ``[project] version`` in ``pyproject.toml``; the two are
+#: asserted equal by ``tests/test_verbs.py``.
+__version__ = "0.5.0"
 
 __all__ = ["__version__"]
 
@@ -176,8 +178,13 @@ except ImportError as exc:
 else:
     __all__ += ["models"]
 
+# The subpackage is imported for its side effects, but deliberately **not**
+# bound to the name `select` here: the `pn.select(...)` verb wired at the
+# bottom owns it. Binding the module too would leave type checkers seeing
+# `pn.select` as a module and reporting "Module not callable" at every call
+# site. `from panelary.select import mrmr` and `pn.select.mrmr` both work.
 try:
-    from panelary import select as select
+    _importlib.import_module("panelary.select")
 except ImportError as exc:
     _warn_unavailable("panelary.select", exc)
 else:
@@ -192,16 +199,20 @@ else:
     __all__ += ["factor"]
 
 # --- Dimensionality reduction -----------------------------------------------
+# Imported for its side effects only; the `pn.reduce(...)` verb owns the name
+# (see the note on `select` above).
 try:
-    from panelary import reduce as reduce
+    _importlib.import_module("panelary.reduce")
 except ImportError as exc:
     _warn_unavailable("panelary.reduce", exc)
 else:
     __all__ += ["reduce"]
 
 # --- Clustering -------------------------------------------------------------
+# Imported for its side effects only; the `pn.cluster(...)` verb owns the name
+# (see the note on `select` above).
 try:
-    from panelary import cluster as cluster
+    _importlib.import_module("panelary.cluster")
 except ImportError as exc:
     _warn_unavailable("panelary.cluster", exc)
 else:
@@ -266,7 +277,52 @@ for _name in (
         __all__ += [_name]
 del _name
 
-#: Submodules that are reachable as ``pk.<name>`` but are **not** imported
+# --- The golden path: eight top-level verbs ---------------------------------
+# One verb per task, uniform signature, thin facade over the subpackages above
+# (see `panelary/_verbs.py`). This block must stay **last**, because `select`,
+# `cluster` and `reduce` are also subpackage names and the verb is what
+# `pn.select` / `pn.cluster` / `pn.reduce` must resolve to.
+#
+# Nothing is lost to that collision: those three verbs are `_SubpackageVerb`
+# instances, which forward any attribute they lack to the module of the same
+# name. So `pn.select(df, ...)`, `pn.select.mrmr`, `from panelary.select import
+# mrmr` and `import panelary.select as s` all work. The other five verbs shadow
+# nothing and are plain functions.
+#
+# `_verbs` imports polars, numpy and every subpackage *inside* the function
+# bodies, so wiring it here costs ~0 ms of import time.
+try:
+    from panelary._verbs import (
+        bubbles,
+        causal,
+        cluster,
+        features,
+        impute,
+        reduce,
+        regression,
+        select,
+    )
+except ImportError as exc:  # pragma: no cover - defensive
+    _warn_unavailable("panelary._verbs", exc)
+else:
+    # `cluster` / `reduce` / `select` are already in `__all__` as subpackages;
+    # the name now resolves to the verb, so don't list it twice.
+    __all__ += [
+        _verb
+        for _verb in (
+            "bubbles",
+            "causal",
+            "cluster",
+            "features",
+            "impute",
+            "reduce",
+            "regression",
+            "select",
+        )
+        if _verb not in __all__
+    ]
+
+#: Submodules that are reachable as ``pn.<name>`` but are **not** imported
 #: eagerly, because doing so would violate the light-core guarantee. Measured
 #: cost of importing them at ``import panelary`` time:
 #:
@@ -277,7 +333,7 @@ del _name
 #:   llm          raises outright unless the `llm` extra is installed
 #:
 #: They resolve on first attribute access via the PEP 562 hook below, so
-#: ``pk.forecasting`` works without making every ``import panelary``
+#: ``pn.forecasting`` works without making every ``import panelary``
 #: pay for it. They are deliberately absent from ``__all__`` so that
 #: ``from panelary import *`` cannot trigger a heavy or failing import.
 _LAZY_SUBMODULES = ("forecasting", "llm", "plotting", "backtesting")

@@ -26,9 +26,11 @@ pytestmark = pytest.mark.slow
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-#: Maximum built-wheel size.  The 0.4.0 pure-Python wheel measures ~0.29 MB;
-#: 1.5 MB leaves room for genuine growth while catching an accidentally
-#: vendored binary, dataset or notebook.  Override with
+#: Maximum built-wheel size.  The budget is 1.5 MB; the pure-Python wheel
+#: currently measures ~0.65 MB (it was ~0.29 MB in 0.4.0 -- `panelary/evolve/`
+#: and friends account for most of the growth), so there is still room to grow
+#: while catching an accidentally vendored binary, dataset or notebook.
+#: Override with
 #: ``PANELARY_WHEEL_BUDGET_MB`` if the budget is deliberately raised.
 WHEEL_BUDGET_MB = float(os.environ.get("PANELARY_WHEEL_BUDGET_MB", "1.5"))
 
@@ -132,9 +134,7 @@ def test_wheel_ships_only_the_package(built_wheel):
     """Top-level wheel contents are the package plus its ``.dist-info``."""
     with zipfile.ZipFile(built_wheel) as zf:
         tops = {n.split("/", 1)[0] for n in zf.namelist()}
-    unexpected = {
-        t for t in tops if t != "panelary" and not t.endswith(".dist-info")
-    }
+    unexpected = {t for t in tops if t != "panelary" and not t.endswith(".dist-info")}
     assert not unexpected, (
         f"wheel ships unexpected top-level entries {sorted(unexpected)}; only "
         "`panelary/` and the `.dist-info` directory belong in it."

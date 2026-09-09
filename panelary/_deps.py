@@ -40,8 +40,7 @@ _MODULE_TO_EXTRA: dict[str, str] = {
     "shap": "explain",
 }
 
-#: PyPI distribution name (for the pip hint). The import package is `panelary`
-#: but the installable project is `panelary`.
+#: PyPI distribution name (for the pip hint).
 _DIST_NAME = "panelary"
 
 

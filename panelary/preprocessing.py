@@ -585,8 +585,9 @@ def cafe_impute(
         Append a per-cell posterior standard deviation column ``<col>__cafe_sigma``
         for every imputed numeric column (NaN where the value was observed).
     add_recoverability : bool, default False
-        Append a per-cell recoverability certificate in ``[0, 1]`` as
-        ``<col>__cafe_recoverability`` (NaN where observed).
+        **Not supported.** Kept only so the keyword stays a stable part of the
+        signature; passing ``True`` raises :class:`NotImplementedError`. See the
+        Notes below.
     add_anomaly : bool, default False
         Append a single per-row outlier score column ``cafe_anomaly`` in
         ``[0, 1]`` (0 = perfect fit, 1 = strong outlier), causal per entity.
@@ -598,17 +599,42 @@ def cafe_impute(
         columns. Other numeric columns pass through with their original values.
         Defaults to every numeric feature column.
 
+    Raises
+    ------
+    NotImplementedError
+        If ``add_recoverability=True``. ``cafe-impute`` (the only published
+        version is 0.1.0) exposes no recoverability certificate: ``CafeResult``
+        offers ``uncertainty`` / ``confidence_interval`` (posterior predictive
+        sd), ``anomaly_scores``, ``missingness_features``, ``decompose``,
+        ``factors``, ``effective_rank`` and ``dependency_network`` -- and
+        nothing else. A ``[0, 1]`` certificate would need the *prior* (pre-
+        conditioning) variance of each cell to normalise the posterior variance
+        against, and that quantity is not recorded in CAFE's trace. Normalising
+        by a sample variance instead would either be an invented metric or,
+        worse, use the whole sample and break the point-in-time contract, so
+        this raises instead of guessing.
+
     Notes
     -----
-    The by-products (uncertainty / recoverability / anomaly) are produced by the
-    strictly-causal per-entity traced pass, so appending future rows never
-    changes an earlier ``(entity, time)`` cell's value or by-product.
+    The by-products (uncertainty / anomaly) are produced by the strictly-causal
+    per-entity traced pass, so appending future rows never changes an earlier
+    ``(entity, time)`` cell's value or by-product.
     """
-    want_byproducts = add_uncertainty or add_recoverability or add_anomaly
+    if add_recoverability:
+        raise NotImplementedError(
+            "cafe_impute(add_recoverability=True) is not supported: the `cafe` "
+            "package (0.1.0) exposes no recoverability certificate, and any "
+            "[0, 1] score derived from what it does expose would either be "
+            "invented or would need whole-sample normalisation, which would "
+            "break the point-in-time contract. Use `add_uncertainty=True` for "
+            "the per-cell posterior standard deviation instead."
+        )
+
+    want_byproducts = add_uncertainty or add_anomaly
 
     def transform(X: pl.LazyFrame) -> pl.LazyFrame:
         cafe = _require_cafe()
-        entity_col, time_col = X.columns[:2]
+        entity_col, time_col = X.collect_schema().names()[:2]
         df = X.collect()
 
         keys = {entity_col, time_col}
@@ -638,7 +664,6 @@ def cafe_impute(
             n_rows = df.height
             col_idx = {c: j for j, c in enumerate(target_cols)}
             sigma = np.full((n_rows, len(target_cols)), np.nan)
-            recov = np.full((n_rows, len(target_cols)), np.nan)
             anomaly = np.full(n_rows, np.nan)
 
             # Per-entity, strictly point-in-time traced pass. Rows are gathered in
@@ -652,8 +677,6 @@ def cafe_impute(
                 res = cafe.CAFE().run(mat)
                 if add_uncertainty:
                     sigma[rows] = np.asarray(res.uncertainty)
-                if add_recoverability:
-                    recov[rows] = np.asarray(res.recoverability_score())
                 if add_anomaly:
                     anomaly[rows] = np.asarray(res.anomaly_scores())
 
@@ -661,8 +684,6 @@ def cafe_impute(
                 j = col_idx[col]
                 if add_uncertainty:
                     extra.append(pl.Series(f"{col}__cafe_sigma", sigma[:, j]))
-                if add_recoverability:
-                    extra.append(pl.Series(f"{col}__cafe_recoverability", recov[:, j]))
             if add_anomaly:
                 extra.append(pl.Series("cafe_anomaly", anomaly))
 

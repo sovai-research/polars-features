@@ -110,7 +110,7 @@ def fit_autoreg(
     return artifacts
 
 
-def fit_cv(  # noqa: Ruff too complex
+def fit_cv(
     y: pl.LazyFrame,
     forecaster_cls,
     freq: str | None,

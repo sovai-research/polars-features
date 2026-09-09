@@ -2,7 +2,8 @@
 
 Covered:
 * ``cafe_impute`` fills nulls, preserves observed values / schema / column order,
-* opt-in by-product columns (sigma / recoverability / anomaly / missingness),
+* opt-in by-product columns (sigma / anomaly / missingness), and the fact that
+  `add_recoverability` is refused rather than silently faked,
 * the point-in-time (leak-safety) property: truncating future rows never changes
   an earlier ``(entity, time)`` fill,
 * the ``CafeImputer`` fit/transform contract.
@@ -79,6 +80,19 @@ def test_impute_cafe_alias_matches_direct() -> None:
     )
 
 
+@pytest.mark.xfail(
+    raises=NotImplementedError,
+    strict=True,
+    reason=(
+        "`add_recoverability` has never worked: it called "
+        "CafeResult.recoverability_score(), which cafe-impute has never had "
+        "(0.1.0 is the only published version). A [0, 1] certificate would "
+        "need the pre-conditioning variance of each cell, which CAFE does not "
+        "record, so cafe_impute now refuses the flag instead of inventing a "
+        "metric. See test_byproduct_columns_appear_when_requested_sans_"
+        "recoverability for the by-products that do work."
+    ),
+)
 def test_byproduct_columns_appear_when_requested() -> None:
     df = _panel()
     result = cafe_impute(
@@ -108,6 +122,44 @@ def test_byproduct_columns_appear_when_requested() -> None:
     anomaly = result.get_column("cafe_anomaly").to_numpy()
     assert anomaly.shape[0] == df.height
     assert np.all((anomaly >= 0) & (anomaly <= 1))
+
+
+def test_byproduct_columns_appear_when_requested_sans_recoverability() -> None:
+    """Same contract as above for the by-products cafe-impute actually provides."""
+    df = _panel()
+    result = cafe_impute(
+        add_uncertainty=True,
+        add_anomaly=True,
+        add_missingness=True,
+    )(df.lazy()).collect()
+
+    for col in ("x", "y"):
+        assert f"{col}__cafe_sigma" in result.columns
+        assert f"{col}__cafe_was_imputed" in result.columns
+        assert f"{col}__cafe_recoverability" not in result.columns
+    assert "cafe_anomaly" in result.columns
+
+    # The was-imputed indicator matches the original null pattern.
+    assert (
+        result.get_column("x__cafe_was_imputed").to_list()
+        == df.get_column("x").is_null().to_list()
+    )
+    # Sigma is finite (>= 0) exactly where a value was imputed, NaN where observed.
+    sigma = result.get_column("x__cafe_sigma").to_numpy()
+    was_imputed = df.get_column("x").is_null().to_numpy()
+    assert np.all(np.isfinite(sigma[was_imputed]))
+    assert np.all(np.isnan(sigma[~was_imputed]))
+    # Anomaly score is a per-row value in [0, 1].
+    anomaly = result.get_column("cafe_anomaly").to_numpy()
+    assert anomaly.shape[0] == df.height
+    assert np.all((anomaly >= 0) & (anomaly <= 1))
+
+
+def test_add_recoverability_is_refused_with_an_actionable_message() -> None:
+    """The flag is refused up front, before any data reaches CAFE."""
+    df = _panel()
+    with pytest.raises(NotImplementedError, match="add_recoverability"):
+        cafe_impute(add_recoverability=True)(df.lazy())
 
 
 def test_no_byproducts_by_default() -> None:

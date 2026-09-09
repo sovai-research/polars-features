@@ -86,6 +86,14 @@ def _iv_items(iv: Any) -> list[tuple[tuple[int, ...], float]]:
     return [(tuple(k), float(arr[i])) for k, i in lookup.items()]
 
 
+#: Feature count above which the default shapiq coalition budget stops being
+#: exact. At or below it the default is ``2 ** n_features`` (every coalition,
+#: i.e. an exact answer); above it the budget saturates at
+#: :data:`_MAX_EXACT_BUDGET` model evaluations per row.
+_MAX_EXACT_FEATURES = 13
+_MAX_EXACT_BUDGET = 2**_MAX_EXACT_FEATURES
+
+
 def interaction_values(
     model: Any,
     X: PanelFrame | pl.DataFrame | pl.LazyFrame,
@@ -99,6 +107,7 @@ def interaction_values(
     min_order: int = 1,
     max_rows: int | None = None,
     class_index: int | None = None,
+    budget: int | None = None,
     **explainer_kwargs: Any,
 ) -> pl.DataFrame:
     """Panel-keyed Shapley interaction values of order up to ``max_order``.
@@ -124,6 +133,14 @@ def interaction_values(
         Explain only the first ``max_rows`` rows (after panel sorting).
     class_index : int, optional
         Output index for multiclass models.
+    budget : int, optional
+        Coalition budget for the sampling-based (``"marginal"`` /
+        ``"conditional"``) engines -- how many model evaluations one row's
+        explanation may spend. ``shapiq >= 1.3`` requires it explicitly. The
+        default enumerates every coalition (``2 ** n_features``, i.e. exact),
+        capped at :data:`_MAX_EXACT_BUDGET` so a wide feature set degrades to a
+        deterministic approximation instead of hanging. Ignored by the
+        ``"path_dependent"`` (tree) engine, which is exact by construction.
     **explainer_kwargs
         Forwarded to the ``shapiq`` explainer.
 
@@ -141,6 +158,8 @@ def interaction_values(
     """
     if int(max_order) < 1:
         raise ValueError(f"`max_order` must be >= 1, got {max_order!r}.")
+    if budget is not None and int(budget) < 1:
+        raise ValueError(f"`budget` must be >= 1, got {budget!r}.")
     if not isinstance(background, TimeAwareBackground):
         raise TypeError(
             "`background` must be a TimeAwareBackground so interaction values "
@@ -202,6 +221,17 @@ def interaction_values(
                 rows_v.append(val)
     else:
         imputer = "marginal" if background.mode == "interventional" else "conditional"
+        # `shapiq >= 1.3` made `budget` a required argument of
+        # `TabularExplainer.explain_function`. Enumerating all 2**n coalitions is
+        # the exact answer; the cap keeps a wide feature set from turning one row
+        # into an unbounded number of model calls. It depends only on the number
+        # of features, never on the number of rows or on their values, so it is
+        # deterministic and carries no information between rows.
+        n_budget = (
+            int(budget)
+            if budget is not None
+            else 2 ** min(len(feats), _MAX_EXACT_FEATURES)
+        )
         # One explainer per distinct reference set; the canonical walk-forward
         # case (a test fold after the training fold) yields exactly one.
         from panelary.explain._tree import _group_rows_by_background
@@ -223,7 +253,7 @@ def interaction_values(
                 **explainer_kwargs,
             )
             for i in idx_list:
-                for tup, val in _iv_items(explainer.explain(mat[i])):
+                for tup, val in _iv_items(explainer.explain(mat[i], budget=n_budget)):
                     if not (min_order <= len(tup) <= max_order):
                         continue
                     rows_e.append(ents[i])

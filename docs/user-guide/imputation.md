@@ -97,7 +97,7 @@ your Polars pipeline and you `.collect()` when you are ready.
 cafe_impute(
     engine="joint",            # "joint" | "per_entity"
     add_uncertainty=False,     # emit <col>__cafe_sigma
-    add_recoverability=False,  # emit <col>__cafe_recoverability
+    add_recoverability=False,  # NOT IMPLEMENTED - raises NotImplementedError
     add_anomaly=False,         # emit cafe_anomaly (one column, per row)
     add_missingness=False,     # emit <col>__cafe_was_imputed
     columns=None,              # restrict to a subset of numeric columns
@@ -122,13 +122,22 @@ information back as an extra column instead of hiding it:
 | Flag | Column(s) emitted | Meaning |
 | --- | --- | --- |
 | `add_uncertainty` | `<col>__cafe_sigma` | Per-cell posterior standard deviation of the fill. `NaN` where the value was observed. |
-| `add_recoverability` | `<col>__cafe_recoverability` | Per-cell recoverability certificate in `[0, 1]` — how identifiable that cell was. `NaN` where observed. |
+| `add_recoverability` | *(none)* | **Not implemented.** Setting it to `True` raises `NotImplementedError`. See the note below. |
 | `add_anomaly` | `cafe_anomaly` | A single per-**row** outlier score in `[0, 1]` (0 = perfect fit, 1 = strong outlier), causal per entity. |
 | `add_missingness` | `<col>__cafe_was_imputed` | Boolean flag preserving the original missing pattern — `true` exactly where the cell was filled. |
 
-The uncertainty / recoverability / anomaly by-products come from a strictly
-causal, per-entity traced pass, so they carry the same point-in-time guarantee
-as the fill itself.
+The uncertainty / anomaly by-products come from a strictly causal, per-entity
+traced pass, so they carry the same point-in-time guarantee as the fill itself.
+
+!!! warning "`add_recoverability` is not implemented"
+
+    The parameter exists but always raises `NotImplementedError`. A meaningful
+    recoverability score is `1 - cvar / prior_var`, and while CAFE records the
+    posterior predictive variance `cvar` per cell, it does not expose the prior
+    variance needed to normalise it. Normalising by a sample variance instead
+    would either invent a metric or require whole-sample statistics, which would
+    break the point-in-time contract that the rest of this page depends on.
+    Use `add_uncertainty` for the per-cell posterior standard deviation.
 
 ## Worked example: fill plus by-products
 
@@ -140,7 +149,6 @@ from panelary.preprocessing import cafe_impute
 out = X.pipe(
     cafe_impute(
         add_uncertainty=True,
-        add_recoverability=True,
         add_missingness=True,
     )
 ).collect()
@@ -149,37 +157,36 @@ print(
     out.select(
         "entity", "time", "sales",
         "sales__cafe_sigma",
-        "sales__cafe_recoverability",
         "sales__cafe_was_imputed",
     )
 )
 ```
 
 ```text
-shape: (12, 6)
-┌────────┬──────┬───────────┬───────────────────┬────────────────────────────┬─────────────────────────┐
-│ entity ┆ time ┆ sales     ┆ sales__cafe_sigma ┆ sales__cafe_recoverability ┆ sales__cafe_was_imputed │
-│ str    ┆ i64  ┆ f64       ┆ f64               ┆ f64                        ┆ bool                    │
-╞════════╪══════╪═══════════╪═══════════════════╪════════════════════════════╪═════════════════════════╡
-│ A      ┆ 0    ┆ 10.0      ┆ NaN               ┆ NaN                        ┆ false                   │
-│ A      ┆ 1    ┆ 11.0      ┆ 179.336772        ┆ 0.565479                   ┆ true                    │
-│ A      ┆ 2    ┆ 12.0      ┆ NaN               ┆ NaN                        ┆ false                   │
-│ A      ┆ 3    ┆ 13.0      ┆ NaN               ┆ NaN                        ┆ false                   │
-│ A      ┆ 4    ┆ 14.333333 ┆ 93.422528         ┆ 0.485155                   ┆ true                    │
-│ A      ┆ 5    ┆ 15.0      ┆ NaN               ┆ NaN                        ┆ false                   │
-│ B      ┆ 0    ┆ 20.0      ┆ NaN               ┆ NaN                        ┆ false                   │
-│ B      ┆ 1    ┆ 21.0      ┆ NaN               ┆ NaN                        ┆ false                   │
-│ B      ┆ 2    ┆ 22.500002 ┆ 253.45163         ┆ 0.501038                   ┆ true                    │
-│ B      ┆ 3    ┆ 23.0      ┆ NaN               ┆ NaN                        ┆ false                   │
-│ B      ┆ 4    ┆ 24.0      ┆ NaN               ┆ NaN                        ┆ false                   │
-│ B      ┆ 5    ┆ 25.333339 ┆ 163.685478        ┆ 0.476829                   ┆ true                    │
-└────────┴──────┴───────────┴───────────────────┴────────────────────────────┴─────────────────────────┘
+shape: (12, 5)
+┌────────┬──────┬───────────┬───────────────────┬─────────────────────────┐
+│ entity ┆ time ┆ sales     ┆ sales__cafe_sigma ┆ sales__cafe_was_imputed │
+│ ---    ┆ ---  ┆ ---       ┆ ---               ┆ ---                     │
+│ str    ┆ i64  ┆ f64       ┆ f64               ┆ bool                    │
+╞════════╪══════╪═══════════╪═══════════════════╪═════════════════════════╡
+│ A      ┆ 0    ┆ 10.0      ┆ NaN               ┆ false                   │
+│ A      ┆ 1    ┆ 11.0      ┆ 179.336772        ┆ true                    │
+│ A      ┆ 2    ┆ 12.0      ┆ NaN               ┆ false                   │
+│ A      ┆ 3    ┆ 13.0      ┆ NaN               ┆ false                   │
+│ A      ┆ 4    ┆ 14.333333 ┆ 93.422528         ┆ true                    │
+│ A      ┆ 5    ┆ 15.0      ┆ NaN               ┆ false                   │
+│ B      ┆ 0    ┆ 20.0      ┆ NaN               ┆ false                   │
+│ B      ┆ 1    ┆ 21.0      ┆ NaN               ┆ false                   │
+│ B      ┆ 2    ┆ 22.500002 ┆ 253.45163         ┆ true                    │
+│ B      ┆ 3    ┆ 23.0      ┆ NaN               ┆ false                   │
+│ B      ┆ 4    ┆ 24.0      ┆ NaN               ┆ false                   │
+│ B      ┆ 5    ┆ 25.333339 ┆ 163.685478        ┆ true                    │
+└────────┴──────┴───────────┴───────────────────┴─────────────────────────┘
 ```
 
 Read a filled row together with its by-products: `sales` at `(A, 1)` was filled
 to `11.0`, `sales__cafe_was_imputed` is `true` there (and `false` on every
-observed cell), and the `sigma` / `recoverability` columns quantify how much to
-trust that fill. On observed cells the by-products are `NaN` — there was nothing
+observed cell), and the `sigma` column quantifies how much to trust that fill. On observed cells the by-products are `NaN` — there was nothing
 to impute.
 
 ### Imputing a subset of columns
