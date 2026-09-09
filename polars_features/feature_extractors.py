@@ -118,11 +118,16 @@ def _cusum_events_py(
             total = 0.0
             for x in obs:
                 total += x
-            mu = total / count
-            sq = 0.0
-            for x in obs:
-                sq += (x - mu) ** 2
-            sigma = math.sqrt(sq / count)
+            # np.float64, not Python float: when every warmup observation is
+            # NaN, `obs` is empty and count == 0. Python division would raise
+            # ZeroDivisionError; Rust f64 (and the numba kernel under
+            # error_model="numpy") yield NaN. Keep the IEEE behaviour.
+            with np.errstate(divide="ignore", invalid="ignore"):
+                mu = np.float64(total) / np.float64(count)
+                sq = 0.0
+                for x in obs:
+                    sq += (x - mu) ** 2
+                sigma = np.sqrt(np.float64(sq) / np.float64(count))
             t += 1
             # fall through to process THIS value (no continue)
 
@@ -167,7 +172,13 @@ def _get_cusum_numba() -> Callable[[np.ndarray, float, int, float], np.ndarray] 
         return None
     import numba  # noqa: PLC0415  (lazy, optional-extra import)
 
-    @numba.njit(cache=True)
+    # error_model="numpy" is load-bearing, not a tuning knob: numba's default
+    # ("python") RAISES ZeroDivisionError on float division by zero, while the
+    # pure-Python path relies on numpy IEEE semantics (inf/nan) to reproduce the
+    # original Rust f64 behaviour exactly. Without it the `fast` extra silently
+    # changes results on a constant warmup window (sigma == 0), which is the
+    # divergence tests/test_cusum_pure.py::test_numba_matches_python detects.
+    @numba.njit(cache=True, error_model="numpy")
     def _kernel(
         values: np.ndarray, threshold: float, warmup_period: int, drift: float
     ) -> np.ndarray:  # pragma: no cover - exercised only when numba installed
