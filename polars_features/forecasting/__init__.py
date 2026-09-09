@@ -20,32 +20,52 @@ from .linear import (
 from .naive import naive
 from .snaive import snaive
 
+
+def _missing(name: str, extra: str):
+    """Return a placeholder that raises an actionable error when *called*.
+
+    Previously these names were bound to an ``ImportError`` **instance**, which
+    meant ``fc.lightgbm`` was a value rather than something that raised: the
+    failure surfaced far from its cause, as a "not callable" TypeError. The
+    hints were also wrong -- they advertised the extras ``lgb``, ``cat`` and
+    ``xgb``, none of which exist (see ``_deps._MODULE_TO_EXTRA``), so a user
+    who followed them got "no matches found" from pip.
+    """
+
+    def _raise(*_args, **_kwargs):
+        raise ImportError(
+            f"polars_features.forecasting.{name} requires the optional "
+            f"'{extra}' extra: pip install 'polars-features[{extra}]'"
+        )
+
+    _raise.__name__ = name
+    _raise.__doc__ = f"Unavailable: install the '{extra}' extra to use {name}."
+    return _raise
+
+
 try:
     from .lance import ann
 except ImportError:
-    msg = "Missing ann extras: `pip install polars_features[ann]`"
-    ann = ImportError(msg)
+    ann = _missing("ann", "ann")
 
 try:
     from .automl import auto_lightgbm
     from .lightgbm import flaml_lightgbm, lightgbm
 except ImportError:
-    msg = "Missing lightgbm extras: `pip install polars_features[lgb]`"
-    auto_lightgbm = ImportError(msg)
-    flaml_lightgbm = ImportError(msg)
-    lightgbm = ImportError(msg)
+    # `lightgbm` needs only the booster; the FLAML-driven paths need `automl`.
+    auto_lightgbm = _missing("auto_lightgbm", "automl")
+    flaml_lightgbm = _missing("flaml_lightgbm", "automl")
+    lightgbm = _missing("lightgbm", "lightgbm")
 
 try:
     from .catboost import catboost
 except ImportError:
-    catboost = ImportError(
-        "Missing catboost extras: `pip install polars_features[cat]`"
-    )
+    catboost = _missing("catboost", "catboost")
 
 try:
     from .xgboost import xgboost
 except ImportError:
-    xgboost = ImportError("Missing xgboost extras: `pip install polars_features[xgb]`")
+    xgboost = _missing("xgboost", "xgboost")
 
 
 __all__ = [

@@ -6,10 +6,9 @@ from typing import Any, Literal
 
 import polars as pl
 import polars.selectors as cs
-from sklearn.linear_model import LassoLarsIC
 
+from polars_features import _deps
 from polars_features._progress import progress
-from polars_features.backtesting import backtest
 from polars_features.base.forecaster import Forecaster
 from polars_features.base.metric import METRIC_TYPE
 from polars_features.conversion import X_to_numpy, y_to_numpy
@@ -214,6 +213,13 @@ class elite(Forecaster):
         return X_stack
 
     def _fit(self, y: pl.LazyFrame, X: pl.LazyFrame | None = None):
+        # Imported here, not at module scope: `backtesting` imports
+        # `forecasting._reduction`, so a top-level import made
+        # `polars_features.backtesting` unimportable by ANY path (circular
+        # import via forecasting/__init__ -> elite). base/forecaster.py:280
+        # already uses this same local-import pattern.
+        from polars_features.backtesting import backtest
+
         freq = self.freq
         lags = self.lags
         top_k = self.top_k
@@ -303,6 +309,9 @@ class elite(Forecaster):
         final_regressor = None
         if self.ensemble_strategy in ["lasso", "log_lasso"]:
             # 5. Fit final regressor
+            LassoLarsIC = _deps.require(
+                "sklearn.linear_model", feature="elite() stacking"
+            ).LassoLarsIC
             final_regressor = LassoLarsIC(**self.kwargs).fit(
                 X=X_to_numpy(X_stack), y=y_to_numpy(y_stack)
             )

@@ -19,6 +19,7 @@ available is listed in :data:`__all__`.
 
 from __future__ import annotations
 
+import importlib as _importlib
 import warnings
 
 __version__ = "0.4.0"
@@ -229,3 +230,68 @@ except ImportError as exc:
     _warn_unavailable("polars_features.econ", exc)
 else:
     __all__ += ["econ"]
+
+# --- Causal bubble, regime & change-point detection --------------------------
+try:
+    from polars_features import detect as detect
+except ImportError as exc:
+    _warn_unavailable("polars_features.detect", exc)
+else:
+    __all__ += ["detect"]
+
+# --- Remaining light-core modules -------------------------------------------
+# These cost ~0-10 ms on top of the base import and pull no optional
+# dependency (verified: sklearn/scipy/pandas/plotly stay out of sys.modules),
+# so they are imported eagerly like everything above. `detect` is separate only
+# because it is the largest of them.
+for _name in (
+    "core",
+    "base",
+    "testing",
+    "offsets",
+    "imputation",
+    "preprocessing",
+    "seasonality",
+    "metrics",
+    "conformal",
+    "cross_validation",
+    "evaluation",
+):
+    try:
+        _mod = _importlib.import_module(f"polars_features.{_name}")
+    except ImportError as exc:  # pragma: no cover - depends on the install
+        _warn_unavailable(f"polars_features.{_name}", exc)
+    else:
+        globals()[_name] = _mod
+        __all__ += [_name]
+del _name
+
+#: Submodules that are reachable as ``pk.<name>`` but are **not** imported
+#: eagerly, because doing so would violate the light-core guarantee. Measured
+#: cost of importing them at ``import polars_features`` time:
+#:
+#:   forecasting  828 ms, pulls sklearn + scipy + pandas + lightgbm
+#:   backtesting  imports forecasting._reduction, so it drags in all of the
+#:                above (measured: it took the cold import from 80 ms to 779 ms)
+#:   plotting     143 ms, pulls plotly
+#:   llm          raises outright unless the `llm` extra is installed
+#:
+#: They resolve on first attribute access via the PEP 562 hook below, so
+#: ``pk.forecasting`` works without making every ``import polars_features``
+#: pay for it. They are deliberately absent from ``__all__`` so that
+#: ``from polars_features import *`` cannot trigger a heavy or failing import.
+_LAZY_SUBMODULES = ("forecasting", "llm", "plotting", "backtesting")
+
+
+def __getattr__(name: str):
+    """Resolve heavy submodules on first access (PEP 562)."""
+    if name in _LAZY_SUBMODULES:
+        _mod = _importlib.import_module(f"polars_features.{name}")
+        globals()[name] = _mod  # cache: __getattr__ is not called again
+        return _mod
+    raise AttributeError(f"module 'polars_features' has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    """Include the lazy submodules in tab-completion and ``dir()``."""
+    return sorted(set(globals()) | set(_LAZY_SUBMODULES))
