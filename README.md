@@ -158,6 +158,7 @@ The [Quickstart](./docs/quickstart.md) continues from here — bulk feature extr
 | 100+ Polars-native feature extractors (`ts` namespace), catch22, `extract_features` | `pn.feature_extractors`, `pn.catch22` |
 | Forecasting (linear, kNN, GBM, conformal, censored, AutoML) | `pn.forecasting`, `pn.models` |
 | Metrics, evaluation, backtesting, seasonality, LLM analysis | `pn.metrics`, `pn.evaluation`, `pn.backtesting`, `pn.seasonality`, `pn.llm` |
+| Point-in-time compilation (`causalize`) and borrowed accuracy | `pn.leakage` |
 | The leakage verifier and test helpers | `pn.assert_no_lookahead`, `pn.testing` |
 
 Every operator also registers a machine-readable `FeatureSpec` in `pn.registry` carrying its safety contract, provenance and license (56 registered today: `ts`=42, `xs`=7, `factor`=4, `panel`=3).

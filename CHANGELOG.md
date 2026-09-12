@@ -19,6 +19,84 @@ above the 0.4.0 entry, and [MIGRATING.md](MIGRATING.md) for how to move.
 
 ## [Unreleased]
 
+### Added — `leakage`: a point-in-time compiler, and a price for what leaks
+
+Two tools, one package. `causalize` **prevents** leakage; `borrowed_accuracy`
+**measures** it. They ship together because the metric is the compiler's test
+suite: a rewrite that is genuinely point-in-time scores zero borrowed accuracy,
+and one that does not score zero was not a rewrite. The subpackage is
+`panelary.leakage` rather than `panelary.causal` because that verb is already
+taken by the causal-inference pillar. Pure NumPy + Polars, eagerly imported —
+it pulls in no optional dependency.
+
+- **`audit` / `causalize`** — the compiler. It serialises a Polars expression to
+  its tree (`Expr.meta.serialize(format="json")`), classifies every node against
+  a rule table keyed by qualified node kind, rewrites the forward-reaching ones
+  into expanding-window equivalents, and reads the mutated JSON back with
+  `pl.Expr.deserialize`. A backward fill becomes a forward fill; a centred
+  rolling window becomes trailing; a whole-column aggregate becomes a cumulative
+  one. `audit` returns a `CompileResult` of `Finding`s and changes nothing;
+  `causalize` returns the repaired expression or raises `LeakageRefused` with
+  that same result attached. Both take the panel keys as `time=` / `entity=`;
+  rewrites are applied bottom-up, and the walker recurses only into the payload
+  keys a matching `Rule` declares as children, so an options dict can never be
+  mistaken for a node.
+- **`borrowed_accuracy`** — the metric. Run a pipeline twice: permissively, with
+  every `Component` fit once on everything, and point-in-time, with each one
+  refit per fold on training rows only. The gap is the accuracy *borrowed* from
+  data the method will not have at prediction time. Ablating one component at a
+  time cannot attribute it — two components can be individually harmless and
+  leak badly together — so the attribution is the exact Shapley value of the
+  game `v(S) = score when exactly S runs permissively`, computed over every one
+  of the `2^k` subsets. Nothing is sampled, so `sum(attribution) == total`
+  (Shapley efficiency) and the result is a decomposition rather than a pile of
+  ablations. The module is deliberately just the combinatorics: the caller
+  supplies `evaluate(selection) -> float`, and it never fits a model, touches a
+  frame, or decides what "permissive" means. `k` is capped (`max_components`,
+  default 12 — 4096 evaluations) and refused above it rather than quietly taking
+  exponential time.
+- **`Pipeline.audit()` / `Pipeline.causalize()`** front the compiler at the
+  pipeline level. A step opts into expression-level auditing by implementing
+  `leakage_exprs()` (and `with_leakage_exprs()` to accept the rewrite); a step
+  that does not is audited from its declared `panel_safe` / `leakage_safe`
+  attributes instead, which is a weaker check and is reported as such.
+  `audit` returns a `PipelineAudit` of per-step `StepAudit`s; `causalize`
+  returns a **new** `Pipeline` and never mutates the original, and fails closed
+  rather than handing back a partially-corrected object.
+- **`.over(entity)` carries no `order_by`.** The serialised tree made this
+  visible: Polars' `Over` node stores no time order, so every "within-entity"
+  operation in the library — ours included — is correct only if the frame
+  happens to be sorted. `AGENTS.md` has always stated that precondition and
+  nothing enforced it. The compiler injects `order_by=time` when the `time` key
+  is given and refuses when it is not, rather than assuming sortedness.
+
+**Limits, stated plainly.**
+
+- v1's rule table knows 39 node kinds, and exactly **ten of them carry a
+  rewrite**: the seven whole-column aggregates that become cumulative
+  (`mean`, `sum`, `min`, `max`, `std`, `var`, `count`), the backward fill
+  strategy, the centred rolling window, and the `.over` that gains an
+  `order_by`. The other 29 are classify-only — safe leaves like `Column`,
+  `Cast` and `BinaryExpr`, and refusals like `Rank`, `Interpolate`, a negative
+  `Shift`, a reversed `CumSum` and `EwmMean`. Everything not in the table is
+  refused, not approved. This is a rule table, not a verifier for arbitrary
+  Python.
+- The serialised expression tree is **not** a stable public Polars API; Polars
+  promises nothing about it across versions. The rule table is therefore pinned
+  to the Polars minors it has been tested against — 1.44 today — and the
+  serialise/deserialise round trip runs on every call, even when nothing is
+  rewritten, so format drift surfaces as a loud error naming the tested versions
+  rather than as a silently unrewritten expression. A format change costs you
+  refusals, never a silent pass.
+- `map_batches` and `map_elements` are opaque and are **always** refused. The
+  escape hatch is the operator registry: a `FeatureSpec` already carries
+  `panel_safe` / `leakage_safe`, so a registered op is a trusted leaf. That is
+  what stops the compiler refusing Panelary's own `map_batches`-based operators.
+- Rewrites that are causal but not numerically identical to the original — an
+  expanding quantile is not the global quantile — are **off by default** and
+  require `allow_approximate=True`. A rewrite should not silently change
+  results.
+
 ### Fixed
 
 - **`sliding_window_split` trained on future data.** `cross_validation`'s

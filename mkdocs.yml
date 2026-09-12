@@ -59,6 +59,7 @@ nav:
     - Leak-safety: concepts/leak-safety.md
     - Interactions (higher-order structure): concepts/interactions.md
     - The background-set leak: concepts/attribution-leakage.md
+    - Point-in-time compilation: concepts/point-in-time.md
   - Leakage & Correctness: leakage.md
   - User Guide:
     - Feature Engineering: user-guide/features.md
@@ -107,6 +108,7 @@ nav:
     - econ: api-reference/econ.md
     - detect: api-reference/detect.md
     - econ.features: api-reference/econ-features.md
+    - leakage (causalize): api-reference/leakage.md
     - leak verifiers: api-reference/testing.md
     - evaluation: api-reference/evaluation.md
     - metrics: api-reference/metrics.md

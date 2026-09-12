@@ -59,6 +59,7 @@ Each workflow stage has one top-level verb on the `pn` namespace, fronting the s
 - `pn.catch22`, `pn.feature_extractors`, `pn.extract_features` — time-series feature extraction, including a clean-room catch22 reimplementation.
 - `pn.imputation` / `pn.CafeImputer` — leak-safe imputation.
 - `pn.llm` — optional LLM-assisted analysis of panels.
+- `pn.leakage` — the point-in-time compiler (`causalize`, `audit`) and the borrowed-accuracy metric with exact Shapley attribution.
 - `pn.assert_no_lookahead`, `pn.testing` — the leakage verifier and test helpers.
 
 ## Docs

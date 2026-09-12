@@ -250,6 +250,16 @@ except ImportError as exc:
 else:
     __all__ += ["detect"]
 
+# --- Point-in-time compiler & borrowed-accuracy metric -----------------------
+# numpy + polars only, so it is eager like `detect` above. The package is
+# `leakage`, not `causal`: `causal` is already one of the eight verbs.
+try:
+    from panelary import leakage as leakage
+except ImportError as exc:
+    _warn_unavailable("panelary.leakage", exc)
+else:
+    __all__ += ["leakage"]
+
 # --- Remaining light-core modules -------------------------------------------
 # These cost ~0-10 ms on top of the base import and pull no optional
 # dependency (verified: sklearn/scipy/pandas/plotly stay out of sys.modules),

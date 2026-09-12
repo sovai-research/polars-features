@@ -1,0 +1,948 @@
+"""The rule table: what the point-in-time compiler may do with each node kind.
+
+:data:`RULES` maps a *qualified node kind* -- exactly what
+:func:`panelary.leakage._types.node_kind` returns for a serialised Polars
+expression node -- to a :class:`~panelary.leakage._types.Rule` saying whether
+that node is causal, repairable, or fatal.
+
+Reading the table
+-----------------
+
+Classification is by **what the node does**, never by its name. A
+``Function.CumSum`` is safe forwards and fatal in reverse; an ``Agg.Sum`` is
+safe over a constant and a leak over a column, because a whole-column sum is
+broadcast back onto every row and so hands rows before ``t`` a number computed
+from rows after ``t``. Three families therefore classify dynamically:
+
+* the cumulative family, on ``reverse``;
+* ``Function.Shift`` / ``Diff`` / ``PctChange``, on the sign of the literal
+  offset in ``input[1]``;
+* the aggregates, on whether their input is a constant.
+
+Everything not in the table is refused -- invariant 1, fail closed.
+
+The one assumption every rule shares
+------------------------------------
+
+"Before ``t``" means "earlier in the frame's row order". Every SAFE
+classification and every rewrite emitted here is causal *provided rows are in
+time order within the window they are evaluated over*. That is precisely why
+``Over`` with ``order_by: null`` is not safe: it is the one node that can
+silently redefine the order. Repair it (inject ``Context.time``) and the
+assumption holds again.
+
+Calling convention
+------------------
+
+``Rule.classify`` and ``Rule.rewrite`` receive the node's **payload** -- the
+value under the single top-level discriminator key, i.e. ``node["Function"]``
+for a ``Function.*`` kind and ``node["Agg"]`` for an ``Agg.*`` kind -- plus the
+:class:`~panelary.leakage._types.Context`.
+
+``Rule.rewrite`` returns a **complete replacement node** (a single-key dict),
+not a payload. It has to: a rewrite may change the node's kind outright --
+``Agg.Mean`` becomes a ``Ternary`` wrapping a ``BinaryExpr``, because the
+expanding mean is ``cum_sum() / cum_count()`` and there is no ``Agg`` variant
+that means "expanding mean". Callers should go through :func:`rewrite_node`,
+which takes and returns whole nodes and never exposes the distinction.
+
+``Rule.children`` names the payload slots under which child nodes live, in the
+same vocabulary the walker in ``_compile.py`` understands: a mapping key
+(``"input"``, ``"left"``), or a positional key for a sequence payload --
+``Alias`` is ``[node, name]``, so its child is ``"0"``. A slot may hold a
+single node or a list of them (``Over.partition_by``); :func:`child_nodes`
+resolves both and skips the non-node entries that share those lists (a ddof
+integer, an alias string).
+
+``Agg.Min``, ``Agg.Max`` and ``Agg.Count`` are the one place this vocabulary
+runs out. Polars nests their operand two levels down -- ``{"Min": {"input":
+<node>, "propagate_nans": false}}`` -- and a single key cannot name that, so
+they declare no children and take responsibility themselves: their ``classify``
+audits the operand with :func:`_subtree_is_safe` and refuses unless every node
+in it is already causal. That keeps invariant 1 (nothing unaudited is ever
+rewritten) at the cost of refusing an aggregate over an operand that would
+itself have needed repairing. Widen it the moment ``children`` can express a
+two-level path.
+
+Rewrites are built by serialising a real Polars expression written against a
+placeholder column and substituting the original child subtree back in, so the
+replacement JSON is whatever the installed Polars would itself emit -- never
+hand-written.
+"""
+
+from __future__ import annotations
+
+import copy
+import functools
+import json
+from collections.abc import Callable, Iterator
+from typing import Any
+
+import polars as pl
+
+from panelary.leakage._types import Classification, Context, Rule, node_kind
+
+__all__ = [
+    "CROSS_SECTIONAL_SAFE_KINDS",
+    "RULES",
+    "child_nodes",
+    "classify_node",
+    "payload_of",
+    "rewrite_node",
+    "rule_for",
+]
+
+#: Kinds that leak over a whole column but are perfectly causal when evaluated
+#: inside ``.over(Context.time)`` -- a cross-sectional statistic uses only rows
+#: sharing the same timestamp. A node cannot see its parent, so these are
+#: classified on their own (leaky) merits; a walker that tracks the enclosing
+#: ``Over`` may consult this set to avoid refusing a legitimate cross-sectional
+#: feature such as ``pl.col("x").rank().over("date")``.
+CROSS_SECTIONAL_SAFE_KINDS: frozenset[str] = frozenset(
+    {
+        "Agg.Max",
+        "Agg.Mean",
+        "Agg.Median",
+        "Agg.Min",
+        "Agg.NUnique",
+        "Agg.Std",
+        "Agg.Sum",
+        "Agg.Var",
+        "Function.Quantile",
+        "Function.Rank",
+    }
+)
+
+
+# --------------------------------------------------------------------------- #
+# Node plumbing
+# --------------------------------------------------------------------------- #
+def payload_of(node: Any) -> Any:
+    """Value under a node's single discriminator key."""
+    return next(iter(node.values()))
+
+
+def _is_node(value: Any) -> bool:
+    return node_kind(value) is not None
+
+
+def child_nodes(payload: Any, children: tuple[str, ...]) -> Iterator[tuple[Any, Any]]:
+    """Yield ``(path, child_node)`` for every child reachable from ``payload``.
+
+    ``path`` is a tuple of keys/indices relative to the payload, suitable for
+    extending a :attr:`panelary.leakage._types.Finding.path`. Non-node entries
+    (a ddof integer, an alias string, an options dict) are skipped.
+    """
+    for key in children:
+        value = _get(payload, key)
+        slot: Any = int(key) if key.lstrip("-").isdigit() else key
+        if value is None:
+            continue
+        if _is_node(value):
+            yield (slot,), value
+        elif isinstance(value, list):
+            for i, item in enumerate(value):
+                if _is_node(item):
+                    yield (slot, i), item
+
+
+def _get(payload: Any, key: str) -> Any:
+    """The value at ``key``, for mapping *and* sequence payloads.
+
+    Sequence payloads (``Alias`` is ``[expr, name]``) address their children by
+    positional key -- ``"0"`` -- which is the same convention the walker in
+    ``_compile.py`` uses. The two must agree: when they did not, every aliased
+    expression was refused instead of audited, which would have hidden a leak
+    behind a rename.
+    """
+    if isinstance(payload, dict):
+        return payload.get(key)
+    if isinstance(payload, (list, tuple)) and key.lstrip("-").isdigit():
+        index = int(key)
+        return payload[index] if -len(payload) <= index < len(payload) else None
+    return None
+
+
+def rule_for(node: Any) -> Rule | None:
+    """The rule governing ``node``, or ``None`` when it is unrecognised."""
+    kind = node_kind(node)
+    return RULES.get(kind) if kind is not None else None
+
+
+def classify_node(node: Any, ctx: Context | None = None) -> Classification:
+    """Classify a whole node. Unrecognised kinds are :data:`REFUSE`."""
+    rule = rule_for(node)
+    if rule is None:
+        return Classification.REFUSE
+    return rule.classify(payload_of(node), ctx if ctx is not None else Context())
+
+
+def rewrite_node(node: Any, ctx: Context | None = None) -> Any:
+    """Return the point-in-time replacement for ``node`` (a whole node).
+
+    Raises ``ValueError`` if the node is not classified
+    :data:`~panelary.leakage._types.Classification.REWRITE` under ``ctx``.
+    """
+    ctx = ctx if ctx is not None else Context()
+    rule = rule_for(node)
+    payload = payload_of(node)
+    if (
+        rule is None
+        or rule.rewrite is None
+        or rule.classify(payload, ctx) is not Classification.REWRITE
+    ):
+        raise ValueError(f"{node_kind(node)!r} has no rewrite under this context")
+    return rule.rewrite(payload, ctx)
+
+
+# --------------------------------------------------------------------------- #
+# Building replacement subtrees
+# --------------------------------------------------------------------------- #
+_PLACEHOLDER = "__panelary_leakage_child__"
+
+
+def _serialize(expr: pl.Expr) -> Any:
+    return json.loads(expr.meta.serialize(format="json"))
+
+
+@functools.cache
+def _template(name: str, arg: int = 0) -> Any:
+    """Serialised expression tree for ``name``, written against a placeholder."""
+    p = pl.col(_PLACEHOLDER)
+    builder = _TEMPLATES[name]
+    return _serialize(builder(p, arg))
+
+
+def _graft(tree: Any, child: Any) -> Any:
+    """Copy ``tree``, replacing every placeholder column with ``child``."""
+    if isinstance(tree, dict):
+        if tree == {"Column": _PLACEHOLDER}:
+            return copy.deepcopy(child)
+        return {k: _graft(v, child) for k, v in tree.items()}
+    if isinstance(tree, list):
+        return [_graft(v, child) for v in tree]
+    return tree
+
+
+def _expanding(name: str, child: Any, arg: int = 0) -> Any:
+    return _graft(_template(name, arg), child)
+
+
+def _null_f64() -> pl.Expr:
+    return pl.lit(None, dtype=pl.Float64)
+
+
+def _count(p: pl.Expr) -> pl.Expr:
+    return p.cum_count().cast(pl.Int64)
+
+
+def _expanding_mean_expr(p: pl.Expr) -> pl.Expr:
+    n = _count(p)
+    total = p.fill_null(0).cum_sum()
+    return pl.when(n > 0).then(total / n).otherwise(_null_f64())
+
+
+def _expanding_var_expr(p: pl.Expr, ddof: int) -> pl.Expr:
+    n = _count(p)
+    x = p.fill_null(0).cast(pl.Float64)
+    s1 = x.cum_sum()
+    s2 = (x * x).cum_sum()
+    var = (s2 - s1 * s1 / n) / (n - ddof)
+    return pl.when(n > ddof).then(var).otherwise(_null_f64())
+
+
+def _expanding_std_expr(p: pl.Expr, ddof: int) -> pl.Expr:
+    n = _count(p)
+    x = p.fill_null(0).cast(pl.Float64)
+    s1 = x.cum_sum()
+    s2 = (x * x).cum_sum()
+    var = (s2 - s1 * s1 / n) / (n - ddof)
+    # Cancellation in the sum-of-squares form can push an exactly-zero variance
+    # a hair below zero; clamp before the square root rather than emit NaN.
+    nonneg = pl.when(var > 0).then(var).otherwise(pl.lit(0.0))
+    return pl.when(n > ddof).then(nonneg.sqrt()).otherwise(_null_f64())
+
+
+# Null handling is where exactness is won or lost. `sum()` treats nulls as
+# absent (an all-null column sums to 0) while `cum_sum()` emits a null *at* a
+# null row; `min()`/`max()` skip nulls while `cum_min()`/`cum_max()` emit one.
+# Filling first restores the aggregate's own null semantics without changing a
+# single value: a forward fill can only repeat a value already seen, so it
+# cannot move the running minimum or maximum.
+_TEMPLATES: dict[str, Callable[[pl.Expr, int], pl.Expr]] = {
+    "cum_sum": lambda p, _: p.fill_null(0).cum_sum(),
+    "cum_min": lambda p, _: p.fill_null(strategy="forward").cum_min(),
+    "cum_max": lambda p, _: p.fill_null(strategy="forward").cum_max(),
+    "cum_count": lambda p, _: p.cum_count(),
+    "cum_count_all": lambda p, _: p.is_null().cum_count(),
+    "mean": lambda p, _: _expanding_mean_expr(p),
+    "var": _expanding_var_expr,
+    "std": _expanding_std_expr,
+}
+
+
+@functools.cache
+def _order_by_payload(time: str) -> Any:
+    """The ``Over.order_by`` payload Polars itself emits for ``order_by=time``."""
+    probe = pl.col("__x__").cum_sum().over("__g__", order_by=time)
+    return _serialize(probe)["Over"]["order_by"]
+
+
+# --------------------------------------------------------------------------- #
+# Node predicates
+# --------------------------------------------------------------------------- #
+def _fn_variant(payload: Any) -> tuple[str, Any]:
+    """``(variant name, variant body)`` of a ``Function`` payload."""
+    fn = _get(payload, "function")
+    if isinstance(fn, str):
+        return fn, None
+    if isinstance(fn, dict) and len(fn) == 1:
+        key = next(iter(fn))
+        return key, fn[key]
+    return "", None
+
+
+def _inner_variant(body: Any) -> tuple[str, Any]:
+    """``(name, body)`` of a nested single-key enum such as a fill strategy."""
+    if isinstance(body, str):
+        return body, None
+    if isinstance(body, dict) and len(body) == 1:
+        key = next(iter(body))
+        return key, body[key]
+    return "", None
+
+
+def _literal_number(node: Any) -> float | None:
+    """The numeric value of a ``Literal`` node, or ``None``."""
+    if node_kind(node) != "Literal":
+        return None
+    value: Any = node["Literal"]
+    while isinstance(value, dict) and len(value) == 1:
+        value = next(iter(value.values()))
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _is_constant(node: Any) -> bool:
+    """True when ``node`` cannot depend on any row of data."""
+    kind = node_kind(node)
+    if kind == "Literal":
+        return True
+    if kind == "Cast":
+        return _is_constant(node["Cast"]["expr"])
+    if kind == "Alias":
+        return _is_constant(node["Alias"][0])
+    if kind == "BinaryExpr":
+        body = node["BinaryExpr"]
+        return _is_constant(body["left"]) and _is_constant(body["right"])
+    return False
+
+
+def _agg_input(payload: Any, variant: str) -> Any:
+    """The aggregated child node of an ``Agg.<variant>`` payload."""
+    body = _get(payload, variant)
+    if _is_node(body):
+        return body
+    if isinstance(body, list) and body and _is_node(body[0]):
+        return body[0]
+    if isinstance(body, dict) and _is_node(body.get("input")):
+        return body["input"]
+    return None
+
+
+def _agg_ddof(payload: Any, variant: str, default: int = 1) -> int:
+    body = _get(payload, variant)
+    if isinstance(body, list) and len(body) > 1 and isinstance(body[1], int):
+        return int(body[1])
+    return default
+
+
+def _offset_sign_ok(payload: Any) -> bool | None:
+    """True/False for a non-negative/negative literal offset, ``None`` if opaque."""
+    inputs = _get(payload, "input")
+    if not isinstance(inputs, list) or len(inputs) < 2:
+        return None
+    value = _literal_number(inputs[1])
+    if value is None:
+        return None
+    return value >= 0
+
+
+# --------------------------------------------------------------------------- #
+# Rule constructors
+# --------------------------------------------------------------------------- #
+def _const(result: Classification) -> Callable[[Any, Context], Classification]:
+    def classify(_payload: Any, _ctx: Context) -> Classification:
+        return result
+
+    return classify
+
+
+def _safe(kind: str, reason: str, children: tuple[str, ...] = ()) -> Rule:
+    return Rule(
+        kind=kind,
+        classify=_const(Classification.SAFE),
+        reason=reason,
+        children=children,
+    )
+
+
+def _refuse(kind: str, reason: str, children: tuple[str, ...] = ()) -> Rule:
+    return Rule(
+        kind=kind,
+        classify=_const(Classification.REFUSE),
+        reason=reason,
+        children=children,
+    )
+
+
+_FN: tuple[str, ...] = ("input",)
+
+
+# --------------------------------------------------------------------------- #
+# Leaves and plumbing
+# --------------------------------------------------------------------------- #
+_LEAVES: list[Rule] = [
+    _safe("Column", "a column reference reads the current row only."),
+    _safe("Literal", "a literal is the same at every row."),
+    _safe(
+        "BinaryExpr",
+        "an arithmetic or comparison operator is row-wise; it can only leak if "
+        "one of its operands does.",
+        ("left", "right"),
+    ),
+    _safe(
+        "Cast",
+        "a dtype cast is row-wise; it cannot move information between rows.",
+        ("expr",),
+    ),
+    _safe(
+        "Ternary",
+        "when/then/otherwise selects row by row; it can only leak if one of its "
+        "branches does.",
+        ("predicate", "truthy", "falsy"),
+    ),
+    # The payload is the sequence [expr, name], so the child lives at the
+    # positional key "0". Get this wrong and the walker refuses every aliased
+    # expression instead of auditing what is under the alias -- which would
+    # hide a leak behind a rename, since `shift(-1).alias("lead")` puts the
+    # Alias at the root.
+    _safe("Alias", "renaming an expression cannot move information in time.", ("0",)),
+    _safe(
+        "Function.Abs",
+        "absolute value is row-wise; it cannot move information between rows.",
+        _FN,
+    ),
+    _safe(
+        "Function.Pow",
+        "exponentiation is row-wise; it cannot move information between rows.",
+        _FN,
+    ),
+    _safe(
+        "Function.FillNull",
+        "filling nulls with an explicit value or expression is row-wise; the "
+        "fill value is audited on its own merits.",
+        _FN,
+    ),
+    _safe(
+        "Function.EwmMean",
+        "an exponentially weighted mean is a trailing, causal average.",
+        _FN,
+    ),
+    _safe(
+        "Agg.First",
+        "the first value of a column is known from the first row onwards, so "
+        "broadcasting it backwards moves no information into the past.",
+        ("First",),
+    ),
+]
+
+
+# --------------------------------------------------------------------------- #
+# Boolean predicates: elementwise ones are safe, whole-column ones are not
+# --------------------------------------------------------------------------- #
+_ROWWISE_BOOLEAN = frozenset(
+    {
+        "IsNull",
+        "IsNotNull",
+        "IsNan",
+        "IsNotNan",
+        "IsFinite",
+        "IsInfinite",
+        "Not",
+        "IsIn",
+        "IsBetween",
+    }
+)
+
+
+def _classify_boolean(payload: Any, _ctx: Context) -> Classification:
+    _, body = _fn_variant(payload)
+    name, _ = _inner_variant(body)
+    return Classification.SAFE if name in _ROWWISE_BOOLEAN else Classification.REFUSE
+
+
+_BOOLEAN_RULE = Rule(
+    kind="Function.Boolean",
+    classify=_classify_boolean,
+    reason=(
+        "row-wise predicates (is_null, is_nan, is_finite, not, is_in) are "
+        "causal, but the whole-column ones (is_unique, is_duplicated, any, all) "
+        "read every row, including rows after t; compute them per date with "
+        "`.over(<time>)` or over a trailing window."
+    ),
+    children=_FN,
+)
+
+
+# --------------------------------------------------------------------------- #
+# The cumulative family: causal forwards, pure future in reverse
+# --------------------------------------------------------------------------- #
+def _classify_cumulative(payload: Any, _ctx: Context) -> Classification:
+    _, body = _fn_variant(payload)
+    reverse = body.get("reverse") if isinstance(body, dict) else None
+    if reverse is None:
+        return Classification.REFUSE
+    return Classification.REFUSE if reverse else Classification.SAFE
+
+
+_CUMULATIVE_REASON = (
+    "a reversed cumulative accumulates rows t..n-1, i.e. the value at t is a "
+    "function of the future and nothing else; there is no causal equivalent, "
+    "because the quantity itself is defined by what has not happened yet. Drop "
+    "`reverse=True` to accumulate forwards."
+)
+
+_CUMULATIVE: list[Rule] = [
+    Rule(
+        kind=f"Function.{name}",
+        classify=_classify_cumulative,
+        reason=_CUMULATIVE_REASON,
+        children=_FN,
+    )
+    for name in ("CumSum", "CumProd", "CumMin", "CumMax", "CumCount")
+]
+
+
+# --------------------------------------------------------------------------- #
+# Offsets: shift / diff / pct_change
+# --------------------------------------------------------------------------- #
+def _classify_offset(payload: Any, _ctx: Context) -> Classification:
+    ok = _offset_sign_ok(payload)
+    if ok is None:
+        return Classification.REFUSE
+    return Classification.SAFE if ok else Classification.REFUSE
+
+
+_OFFSET_RULES: list[Rule] = [
+    Rule(
+        kind="Function.Shift",
+        classify=_classify_offset,
+        reason=(
+            "a negative shift copies a future observation backwards onto row t; "
+            "use `shift(k)` with k >= 0 for a lag. A non-literal offset is "
+            "refused because its sign cannot be checked."
+        ),
+        children=_FN,
+    ),
+    Rule(
+        kind="Function.Diff",
+        classify=_classify_offset,
+        reason=(
+            "`diff(-k)` differences against a future row; use `diff(k)` with "
+            "k >= 0. A non-literal offset is refused because its sign cannot be "
+            "checked."
+        ),
+        children=_FN,
+    ),
+    Rule(
+        kind="Function.PctChange",
+        classify=_classify_offset,
+        reason=(
+            "`pct_change(-k)` compares row t against a future row; use a "
+            "non-negative period. A non-literal offset is refused because its "
+            "sign cannot be checked."
+        ),
+        children=_FN,
+    ),
+]
+
+
+# --------------------------------------------------------------------------- #
+# fill_null(strategy=...)
+# --------------------------------------------------------------------------- #
+def _fill_strategy(payload: Any) -> tuple[str, Any]:
+    _, body = _fn_variant(payload)
+    return _inner_variant(body)
+
+
+def _classify_fill_strategy(payload: Any, _ctx: Context) -> Classification:
+    name, _ = _fill_strategy(payload)
+    if name == "Backward":
+        return Classification.REWRITE
+    if name in ("Forward", "Zero", "One"):
+        return Classification.SAFE
+    return Classification.REFUSE
+
+
+def _rewrite_fill_strategy(payload: Any, _ctx: Context) -> Any:
+    _, limit = _fill_strategy(payload)
+    replacement = copy.deepcopy(payload)
+    replacement["function"] = {"FillNullWithStrategy": {"Forward": limit}}
+    return {"Function": replacement}
+
+
+_FILL_RULE = Rule(
+    kind="Function.FillNullWithStrategy",
+    classify=_classify_fill_strategy,
+    reason=(
+        "a backward fill copies a future observation into the past; use a "
+        "forward fill, which carries the last value you actually had. The "
+        "`min`/`max`/`mean` strategies fill from a whole-column statistic that "
+        "includes rows after t and are refused: fill with an explicitly "
+        "expanding statistic instead."
+    ),
+    rewrite=_rewrite_fill_strategy,
+    rewrote_to="fill_null(strategy='forward')",
+    children=_FN,
+)
+
+
+# --------------------------------------------------------------------------- #
+# Rolling windows
+# --------------------------------------------------------------------------- #
+def _rolling_options(payload: Any) -> Any:
+    _, body = _fn_variant(payload)
+    return body.get("options") if isinstance(body, dict) else None
+
+
+def _classify_rolling(payload: Any, _ctx: Context) -> Classification:
+    options = _rolling_options(payload)
+    if not isinstance(options, dict) or "center" not in options:
+        return Classification.REFUSE
+    return Classification.REWRITE if options["center"] else Classification.SAFE
+
+
+def _rewrite_rolling(payload: Any, _ctx: Context) -> Any:
+    replacement = copy.deepcopy(payload)
+    variant, body = _fn_variant(replacement)
+    body["options"]["center"] = False
+    replacement["function"] = {variant: body}
+    return {"Function": replacement}
+
+
+_ROLLING_RULE = Rule(
+    kind="Function.RollingExpr",
+    classify=_classify_rolling,
+    reason=(
+        "a centred rolling window straddles row t, so half of every window is "
+        "the future; the causal form is the trailing window of the same width, "
+        "`center=False`. Note the values change: the window now ends at t "
+        "instead of being centred on it."
+    ),
+    rewrite=_rewrite_rolling,
+    rewrote_to="the same rolling window with center=False (trailing)",
+    children=_FN,
+)
+
+
+# --------------------------------------------------------------------------- #
+# Aggregates broadcast back over rows
+# --------------------------------------------------------------------------- #
+def _subtree_is_safe(node: Any, ctx: Context) -> bool:
+    """True when ``node`` and everything under it already classify SAFE.
+
+    Used by the aggregates whose operand the walker cannot reach (see the
+    module docstring): they vouch for their own operand rather than rewrite one
+    that nothing has audited.
+    """
+    rule = rule_for(node)
+    if rule is None:
+        return False
+    payload = payload_of(node)
+    if rule.classify(payload, ctx) is not Classification.SAFE:
+        return False
+    return all(
+        _subtree_is_safe(child, ctx)
+        for _path, child in child_nodes(payload, rule.children)
+    )
+
+
+def _classify_agg(
+    variant: str, *, vouch_for_operand: bool = False
+) -> Callable[[Any, Context], Classification]:
+    def classify(payload: Any, ctx: Context) -> Classification:
+        child = _agg_input(payload, variant)
+        if child is None:
+            return Classification.REFUSE
+        if _is_constant(child):
+            return Classification.SAFE
+        if vouch_for_operand and not _subtree_is_safe(child, ctx):
+            return Classification.REFUSE
+        return Classification.REWRITE
+
+    return classify
+
+
+def _rewrite_agg(variant: str, template: str) -> Callable[[Any, Context], Any]:
+    def rewrite(payload: Any, _ctx: Context) -> Any:
+        child = _agg_input(payload, variant)
+        return _expanding(template, child)
+
+    return rewrite
+
+
+def _rewrite_agg_moment(variant: str, template: str) -> Callable[[Any, Context], Any]:
+    def rewrite(payload: Any, _ctx: Context) -> Any:
+        child = _agg_input(payload, variant)
+        return _expanding(template, child, _agg_ddof(payload, variant))
+
+    return rewrite
+
+
+def _rewrite_agg_count(payload: Any, _ctx: Context) -> Any:
+    child = _agg_input(payload, "Count")
+    body = _get(payload, "Count")
+    include_nulls = bool(body.get("include_nulls")) if isinstance(body, dict) else False
+    return _expanding("cum_count_all" if include_nulls else "cum_count", child)
+
+
+def _agg_rule(
+    variant: str,
+    reason: str,
+    rewrite: Callable[[Any, Context], Any],
+    rewrote_to: str,
+    *,
+    nested_operand: bool = False,
+) -> Rule:
+    """One aggregate rule.
+
+    ``nested_operand`` marks the variants whose payload buries the operand one
+    level deeper than ``children`` can name (``Min``, ``Max``, ``Count``): they
+    declare no children and vouch for the operand in ``classify`` instead.
+    """
+    return Rule(
+        kind=f"Agg.{variant}",
+        classify=_classify_agg(variant, vouch_for_operand=nested_operand),
+        reason=reason,
+        rewrite=rewrite,
+        rewrote_to=rewrote_to,
+        children=() if nested_operand else (variant,),
+    )
+
+
+_NESTED_OPERAND = (
+    " Polars buries this aggregate's operand one level deeper than a `children` "
+    "key can name, so the operand is audited by the rule itself and anything "
+    "that is not already causal is refused rather than rewritten unchecked."
+)
+
+_BROADCAST = (
+    "a whole-column {name} is reduced to one number and broadcast back onto "
+    "every row, so rows before t are handed a value computed from rows after "
+    "t. The exact point-in-time equivalent is the expanding {name}: {how}."
+)
+
+_AGGREGATES: list[Rule] = [
+    _agg_rule(
+        "Sum",
+        _BROADCAST.format(name="sum", how="`cum_sum()`"),
+        _rewrite_agg("Sum", "cum_sum"),
+        "cum_sum() (expanding sum)",
+    ),
+    _agg_rule(
+        "Min",
+        _BROADCAST.format(name="minimum", how="`cum_min()`") + _NESTED_OPERAND,
+        _rewrite_agg("Min", "cum_min"),
+        "cum_min() (expanding minimum)",
+        nested_operand=True,
+    ),
+    _agg_rule(
+        "Max",
+        _BROADCAST.format(name="maximum", how="`cum_max()`") + _NESTED_OPERAND,
+        _rewrite_agg("Max", "cum_max"),
+        "cum_max() (expanding maximum)",
+        nested_operand=True,
+    ),
+    _agg_rule(
+        "Count",
+        "a whole-column count depends on how many rows exist in total, so the "
+        "value at t changes when rows after t are added or removed -- the "
+        "prefix-invariance failure that a length-dependent quantity always is. "
+        "The point-in-time equivalent is the expanding count, `cum_count()`."
+        + _NESTED_OPERAND,
+        _rewrite_agg_count,
+        "cum_count() (expanding count)",
+        nested_operand=True,
+    ),
+    _agg_rule(
+        "Mean",
+        _BROADCAST.format(name="mean", how="`cum_sum() / cum_count()`"),
+        _rewrite_agg("Mean", "mean"),
+        "cum_sum() / cum_count() (expanding mean)",
+    ),
+    _agg_rule(
+        "Std",
+        _BROADCAST.format(
+            name="standard deviation",
+            how="the expanding standard deviation built from `cum_sum()` of x "
+            "and of x**2",
+        ),
+        _rewrite_agg_moment("Std", "std"),
+        "expanding standard deviation",
+    ),
+    _agg_rule(
+        "Var",
+        _BROADCAST.format(
+            name="variance",
+            how="the expanding variance built from `cum_sum()` of x and of x**2",
+        ),
+        _rewrite_agg_moment("Var", "var"),
+        "expanding variance",
+    ),
+]
+
+
+# --------------------------------------------------------------------------- #
+# .over(...)
+# --------------------------------------------------------------------------- #
+def _classify_over(payload: Any, ctx: Context) -> Classification:
+    if _get(payload, "order_by") is not None:
+        return Classification.SAFE
+    if ctx.time is None:
+        return Classification.REFUSE
+    return Classification.REWRITE
+
+
+def _rewrite_over(payload: Any, ctx: Context) -> Any:
+    assert ctx.time is not None  # guaranteed by _classify_over
+    replacement = copy.deepcopy(payload)
+    replacement["order_by"] = copy.deepcopy(_order_by_payload(ctx.time))
+    return {"Over": replacement}
+
+
+_OVER_RULE = Rule(
+    kind="Over",
+    classify=_classify_over,
+    reason=(
+        "`.over(...)` without `order_by` evaluates the window in whatever order "
+        "the rows happen to sit in, so a window function inside it can read "
+        "rows that are later in time; it is only correct if the frame is "
+        "already sorted, and sortedness is not something the compiler may "
+        "assume. Pass `order_by=<time column>` -- injected automatically when "
+        "`Context.time` is set, and refused when it is not."
+    ),
+    rewrite=_rewrite_over,
+    rewrote_to="the same window with order_by=<Context.time>",
+    # `order_by` is deliberately not walked: it is a sort key, not a value the
+    # feature is built from, and the repair path writes it rather than reads it.
+    children=("function", "partition_by"),
+)
+
+
+# --------------------------------------------------------------------------- #
+# Refusals
+# --------------------------------------------------------------------------- #
+_REFUSALS: list[Rule] = [
+    _refuse(
+        "AnonymousFunction",
+        "`map_batches` / `map_elements` run arbitrary Python over the whole "
+        "column; the compiler cannot see inside, so it cannot prove the output "
+        "at t ignores rows after t. Register the operation as a Panelary "
+        "`FeatureSpec` (which carries its own panel_safe / leakage_safe "
+        "contract) or express it with native, trailing Polars operators.",
+        _FN,
+    ),
+    _refuse(
+        "Function.Interpolate",
+        "interpolation fills a gap by drawing a line between the observation "
+        "before it and the observation after it, so every filled value carries "
+        "the future one. Use `fill_null(strategy='forward')`.",
+        _FN,
+    ),
+    _refuse(
+        "Function.Rank",
+        "ranking a whole column places row t relative to every other row, "
+        "including rows after t. Rank cross-sectionally within a date "
+        "(`.rank().over(<time>)`), or over a trailing window.",
+        _FN,
+    ),
+    _refuse(
+        "Function.Reverse",
+        "reversing a column puts the last observation first; every subsequent "
+        "operation then reads the future as if it were the past. There is no "
+        "causal equivalent.",
+        _FN,
+    ),
+    _refuse(
+        "Function.Quantile",
+        "a whole-column quantile is computed from every row, including rows "
+        "after t, and is then broadcast back over all of them. Polars has no "
+        "expanding-quantile expression, so this cannot be repaired even with "
+        "`Context.allow_approximate`: use `rolling_quantile(q, window_size=k)` "
+        "with an explicit trailing window, or take the quantile per date with "
+        "`.over(<time>)`.",
+        _FN,
+    ),
+    _refuse(
+        "Agg.Median",
+        "a whole-column median is computed from every row, including rows after "
+        "t. Polars has no expanding-median expression, so this cannot be "
+        "repaired even with `Context.allow_approximate`: use "
+        "`rolling_median(window_size=k)` with an explicit trailing window, or "
+        "take the median per date with `.over(<time>)`.",
+        ("Median",),
+    ),
+    _refuse(
+        "Agg.Last",
+        "`last()` broadcasts the final observation of the column onto every "
+        "row, which is the future by construction. Its point-in-time reading "
+        "-- the latest value as of t -- is just the column itself, so the "
+        "compiler refuses rather than silently turning an aggregate into the "
+        "identity: write `pl.col(x)` (or "
+        "`pl.col(x).fill_null(strategy='forward')`) if that is what you meant.",
+        ("Last",),
+    ),
+    _refuse(
+        "Agg.NUnique",
+        "the number of distinct values in the whole column counts values that "
+        "first appear after t. Count distinct values per date with "
+        "`.over(<time>)`, or over a trailing window.",
+        ("NUnique",),
+    ),
+    _refuse(
+        "Sort",
+        "sorting a column detaches values from their rows, so a value observed "
+        "in the future can land on a row in the past. Sorting is a frame "
+        "operation; do it on the frame, not inside a feature expression.",
+        ("expr",),
+    ),
+]
+
+
+# --------------------------------------------------------------------------- #
+# The table
+# --------------------------------------------------------------------------- #
+def _table(*groups: list[Rule] | Rule) -> dict[str, Rule]:
+    table: dict[str, Rule] = {}
+    for group in groups:
+        rules = group if isinstance(group, list) else [group]
+        for rule in rules:
+            if rule.kind in table:  # pragma: no cover - guards authoring slips
+                raise ValueError(f"duplicate rule for {rule.kind!r}")
+            table[rule.kind] = rule
+    return table
+
+
+RULES: dict[str, Rule] = _table(
+    _LEAVES,
+    _BOOLEAN_RULE,
+    _CUMULATIVE,
+    _OFFSET_RULES,
+    _FILL_RULE,
+    _ROLLING_RULE,
+    _AGGREGATES,
+    _OVER_RULE,
+    _REFUSALS,
+)

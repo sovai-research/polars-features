@@ -188,8 +188,11 @@ leakage regression suites to model on: `tests/test_leakage.py`,
 
 ## Planning convention
 
-Larger work is specified as a markdown plan in `plans/`, moved from
-`plans/todo/` to `plans/done/` when implemented. `plans/done/detect-build-contract.md`
+Larger work is specified as a markdown plan in `plans/`, and moves through
+two stages with `git mv`: `plans/todo/` and `plans/done/` (implemented). A
+`todo/` entry may be either a specified build contract or a research direction
+awaiting one — the file's `Stage:` line says which. Do not implement from a
+file that says it still needs a contract. `plans/done/detect-build-contract.md`
 is a good template: hard invariants, a per-file ownership table, and explicit
 dependency limits. If you are handed a plan file, treat it as the spec and only
 touch the files it assigns to you.
