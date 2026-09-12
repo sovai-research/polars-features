@@ -79,6 +79,7 @@ nav:
     - Feature Extraction (legacy): user-guide/feature-extraction.md
   - Benchmarks:
     - Panelary vs pandas: benchmarks/vs_pandas.md
+    - Borrowed accuracy: benchmarks/leakage-table.md
   - Roadmap: roadmap.md
   - Developer Guides:
     - Custom Forecasters and Transformers: developer-guide/develop.md
